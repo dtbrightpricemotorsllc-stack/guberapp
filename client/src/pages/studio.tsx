@@ -1416,7 +1416,7 @@ export default function StudioPageV2() {
           )}
           {insufficient && !generateMutation.isPending && isStoreBuild && (
             <p className="text-center text-[11px] text-white/60" data-testid="text-store-credits-unavailable">
-              Out of credits. Top-ups aren't available in the app yet — visit guberapp.app to buy more.
+              Out of credits. Complete jobs and missions to earn more — or visit guberapp.app.
             </p>
           )}
         </section>

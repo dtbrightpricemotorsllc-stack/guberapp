@@ -958,10 +958,12 @@ export default function Home() {
           Google Play <span className="text-emerald-400 font-bold">(Live)</span>
         </a>
         <span className="text-muted-foreground/40">|</span>
-        <span className="flex items-center gap-1.5 text-muted-foreground" data-testid="text-platform-ios">
+        <a href="https://apps.apple.com/us/app/guber/id6743511655" target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+          data-testid="text-platform-ios">
           <SiApple className="w-3.5 h-3.5" />
-          App Store <span className="text-amber-400/80 font-bold">(Coming Soon)</span>
-        </span>
+          App Store
+        </a>
         <span className="hidden sm:flex items-center gap-1.5 text-muted-foreground text-[10px]">
           <span className="text-muted-foreground/40">|</span>
           <span className="online-dot" aria-hidden />
@@ -1255,13 +1257,16 @@ export default function Home() {
             >
               <SiGoogleplay className="w-4 h-4" /> GET IT ON GOOGLE PLAY
             </a>
-            <span
-              className="flex items-center gap-2 h-10 px-4 rounded-xl text-[11px] font-display tracking-wider font-bold opacity-50 cursor-default"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}
-              data-testid="text-footer-app-store"
+            <a
+              href="https://apps.apple.com/us/app/guber/id6743511655"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 h-10 px-4 rounded-xl text-[11px] font-display tracking-wider font-bold"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.8)" }}
+              data-testid="link-footer-app-store"
             >
-              <SiApple className="w-4 h-4" /> APP STORE — COMING SOON
-            </span>
+              <SiApple className="w-4 h-4" /> APP STORE
+            </a>
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 w-full">

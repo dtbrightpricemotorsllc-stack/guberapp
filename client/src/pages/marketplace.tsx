@@ -968,7 +968,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                 <div className="absolute top-3 left-3">
                   <span className="text-[10px] font-display font-bold px-2 py-1 rounded-full"
                     style={{ background: "rgba(239,68,68,0.9)", color: "#fff" }}>
-                    SAMPLE / DELETE ME
+                    SAMPLE
                   </span>
                 </div>
               )}

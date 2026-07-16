@@ -158,11 +158,11 @@ export default function StudioCreditsPage() {
                   data-testid={`card-pack-${p.id}`}
                 >
                   <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300/80">{p.label}</p>
-                  <p className="text-2xl font-black">{dollars(p.priceCents)}</p>
+                  {canPurchase && <p className="text-2xl font-black">{dollars(p.priceCents)}</p>}
                   <p className="text-sm text-white/80">
                     <span className="font-bold tabular-nums">{p.credits.toLocaleString()}</span> credits
                   </p>
-                  <p className="text-[10px] text-white/40">≈ {perCreditDollars(p.priceCents, p.credits)} / cr</p>
+                  {canPurchase && <p className="text-[10px] text-white/40">≈ {perCreditDollars(p.priceCents, p.credits)} / cr</p>}
                   {!canPurchase ? (
                     <Link href="/earning-opportunities">
                       <Button size="sm" variant="outline" className="mt-2 w-full text-emerald-300 border-emerald-400/30 hover:bg-emerald-400/10" data-testid={`button-earn-for-${p.id}`}>
@@ -198,7 +198,7 @@ export default function StudioCreditsPage() {
               ))}
             </div>
 
-            <h2 className="text-xs uppercase tracking-[0.25em] text-white/50 mb-3">Monthly Subscriptions</h2>
+            <h2 className="text-xs uppercase tracking-[0.25em] text-white/50 mb-3">{canPurchase ? "Monthly Subscriptions" : "Credit Tiers"}</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {tiers.map((t) => {
                 const isCurrent = me?.tier === t.id && !!me?.subscription;
@@ -212,10 +212,12 @@ export default function StudioCreditsPage() {
                       <p className="text-base font-bold">{t.label}</p>
                       {isCurrent && <Badge variant="outline" className="text-[10px]">CURRENT</Badge>}
                     </div>
-                    <p className="text-2xl font-black">
-                      {dollars(t.priceCents)}
-                      <span className="text-xs font-normal text-white/50"> / mo</span>
-                    </p>
+                    {canPurchase && (
+                      <p className="text-2xl font-black">
+                        {dollars(t.priceCents)}
+                        <span className="text-xs font-normal text-white/50"> / mo</span>
+                      </p>
+                    )}
                     <p className="text-sm text-white/80">
                       <span className="font-bold tabular-nums">{t.monthlyCredits.toLocaleString()}</span> credits / month
                     </p>

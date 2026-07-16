@@ -463,7 +463,7 @@ export default function StudioListingVideoPage() {
 
             {insufficient && (
               <p className="text-xs text-red-400 text-center" data-testid="text-insufficient">
-                Need {cost} credits — you have {credits}. Buy a credit pack to continue.
+                Need {cost} credits — you have {credits}. Earn more credits to continue.
               </p>
             )}
 
