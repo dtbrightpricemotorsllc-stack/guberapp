@@ -7,34 +7,52 @@ import {
 } from "@/lib/background-location";
 
 type Context = "job" | "load_board" | "asset_protection";
+type Platform = "android" | "ios";
 
-const COPY: Record<Context, { title: string; reason: string }> = {
-  job: {
-    title: "Background Location Access",
-    reason:
-      "GUBER needs to track your location while the app is in the background so hirers receive live updates during your active job. Tracking stops automatically when the job ends.",
-  },
-  load_board: {
-    title: "Background Location for Transport",
-    reason:
-      "Shippers need real-time location updates while you're hauling their load. GUBER only tracks your location during an active transport job — never otherwise.",
-  },
-  asset_protection: {
-    title: "Background Location for Asset Protection",
-    reason:
-      "GUBER needs continuous location access to monitor and report on your protected asset during the trip. Tracking is active only for the duration of the protection job.",
-  },
-};
+interface ModalCopy {
+  title: string;
+  reason: string;
+  platformNote: string;
+  enableLabel: string;
+}
+
+function getCopy(context: Context, platform: Platform): ModalCopy {
+  const reasons: Record<Context, string> = {
+    job: "GUBER needs to track your location while the app is in the background so hirers receive live updates during your active job. Tracking stops automatically when the job ends.",
+    load_board: "Shippers need real-time location updates while you're hauling their load. GUBER only tracks your location during an active transport job — never otherwise.",
+    asset_protection: "GUBER needs continuous location access to monitor and report on your protected asset during the trip. Tracking is active only for the duration of the protection job.",
+  };
+
+  const titles: Record<Context, string> = {
+    job: "Background Location Access",
+    load_board: "Background Location for Transport",
+    asset_protection: "Background Location for Asset Protection",
+  };
+
+  const platformNote =
+    platform === "ios"
+      ? 'iOS will ask you to allow location access \u201CAlways\u201D. This is only used while a job is active \u2014 GUBER never tracks you outside of active sessions.'
+      : 'On Android 11+, tapping Enable will open your device\'s location settings — select "Allow all the time" to enable background tracking.';
+
+  const enableLabel =
+    platform === "ios" ? "Allow Background Location" : "Enable Background Location";
+
+  return { title: titles[context], reason: reasons[context], platformNote, enableLabel };
+}
 
 export function BackgroundLocationModal() {
   const [open, setOpen] = useState(false);
   const [context, setContext] = useState<Context>("job");
+  const [platform, setPlatform] = useState<Platform>("android");
   const [requesting, setRequesting] = useState(false);
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const ctx = (e as CustomEvent).detail?.context as Context | undefined;
-      setContext(ctx && ctx in COPY ? ctx : "job");
+      const detail = (e as CustomEvent).detail as { context?: Context; platform?: Platform } | undefined;
+      const ctx = detail?.context;
+      const plt = detail?.platform;
+      setContext(ctx && ["job", "load_board", "asset_protection"].includes(ctx) ? ctx : "job");
+      setPlatform(plt === "ios" ? "ios" : "android");
       setOpen(true);
     };
     window.addEventListener("guber:show-bg-location-disclosure", handler);
@@ -43,13 +61,19 @@ export function BackgroundLocationModal() {
 
   if (!open) return null;
 
-  const copy = COPY[context];
+  const copy = getCopy(context, platform);
 
   const handleEnable = async () => {
     setRequesting(true);
     try {
-      const status = await requestBackgroundLocationFromOS();
-      resolveBackgroundLocationDisclosure(status === "granted");
+      if (platform === "ios") {
+        // On iOS, we just acknowledge the disclosure — bgStartWatch's
+        // requestPermissions:true will trigger the actual OS dialog immediately after.
+        resolveBackgroundLocationDisclosure(true);
+      } else {
+        const status = await requestBackgroundLocationFromOS();
+        resolveBackgroundLocationDisclosure(status === "granted");
+      }
     } catch {
       resolveBackgroundLocationDisclosure(false);
     } finally {
@@ -115,9 +139,7 @@ export function BackgroundLocationModal() {
           <div className="flex items-start gap-2 pt-1">
             <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
             <p className="text-[10px] text-muted-foreground leading-relaxed">
-              On Android 11+, tapping Enable will open your device&apos;s location settings — select{" "}
-              <span className="text-foreground/70 font-semibold">"Allow all the time"</span> to
-              enable background tracking.
+              {copy.platformNote}
             </p>
           </div>
         </div>
@@ -130,7 +152,7 @@ export function BackgroundLocationModal() {
           style={{ background: "linear-gradient(135deg, #00E5E5, #0099AA)" }}
           data-testid="button-bg-location-enable"
         >
-          {requesting ? "Opening settings…" : "Enable Background Location"}
+          {requesting ? "Opening settings…" : copy.enableLabel}
         </button>
 
         <button

@@ -1,18 +1,16 @@
 /**
- * Background location permission flow (Android only).
+ * Background location permission flow (Android + iOS).
  *
- * Google Play policy requires a two-step approach:
- *   1. App shows its own in-app disclosure explaining why background access
- *      is needed BEFORE the OS permission dialog is triggered.
- *   2. The actual OS permission request fires only after the user acknowledges
- *      the disclosure.
+ * Both Google Play and Apple App Store (guideline 5.1.c) require an in-app
+ * disclosure explaining WHY background location is needed BEFORE the OS
+ * permission dialog fires.
  *
  * This module uses the same event-driven pattern as gps.ts / GpsDisclaimerModal:
  * ensureBackgroundLocation() fires a window event → BackgroundLocationModal
  * shows → user acts → resolves the promise.
  *
  * Tracking always proceeds even if permission is denied — foreground tracking
- * (app open) works with ACCESS_FINE_LOCATION alone.
+ * (app open) works with ACCESS_FINE_LOCATION / WhenInUse alone.
  */
 
 import { Capacitor } from "@capacitor/core";
@@ -82,11 +80,36 @@ export async function requestBackgroundLocationFromOS(): Promise<"granted" | "de
 }
 
 /**
+ * Perform the iOS background-location disclosure modal and resolve.
+ * On iOS we show the disclosure but don't call ForegroundTracking — the native
+ * plugin's requestPermissions:true in bgStartWatch() handles the actual OS ask.
+ */
+function showIOSDisclosure(
+  context: "job" | "load_board" | "asset_protection",
+): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    pending.push(resolve);
+    disclosurePending = true;
+    try {
+      window.dispatchEvent(
+        new CustomEvent("guber:show-bg-location-disclosure", { detail: { context, platform: "ios" } }),
+      );
+    } catch {
+      pending.splice(pending.indexOf(resolve), 1);
+      resolve(false);
+    }
+  });
+}
+
+/**
  * Ensure background location permission, showing the in-app disclosure if
- * needed. Always resolves — never rejects. Returns true if granted.
+ * needed. Always resolves — never rejects. Returns true if granted/acknowledged.
  *
- * No-op (returns true) on web and iOS.
- * If permission is already granted, resolves immediately.
+ * - Web: no-op (returns true immediately).
+ * - iOS native: shows in-app disclosure per App Store guideline 5.1(c); the
+ *   actual OS permission is requested by the native plugin when bgStartWatch fires.
+ * - Android: shows disclosure + requests ACCESS_BACKGROUND_LOCATION from OS.
+ *
  * If we already asked once and they denied, shows the disclosure again only if
  * forceReprompt is set — otherwise silently resolves false.
  */
@@ -94,15 +117,22 @@ export function ensureBackgroundLocation(
   context: "job" | "load_board" | "asset_protection",
   opts?: { forceReprompt?: boolean },
 ): Promise<boolean> {
-  if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "android") {
-    return Promise.resolve(true);
+  if (!Capacitor.isNativePlatform()) return Promise.resolve(true);
+
+  const platform = Capacitor.getPlatform();
+
+  // iOS — show our in-app disclosure first; native plugin handles OS permission
+  if (platform === "ios") {
+    if (hasRequestedBackgroundLocation() && !opts?.forceReprompt) {
+      return Promise.resolve(true); // Already acknowledged once
+    }
+    return showIOSDisclosure(context);
   }
 
+  // Android — check OS permission state then show disclosure if needed
   return checkBackgroundLocationPermission().then((status) => {
     if (status === "granted") return true;
 
-    // If they have already denied and we're not force-reprompting, don't
-    // harass them again — let them go to Settings manually.
     if (status === "denied" && hasRequestedBackgroundLocation() && !opts?.forceReprompt) {
       return false;
     }
@@ -112,7 +142,7 @@ export function ensureBackgroundLocation(
       disclosurePending = true;
       try {
         window.dispatchEvent(
-          new CustomEvent("guber:show-bg-location-disclosure", { detail: { context } }),
+          new CustomEvent("guber:show-bg-location-disclosure", { detail: { context, platform: "android" } }),
         );
       } catch {
         pending.splice(pending.indexOf(resolve), 1);

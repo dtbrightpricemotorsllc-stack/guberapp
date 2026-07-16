@@ -1512,7 +1512,7 @@ export default function Marketplace() {
         <div className="flex items-start justify-between mb-5">
           <div>
             <h1 className="text-2xl font-display font-extrabold tracking-tight">
-              Marketplace <span className="text-xs font-normal text-primary ml-1 align-middle inline-flex items-center gap-0.5">BETA<InfoHint title="Beta Feature" description="GUBER Marketplace is currently in beta. Core features are live — some tools are still being refined based on user feedback." bullets={["List items for free", "Local buyers only", "More features rolling out soon"]} /></span>
+              Marketplace
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">List items free · Find local deals · Verify before you buy</p>
           </div>

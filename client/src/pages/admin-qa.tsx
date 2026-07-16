@@ -2639,6 +2639,102 @@ function JacReportsTab() {
   );
 }
 
+function CommerceModeTab() {
+  const { toast } = useToast();
+  const { data, isLoading, refetch } = useQuery<{ mode: string }>({
+    queryKey: ["/api/commerce-mode"],
+    staleTime: 10_000,
+  });
+  const { data: log } = useQuery<{ id: number; previous_mode: string; new_mode: string; changed_at: string; admin_email: string }[]>({
+    queryKey: ["/api/admin/commerce-mode/log"],
+  });
+
+  const setMode = useMutation({
+    mutationFn: (mode: string) => apiRequest("PUT", "/api/admin/commerce-mode", { mode }).then((r) => r.json()),
+    onSuccess: (d) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/commerce-mode"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/commerce-mode/log"] });
+      toast({ title: "Commerce Mode Updated", description: `Now: ${d.mode}` });
+    },
+    onError: () => toast({ title: "Error", description: "Could not update mode", variant: "destructive" }),
+  });
+
+  const MODES = [
+    { value: "HIDDEN", label: "HIDDEN", desc: "All commerce UI concealed. No prices, no buttons.", color: "bg-red-100 text-red-800" },
+    { value: "EARNED_CREDITS_ONLY", label: "EARNED CREDITS ONLY", desc: "iOS production mode. Credits earned through work only — no purchases.", color: "bg-amber-100 text-amber-800" },
+    { value: "FULL_COMMERCE", label: "FULL COMMERCE", desc: "Complete purchase/subscription experience enabled.", color: "bg-green-100 text-green-800" },
+  ];
+
+  const current = data?.mode ?? "EARNED_CREDITS_ONLY";
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Commerce Mode Control</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-lg p-3 bg-amber-50 border border-amber-200 text-sm text-amber-800">
+            <strong>⚠ iOS Production Default:</strong> EARNED_CREDITS_ONLY. Never set FULL_COMMERCE on the iOS store build — it would violate App Store guideline 3.1.1. FULL_COMMERCE is for web-only or Android deployments.
+          </div>
+
+          {isLoading ? (
+            <div className="text-sm text-muted-foreground">Loading…</div>
+          ) : (
+            <div className="space-y-2">
+              {MODES.map((m) => (
+                <div
+                  key={m.value}
+                  className={`rounded-lg border p-3 flex items-center justify-between gap-3 transition-all ${current === m.value ? "border-primary/50 bg-primary/5" : "border-border"}`}
+                  data-testid={`card-commerce-mode-${m.value.toLowerCase()}`}
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className={`rounded px-2 py-0.5 text-xs font-bold ${m.color}`}>{m.label}</span>
+                      {current === m.value && <Badge variant="outline" className="text-xs">ACTIVE</Badge>}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{m.desc}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={current === m.value ? "default" : "outline"}
+                    disabled={current === m.value || setMode.isPending}
+                    onClick={() => setMode.mutate(m.value)}
+                    data-testid={`button-set-commerce-mode-${m.value.toLowerCase()}`}
+                  >
+                    {current === m.value ? "Active" : "Set"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <Button variant="ghost" size="sm" onClick={() => refetch()}>Refresh</Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-sm">Change Log</CardTitle></CardHeader>
+        <CardContent>
+          {!log || log.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No changes recorded yet.</p>
+          ) : (
+            <div className="space-y-1">
+              {log.map((entry) => (
+                <div key={entry.id} className="text-xs text-muted-foreground flex items-center gap-2">
+                  <span className="font-mono">{new Date(entry.changed_at).toLocaleString()}</span>
+                  <span>{entry.previous_mode} → <strong>{entry.new_mode}</strong></span>
+                  <span className="text-foreground/50">by {entry.admin_email ?? `admin #${entry.id}`}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function AdminQa() {
   return (
     <div className="container mx-auto max-w-6xl p-4">
@@ -2669,6 +2765,7 @@ export default function AdminQa() {
           <TabsTrigger value="jac-reports" data-testid="tab-jac-reports"><FileText className="mr-1 h-3 w-3" />JAC Reports</TabsTrigger>
           <TabsTrigger value="og-audit" data-testid="tab-og-audit"><Crown className="mr-1 h-3 w-3 text-amber-500" />OG Audit</TabsTrigger>
           <TabsTrigger value="system-issues" data-testid="tab-system-issues"><Siren className="mr-1 h-3 w-3 text-red-500" />System Issues</TabsTrigger>
+          <TabsTrigger value="commerce-mode" data-testid="tab-commerce-mode">🛒 Commerce Mode</TabsTrigger>
         </TabsList>
         <TabsContent value="checklist"><ChecklistTab /></TabsContent>
         <TabsContent value="sandbox"><SandboxTab /></TabsContent>
@@ -2711,6 +2808,7 @@ export default function AdminQa() {
         <TabsContent value="jac-reports"><JacReportsTab /></TabsContent>
         <TabsContent value="og-audit"><OGAuditTab /></TabsContent>
         <TabsContent value="system-issues"><SystemIssuesTab /></TabsContent>
+        <TabsContent value="commerce-mode"><CommerceModeTab /></TabsContent>
       </Tabs>
     </div>
   );

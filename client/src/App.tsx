@@ -10,6 +10,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { taskTrackingService } from "@/services/location/TaskTrackingService";
 import { ThemeProvider } from "@/lib/theme-context";
+import { CommerceModeProvider } from "@/lib/commerce-mode";
 import InstallPrompt from "@/components/install-prompt";
 import { GoogleAuthOverlay } from "@/components/google-auth-overlay";
 import AnnouncementPopup from "@/components/announcement-popup";
@@ -148,6 +149,7 @@ const AdminGrowthEngine = lazy(() => import("@/pages/admin-growth-engine"));
 const AdminLocalBusinesses = lazy(() => import("@/pages/admin-local-businesses"));
 const OgAdvantage = lazy(() => import("@/pages/og-advantage"));
 const CreditsPage = lazy(() => import("@/pages/credits"));
+const EarningOpportunities = lazy(() => import("@/pages/earning-opportunities"));
 const CarrierProfilePage = lazy(() => import("@/pages/carrier-profile"));
 
 // Campaign Lab — admin-gated marketing workspace
@@ -460,6 +462,7 @@ function Router() {
       <Route path="/investors" component={Investors} />
       <Route path="/guber-investor-deck" component={Investors} />
       <Route path="/credits" component={() => <ProtectedRoute component={CreditsPage} />} />
+      <Route path="/earning-opportunities" component={() => <Suspense fallback={<PageLoader />}><EarningOpportunities /></Suspense>} />
       <Route path="/mobile-checkout" component={() => <Suspense fallback={<PageLoader />}><MobileCheckout /></Suspense>} />
       <Route component={NotFound} />
     </Switch>
@@ -659,6 +662,7 @@ function App() {
   return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
+        <CommerceModeProvider>
         <TooltipProvider>
           <AuthProvider>
             <TaskTrackingResumer />
@@ -674,6 +678,7 @@ function App() {
             <Router />
           </AuthProvider>
         </TooltipProvider>
+        </CommerceModeProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

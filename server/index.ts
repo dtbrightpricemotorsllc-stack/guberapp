@@ -1696,6 +1696,34 @@ app.use((req, res, next) => {
     );
   `).catch(e => console.error("[seed] growth reward config error:", e));
 
+  // ── Commerce Mode tables ───────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS commerce_mode_config (
+      id          INTEGER PRIMARY KEY DEFAULT 1,
+      mode        TEXT NOT NULL DEFAULT 'EARNED_CREDITS_ONLY',
+      updated_at  TIMESTAMP DEFAULT NOW(),
+      updated_by  INTEGER
+    );
+    INSERT INTO commerce_mode_config (id, mode) VALUES (1, 'EARNED_CREDITS_ONLY')
+    ON CONFLICT (id) DO NOTHING;
+
+    CREATE TABLE IF NOT EXISTS commerce_mode_log (
+      id            SERIAL PRIMARY KEY,
+      admin_id      INTEGER,
+      previous_mode TEXT NOT NULL,
+      new_mode      TEXT NOT NULL,
+      changed_at    TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_commerce_mode_log_changed ON commerce_mode_log(changed_at DESC);
+  `).catch(e => console.error("[migration] commerce_mode tables error:", e));
+
+  // ── credit_ledger audit columns ────────────────────────────────────────────
+  await pool.query(`
+    ALTER TABLE credit_ledger
+      ADD COLUMN IF NOT EXISTS previous_balance INTEGER,
+      ADD COLUMN IF NOT EXISTS new_balance      INTEGER;
+  `).catch(e => console.error("[migration] credit_ledger audit columns error:", e));
+
   await registerRoutes(httpServer, app);
   await startOSRuntime(app);
   startStudioToolsListener();

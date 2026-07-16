@@ -1,4 +1,5 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
+import { ensureBackgroundLocation } from "@/lib/background-location";
 
 // Background-capable location watcher for iOS.
 // The @capacitor-community/background-geolocation plugin registers itself as
@@ -58,8 +59,17 @@ export async function bgStartWatch(
   onLocation: (c: BgCoords) => void,
   onError: (code: string) => void,
   distanceFilter = 25,
+  jobContext: "job" | "load_board" | "asset_protection" = "job",
 ): Promise<number | null> {
   if (!isIOSNative) return null;
+
+  // Show in-app disclosure per App Store guideline 5.1(c) before the OS dialog.
+  const acknowledged = await ensureBackgroundLocation(jobContext);
+  if (!acknowledged) {
+    console.info("[GUBER GPS] iOS bg-geo: user dismissed disclosure — not starting background watch");
+    return null;
+  }
+
   try {
     console.info("[GUBER GPS] iOS bg-geo: starting background watch…");
     const watcherId = await BackgroundGeolocation.addWatcher(

@@ -308,7 +308,6 @@ function JacSettingsSection() {
               else WakeWordDetector.disable();
             }}
             testId="switch-jac-voice-activation"
-            badge="Beta"
             disabled={jacDisabled}
           />
           <PrefRow
