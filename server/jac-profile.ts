@@ -69,9 +69,9 @@ export async function syncJacProfile(userId: number): Promise<void> {
       ),
       // Marketplace vehicle listings the user has posted
       pool.query(
-        `SELECT listing_type, vehicle_type, make, model, year
-         FROM marketplace_listings
-         WHERE user_id = $1 AND listing_type = 'vehicle' AND status != 'sold'
+        `SELECT category, title
+         FROM marketplace_items
+         WHERE seller_id = $1 AND status != 'sold'
          ORDER BY created_at DESC LIMIT 1`,
         [userId]
       ),
@@ -86,7 +86,7 @@ export async function syncJacProfile(userId: number): Promise<void> {
         `SELECT
            COUNT(CASE WHEN assigned_helper_id = $1 AND status NOT IN ('completed','cancelled','disputed') THEN 1 END)::int AS worker_active,
            COUNT(CASE WHEN posted_by_id = $1 AND status = 'open' AND assigned_helper_id IS NULL THEN 1 END)::int AS hirer_unfilled
-         FROM jobs WHERE deleted_at IS NULL`,
+         FROM jobs`,
         [userId]
       ),
     ]);
@@ -237,15 +237,15 @@ export async function buildMorningBriefing(userId: number): Promise<{
           (SELECT COUNT(*)::int FROM jobs WHERE assigned_helper_id = $1 AND status NOT IN ('completed','cancelled','disputed') AND deleted_at IS NULL) AS worker_active,
           (SELECT COUNT(*)::int FROM jobs WHERE posted_by_id = $1 AND status = 'open' AND assigned_helper_id IS NULL AND deleted_at IS NULL) AS hirer_unfilled,
           (SELECT COUNT(*)::int FROM notifications WHERE user_id = $1 AND read = false) AS unread_notifs,
-          (SELECT COUNT(*)::int FROM guber_disputes WHERE (claimant_id = $1 OR respondent_id = $1) AND status NOT IN ('resolved','closed')) AS open_disputes,
+          (SELECT COUNT(*)::int FROM guber_disputes WHERE (opened_by_user_id = $1 OR against_user_id = $1) AND status NOT IN ('resolved','closed')) AS open_disputes,
           (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1 AND status = 'pending') AS pending_offers,
           (SELECT COALESCE(SUM(amount),0) FROM wallet_transactions WHERE user_id = $1 AND status = 'completed') AS wallet_balance,
           (SELECT COALESCE(SUM(amount),0) FROM wallet_transactions
            WHERE user_id = $1 AND type = 'earning' AND status IN ('available','completed')
              AND created_at > NOW() - INTERVAL '7 days') AS earn_7d,
-          (SELECT COUNT(*)::int FROM guber_disputes WHERE (claimant_id = $1 OR respondent_id = $1) AND status NOT IN ('resolved','closed')) +
+          (SELECT COUNT(*)::int FROM guber_disputes WHERE (opened_by_user_id = $1 OR against_user_id = $1) AND status NOT IN ('resolved','closed')) +
           (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1 AND status = 'pending') +
-          (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1 AND ps.status='submitted') AS pending_action_count,
+          (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1 AND ps.verified = false) AS pending_action_count,
           (SELECT COUNT(*)::int FROM jobs
            WHERE status = 'open' AND assigned_helper_id IS NULL AND is_published = TRUE
              AND (is_test_job = FALSE OR is_test_job IS NULL) AND deleted_at IS NULL
@@ -389,16 +389,16 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
     const [actionRes, walletRes, onTheWayRes, expiringDocsRes] = await Promise.all([
       pool.query(`
         SELECT
-          (SELECT COUNT(*)::int FROM guber_disputes WHERE (claimant_id = $1 OR respondent_id = $1) AND status NOT IN ('resolved','closed')) AS disputes,
-          (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1 AND status = 'pending') AS mkt_offers,
-          (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1 AND ps.status='submitted') AS proofs_pending,
+          (SELECT COUNT(*)::int FROM guber_disputes WHERE (opened_by_user_id = $1::int OR against_user_id = $1::int) AND status NOT IN ('resolved','closed')) AS disputes,
+          (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1::int AND status = 'pending') AS mkt_offers,
+          (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1::int AND ps.verified = false) AS proofs_pending,
           (SELECT COUNT(*)::int FROM jobs j
-           WHERE j.assigned_helper_id = $1
+           WHERE j.assigned_helper_id = $1::int
              AND j.status IN ('accepted','in_progress','arrived')
              AND j.proof_required = TRUE
              AND j.deleted_at IS NULL
              AND NOT EXISTS (
-               SELECT 1 FROM proof_submissions ps WHERE ps.job_id = j.id AND ps.status = 'submitted'
+               SELECT 1 FROM proof_submissions ps WHERE ps.job_id = j.id AND ps.verified = false
              )
           ) AS unsubmitted_proof
       `, [userId]),

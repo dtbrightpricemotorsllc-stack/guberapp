@@ -1,0 +1,157 @@
+/* GUBER — Formal Document Package: shared design system
+   Traditional / clean business style. Brand color used deliberately (navy cover
+   & header bands, green + gold accents) rather than flat black-and-white. */
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+:root{
+  --paper:#ffffff;
+  --ink:#1b2430;
+  --muted:#5f6b7a;
+  --faint:#8a93a1;
+  --rule:#dde1e6;
+  --rule-soft:#eef1f4;
+  --navy:#0a0e17;
+  --navy-2:#121a2b;
+  --green:#0e8a45;
+  --green-soft:#e7f5ec;
+  --gold:#b7862c;
+  --gold-soft:#faf3e4;
+  --red:#a12c2c;
+}
+
+*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+html,body{background:#f2f3f5;color:var(--ink);font-family:'Inter',system-ui,sans-serif;font-size:10.5pt;-webkit-font-smoothing:antialiased}
+
+h1,h2,h3,.serif{font-family:'Playfair Display',serif}
+
+a{color:var(--green)}
+
+/* ---------- Letter-size document pages (portrait) ---------- */
+.page{
+  width:8.5in;min-height:11in;margin:22px auto;background:var(--paper);
+  box-shadow:0 6px 24px rgba(10,14,23,.14);
+  display:flex;flex-direction:column;
+  page-break-after:always;
+  position:relative;
+}
+.page:last-child{page-break-after:auto}
+@page{size:letter;margin:0}
+@media print{
+  .page{margin:0;box-shadow:none}
+}
+
+.doc-header{
+  background:var(--navy);
+  color:#fff;
+  padding:.32in .55in;
+  display:flex;align-items:center;justify-content:space-between;
+  border-bottom:3px solid var(--gold);
+}
+.doc-header img{height:.62in;display:block}
+.doc-header .doc-title{
+  text-align:right;
+}
+.doc-header .doc-title .eyebrow{
+  font-size:7.5pt;letter-spacing:.22em;text-transform:uppercase;color:#c9d0da;font-weight:600;
+}
+.doc-header .doc-title h1{
+  font-size:19pt;color:#fff;margin-top:2px;line-height:1.05;font-weight:700;
+}
+
+.doc-body{padding:.42in .55in .3in;flex:1;display:flex;flex-direction:column;gap:.18in}
+
+.doc-footer{
+  margin-top:auto;
+  padding:.14in .55in .22in;
+  border-top:1px solid var(--rule);
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:7pt;color:var(--faint);letter-spacing:.03em;text-transform:uppercase;
+}
+.doc-footer .conf{font-style:italic;text-transform:none;letter-spacing:0}
+
+/* ---------- Cover pages (dark, branded) ---------- */
+.cover{
+  background:radial-gradient(1200px 700px at 20% 10%, #16203a 0%, var(--navy) 55%), var(--navy);
+  color:#fff;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:.8in;gap:.22in;
+}
+.cover img.mark{width:1.9in;margin-bottom:.05in}
+.cover .eyebrow{font-size:9.5pt;letter-spacing:.32em;text-transform:uppercase;color:var(--gold);font-weight:700}
+.cover h1{font-size:38pt;color:#fff;line-height:1.02;font-weight:800}
+.cover .tagline{font-size:13pt;color:#c9d0da;font-style:italic;margin-top:.06in}
+.cover .sub{font-size:10.5pt;color:#9aa5b6;max-width:5.6in;line-height:1.55;margin-top:.14in}
+.cover .meta{margin-top:.5in;font-size:8pt;letter-spacing:.14em;text-transform:uppercase;color:#6b7688}
+.cover .meta strong{color:#e6e9ee}
+
+/* ---------- Landscape deck slides ---------- */
+.slide{
+  width:13.333in;height:7.5in;background:var(--paper);
+  page-break-after:always;overflow:hidden;position:relative;
+  display:flex;flex-direction:column;
+  page:landscape;
+}
+.slide:last-child{page-break-after:auto}
+@page landscape{size:13.333in 7.5in;margin:0}
+.slide .band{
+  background:var(--navy);color:#fff;padding:.3in .55in;display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid var(--gold);
+}
+.slide .band img{height:.42in}
+.slide .band .pagenum{font-size:8pt;letter-spacing:.2em;text-transform:uppercase;color:#9aa5b6}
+.slide .content{padding:.4in .6in .5in;flex:1;display:flex;flex-direction:column;gap:.16in;overflow:hidden}
+.slide .eyebrow{font-size:9pt;letter-spacing:.26em;text-transform:uppercase;color:var(--gold);font-weight:700}
+.slide h2{font-size:26pt;color:var(--navy);line-height:1.05;font-weight:700}
+.slide .lede{font-size:12pt;color:var(--muted);max-width:9.5in;line-height:1.5}
+
+/* generic layout helpers */
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:.28in}
+.row3{display:grid;grid-template-columns:repeat(3,1fr);gap:.22in}
+.row4{display:grid;grid-template-columns:repeat(4,1fr);gap:.18in}
+.card{border:1px solid var(--rule);border-radius:8px;padding:.2in .22in;background:#fbfbfc}
+.card.green{border-color:#bfe3cc;background:var(--green-soft)}
+.card.gold{border-color:#e7d3a6;background:var(--gold-soft)}
+.card h3{font-size:12.5pt;color:var(--navy);margin-bottom:.06in;font-weight:700}
+.card p, .card li{font-size:9.5pt;color:var(--muted);line-height:1.45}
+.stat{display:flex;flex-direction:column;gap:2px}
+.stat .v{font-family:'Playfair Display',serif;font-weight:800;font-size:22pt;color:var(--green)}
+.stat .l{font-size:8.5pt;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+
+ul.clean{padding-left:16pt}
+ul.clean li{font-size:10pt;line-height:1.5;margin:2pt 0;color:var(--ink)}
+ul.clean li::marker{color:var(--green)}
+
+table.tbl{width:100%;border-collapse:collapse;font-size:9.5pt}
+table.tbl th{background:var(--navy);color:#fff;text-align:left;padding:6pt 8pt;font-size:8.5pt;letter-spacing:.05em;text-transform:uppercase}
+table.tbl td{padding:6pt 8pt;border-bottom:1px solid var(--rule-soft)}
+table.tbl tr:nth-child(even) td{background:#f7f8f9}
+
+.pill{display:inline-block;padding:2pt 9pt;border-radius:99pt;font-size:7.5pt;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.pill.live{background:var(--green-soft);color:var(--green)}
+.pill.flag{background:var(--gold-soft);color:var(--gold)}
+
+/* ---------- Legal-style document body (LOI / NDA / Term Sheet) ---------- */
+.legal p{font-size:9.7pt;line-height:1.55;color:var(--ink);text-align:justify}
+.legal h3{font-size:11pt;color:var(--navy);margin-top:.08in;font-weight:700}
+.legal ol.clauses{counter-reset:clause;list-style:none;padding-left:0}
+.legal ol.clauses > li{counter-increment:clause;margin:.14in 0;padding-left:.3in;position:relative}
+.legal ol.clauses > li::before{content:counter(clause) ".";position:absolute;left:0;font-weight:700;color:var(--navy)}
+.legal .fillin{border-bottom:1px solid var(--ink);padding:0 4pt;font-weight:600;color:var(--navy)}
+.legal .sig-block{display:grid;grid-template-columns:1fr 1fr;gap:.4in;margin-top:.3in}
+.legal .sig-line{border-top:1px solid var(--ink);margin-top:.5in;padding-top:4pt;font-size:8.5pt;color:var(--muted)}
+.legal .disclaimer-box{
+  border:1px dashed var(--red);background:#fbecec;color:var(--red);
+  font-size:8pt;padding:.12in .16in;border-radius:6px;line-height:1.45;
+}
+
+.watermark-banner{
+  background:var(--gold-soft);border-left:3px solid var(--gold);padding:.1in .16in;font-size:8.3pt;color:#7a5a1e;line-height:1.4;
+}
+
+/* combined-class overrides (specificity beats single-class rules regardless of source order) */
+.slide.cover,.page.cover{
+  background:radial-gradient(1200px 700px at 20% 10%, #16203a 0%, var(--navy) 55%), var(--navy);
+  color:#fff;padding:.8in;
+}
+.slide.cover{justify-content:center}
+

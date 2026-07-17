@@ -24,7 +24,7 @@ export interface ElevenLabsSuccess {
 
 export type ElevenLabsResult = ElevenLabsSuccess | ElevenLabsError;
 
-export const DEFAULT_JAC_VOICE_ID = "VrUPKj92idNr4XrmO032"; // "Hailey" — warm, soft, clear female voice
+export const DEFAULT_JAC_VOICE_ID = "cgSgspJ2msm6clMCkdW9"; // "Jessica" — playful, bright, warm, conversational (more exciting than the old "Hailey" voice)
 
 /**
  * Classifies an ElevenLabs error response into a stable, loggable code.
@@ -51,20 +51,22 @@ function classifyError(status: number, bodyText: string): ElevenLabsError {
   return { ok: false, code: "upstream_error", httpStatus: status, message: `ElevenLabs upstream error (${status}).` };
 }
 
-// eleven_flash_v2_5 is ElevenLabs' lowest-latency model (~75ms model latency vs
-// ~300-400ms for eleven_multilingual_v2), purpose-built for real-time
-// conversational agents. Slight quality tradeoff vs multilingual_v2, but for a
-// live voice assistant the latency win is worth far more than it costs.
-export const DEFAULT_JAC_MODEL_ID = "eleven_flash_v2_5";
+// eleven_turbo_v2_5 balances quality and latency (~300ms vs ~75ms for flash).
+// Flash was chosen for speed but it significantly distorts voice characteristics
+// and sounds noticeably off. Turbo reproduces the voice accurately while still
+// being fast enough for real-time conversational use.
+export const DEFAULT_JAC_MODEL_ID = "eleven_turbo_v2_5";
 
-// Tuned for a warmer, more natural conversational read (vs. the flatter
-// defaults previously used). Lower stability = more expressive/varied
-// delivery; higher similarity_boost + style + speaker_boost = closer to the
-// natural human reference recording instead of a flat TTS read.
+// similarity_boost at 0.9 keeps the output close to the Jessica reference
+// recording while leaving room for expressiveness.
+// stability at 0.38 (lower = more dynamic/expressive delivery — this is what
+// makes the voice sound "exciting" instead of flat) while staying above the
+// point where it gets incoherent.
+// style at 0.55 pushes more of the voice's natural energy/inflection through.
 export const DEFAULT_JAC_VOICE_SETTINGS = {
-  stability: 0.42,
-  similarity_boost: 0.85,
-  style: 0.28,
+  stability: 0.38,
+  similarity_boost: 0.9,
+  style: 0.55,
   use_speaker_boost: true,
 };
 
@@ -87,7 +89,7 @@ export async function synthesizeSpeech(
   const modelId = opts.modelId || process.env.JAC_ELEVENLABS_MODEL_ID || DEFAULT_JAC_MODEL_ID;
   const stream = opts.stream !== false;
   const path = stream ? "stream" : "";
-  const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}${path ? `/${path}` : ""}?output_format=mp3_44100_64${stream ? "&optimize_streaming_latency=3" : ""}`;
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}${path ? `/${path}` : ""}?output_format=mp3_44100_128${stream ? "&optimize_streaming_latency=1" : ""}`;
 
   try {
     const upstream = await fetch(url, {

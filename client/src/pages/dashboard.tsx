@@ -102,8 +102,8 @@ const CORE_TILES = [
   { name: "On-Demand Help",   sub: "Get help fast for any task",        icon: Zap,         bg: "linear-gradient(135deg,#78350f,#92400e,#c2410c)", href: "/browse-jobs?category=On-Demand Help",  testId: "on-demand-help" },
   { name: "Skilled Labor",    sub: "Find skilled pros for the job",     icon: Hammer,      bg: "linear-gradient(135deg,#7f1d1d,#991b1b,#b91c1c)", href: "/browse-jobs?category=Skilled Labor",   testId: "skilled-labor" },
   { name: "General Labor",    sub: "Everyday tasks, done right",        icon: Wrench,      bg: "linear-gradient(135deg,#14532d,#166534,#15803d)", href: "/browse-jobs?category=General Labor",   testId: "general-labor" },
-  { name: "Verify & Inspect", sub: "Verify assets & inspections",       icon: ShieldCheck, bg: "linear-gradient(135deg,#2e1065,#4c1d95,#5b21b6)", href: "/verify-inspect",                       testId: "verify-inspect" },
-  { name: "Marketplace",      sub: "Buy, sell & verify local items",    icon: ShoppingBag, bg: "linear-gradient(135deg,#5C3E07,#8B6010,#A87418)", href: "/marketplace",                          testId: "marketplace", badge: "BETA" },
+  { name: "See For Me",        sub: "Your remote presence",             icon: ShieldCheck, bg: "linear-gradient(135deg,#2e1065,#4c1d95,#5b21b6)", href: "/verify-inspect",                       testId: "verify-inspect" },
+  { name: "Marketplace",      sub: "Buy, sell & verify local items",    icon: ShoppingBag, bg: "linear-gradient(135deg,#5C3E07,#8B6010,#A87418)", href: "/marketplace",                          testId: "marketplace" },
   { name: "Barter Labor",     sub: "Trade skills. No cash needed",      icon: Repeat,      bg: "linear-gradient(135deg,#1e3a8a,#1d4ed8,#2563eb)", href: "/browse-jobs?category=Barter Labor",   testId: "barter-labor" },
   { name: "Load Board",       sub: "Cars, boats, RVs, equipment & more",         icon: Truck,       bg: "linear-gradient(135deg,#0A3D3D,#105252,#186868)", href: "/load-board",                           testId: "load-board", badge: "NEW" },
   { name: "AI or Not?",       sub: "Can you spot the fake? 🤖",         icon: Bot,         bg: "linear-gradient(135deg,#0E0E0F,#141417,#1A1A1F)", href: "/ai-or-not",                            testId: "ai-or-not", tileBorder: "1.5px solid rgba(0,229,118,0.55)" },
@@ -1029,7 +1029,7 @@ export default function Dashboard() {
                   FIND WORK NEAR ME <ChevronRight className="w-4 h-4" />
                 </button>
               </Link>
-              <p className="text-[10px] text-white/30 mt-2 text-center">On-Demand • General Labor • Skilled Labor • Verify &amp; Inspect</p>
+              <p className="text-[10px] text-white/30 mt-2 text-center">On-Demand • General Labor • Skilled Labor • See For Me</p>
             </div>
           )}
         </div>

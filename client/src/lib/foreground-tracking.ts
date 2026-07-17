@@ -3,7 +3,7 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 // JS interface for the native Android foreground-tracking plugin. Implemented
 // in android/app/src/main/java/com/guber/app/ForegroundTrackingPlugin.java.
 export interface ForegroundTrackingPlugin {
-  start(options: { title?: string; text?: string; jobId?: number; authToken?: string }): Promise<void>;
+  start(options: { title?: string; text?: string; jobId?: number; authToken?: string; batchPath?: string }): Promise<void>;
   stop(): Promise<void>;
   /** Returns the current background location permission state without prompting. */
   checkBackgroundLocation(): Promise<{ status: string }>;
@@ -33,6 +33,7 @@ export async function startForegroundTracking(opts?: {
   text?: string;
   jobId?: number;
   authToken?: string;
+  batchPath?: string;
 }): Promise<void> {
   if (!isAndroidNative) return;
   try {
@@ -41,6 +42,7 @@ export async function startForegroundTracking(opts?: {
       text:      opts?.text      ?? "Tracking your location for an active job. Tap to return to GUBER.",
       jobId:     opts?.jobId,
       authToken: opts?.authToken,
+      batchPath: opts?.batchPath,
     });
   } catch {
     // Non-fatal: in-app tracking still works; the notification is best-effort.

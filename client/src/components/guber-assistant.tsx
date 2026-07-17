@@ -10,7 +10,7 @@ import {
   Target, TrendingUp, Zap,
 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
-import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
+import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
 import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
@@ -108,7 +108,7 @@ const INITIAL_CHIPS = [
   "Earn credits",
   "Cash Drops",
   "Day-1 OG",
-  "Verify & Inspect",
+  "See For Me",
   "Transport / Load Board",
   "Start a listing",
 ];
@@ -339,6 +339,7 @@ export function GUBERAssistant() {
 
   const briefingInjectedRef = useRef(false);
   const feedbackDraftRef = useRef<{ ready: boolean; category: string; description: string } | null>(null);
+  const greetingSpokenRef = useRef(false);
 
   // ── "jac:prefill" — quick-action chips pre-load a message ──
   useEffect(() => {
@@ -367,6 +368,8 @@ export function GUBERAssistant() {
   // (no ElevenLabs Conversational Agents / per-minute billing).
   const [liveMode, setLiveMode] = useState(false);
   const [liveState, setLiveState] = useState<ConversationState>("idle");
+  const [jacVolume, setJacVolumeState] = useState(() => getJacVolume());
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const engineRef = useRef<ConversationEngine | null>(null);
   const mutedRef = useRef(muted);
   useEffect(() => { mutedRef.current = muted; }, [muted]);
@@ -380,6 +383,11 @@ export function GUBERAssistant() {
         },
         onStateChange: setLiveState,
         onError: (reason) => {
+          // Hard-stop the engine FIRST so that the speak() call in doSend()
+          // below doesn't call notifySpeakingStarted() on a live engine —
+          // which would re-open the mic after TTS ends even though liveMode
+          // is being set to false.
+          engineRef.current?.stop();
           setLiveMode(false);
           setLiveState("idle");
           const sentinel = reason === "mic_denied" ? "__mic_denied__" : reason === "unsupported" ? "__mic_error__" : "__mic_error__";
@@ -401,10 +409,22 @@ export function GUBERAssistant() {
       stopLiveMode();
       return;
     }
+    // unlockAudioContext() MUST run synchronously inside this gesture handler
+    // so the AudioContext is in "running" state — audio routes to the
+    // loudspeaker on iOS/Android instead of the earpiece or going silent.
     unlockAudioContext();
     cancelSpeech();
     cancelAllJacAudio();
     if (listening) stopListening();
+
+    // Play greeting now, inside the gesture — AudioContext is running so it
+    // comes out of the loudspeaker.  The ref prevents double-play.
+    if (!greetingSpokenRef.current && messages.length === 1) {
+      greetingSpokenRef.current = true;
+      const greetingText = messages[0]?.content ?? DD_GREETING;
+      setTimeout(() => speak(greetingText), 200);
+    }
+
     setLiveMode(true);
     await getEngine().start();
   }
@@ -502,8 +522,10 @@ export function GUBERAssistant() {
 
     const returning = localStorage.getItem("jac_returning") === "1";
     if (!returning) {
-      // First-time visitor — speak the greeting immediately
-      setTimeout(() => speak(DD_GREETING), 300);
+      if (!greetingSpokenRef.current) {
+        greetingSpokenRef.current = true;
+        setTimeout(() => speak(DD_GREETING), 300);
+      }
       return;
     }
     fetch("/api/jac/updates")
@@ -686,10 +708,15 @@ export function GUBERAssistant() {
         }, 1400);
       }
     },
-    onError: () => {
+    onError: (err: any) => {
+      console.error("[JAC listing-collect] failed:", err?.message || err);
+      // Don't leave the user stuck in a broken listing flow that will just
+      // keep failing the same way on every next message — drop back to
+      // normal chat mode so at least general conversation still works.
+      exitListingMode();
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Sorry, I'm having trouble right now. Please try again in a moment." },
+        { role: "assistant", content: "Sorry, I hit a snag building your listing. Let's keep chatting — tell me again what you'd like to post." },
       ]);
     },
   });
@@ -1277,6 +1304,29 @@ export function GUBERAssistant() {
           className="flex-shrink-0 px-4 py-3 border-t border-white/[0.05]"
           style={{ paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))" }}
         >
+          {/* Volume slider */}
+          {showVolumeSlider && (
+            <div className="flex items-center gap-3 mb-2 px-1">
+              <Volume2 className="w-4 h-4 flex-shrink-0" style={{ color: "hsl(270 100% 78%)" }} />
+              <input
+                type="range"
+                min={JAC_VOLUME_BOUNDS.min}
+                max={JAC_VOLUME_BOUNDS.max}
+                step={0.1}
+                value={jacVolume}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setJacVolume(v);
+                  setJacVolumeState(v);
+                }}
+                className="flex-1 accent-purple-400"
+                data-testid="slider-dd-volume"
+              />
+              <span className="text-xs w-6 text-right flex-shrink-0" style={{ color: "hsl(270 100% 78%)" }}>
+                {Math.round((jacVolume / JAC_VOLUME_BOUNDS.max) * 100)}%
+              </span>
+            </div>
+          )}
           <div
             className="flex items-end gap-2 rounded-2xl px-3 py-2"
             style={{ background: "hsl(222 47% 9%)", border: "1px solid hsl(222 47% 16%)" }}
@@ -1293,82 +1343,50 @@ export function GUBERAssistant() {
               disabled={anyPending}
             />
 
-            {/* Live Conversation Mode toggle — always-listening, interruptible */}
+            {/* Volume toggle button */}
+            <button
+              onClick={() => setShowVolumeSlider(v => !v)}
+              className="w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+              style={{ color: showVolumeSlider ? "hsl(270 100% 78%)" : "hsl(0 0% 45%)" }}
+              data-testid="button-dd-volume"
+              aria-label="Adjust JAC volume"
+            >
+              <Volume2 className="w-4 h-4" />
+            </button>
+
+            {/* Mic button — tap to call JAC (live always-listening mode) */}
             {micSupported && (
               <button
                 onClick={toggleLiveMode}
-                className={`relative w-10 h-10 rounded-full flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${
-                  liveMode ? "scale-110" : "hover:scale-105 active:scale-95"
-                }`}
+                className={`relative w-12 h-12 rounded-full flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${liveMode ? "scale-110" : "hover:scale-105 active:scale-95"}`}
                 style={{
                   background: liveMode
                     ? liveState === "speaking"
                       ? "linear-gradient(135deg, hsl(152 90% 40%), hsl(152 70% 30%))"
                       : liveState === "recording"
                         ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
-                        : "linear-gradient(135deg, hsl(45 100% 55%), hsl(35 95% 45%))"
-                    : "linear-gradient(135deg, hsl(222 47% 20%), hsl(222 47% 12%))",
-                  color: liveMode ? "white" : "hsl(45 90% 60%)",
+                        : "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))"
+                    : "linear-gradient(135deg, hsl(270 70% 25%), hsl(152 60% 16%))",
+                  color: "white",
                   boxShadow: liveMode
-                    ? "0 0 0 3px hsl(45 100% 55% / 0.3), 0 0 16px hsl(45 100% 55% / 0.45)"
-                    : "none",
-                }}
-                data-testid="button-live-conversation"
-                aria-label={liveMode ? "Stop live conversation" : "Start live conversation"}
-                disabled={anyPending}
-                title={liveMode ? "Live conversation on — tap to stop" : "Start live conversation (always listening)"}
-              >
-                {liveMode && (liveState === "recording" || liveState === "listening") && (
-                  <span className="absolute inset-0 rounded-full animate-ping opacity-30"
-                    style={{ background: "hsl(45 100% 55%)" }} />
-                )}
-                <Zap className="w-5 h-5" fill={liveMode ? "currentColor" : "none"} />
-              </button>
-            )}
-
-            {/* Mic button (push-to-talk) */}
-            {micSupported && (
-              <button
-                onClick={() => {
-                  unlockAudioContext();
-                  if (liveMode) stopLiveMode();
-                  if (listening) {
-                    stopListening();
-                  } else {
-                    cancelSpeech();
-                    cancelAllJacAudio();
-                    setTimeout(() => startListening(), 150);
-                  }
-                }}
-                className={`relative w-10 h-10 rounded-full flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${
-                  listening ? "scale-110" : "hover:scale-105 active:scale-95"
-                }`}
-                style={{
-                  background: listening
-                    ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
-                    : transcribing
-                      ? "linear-gradient(135deg, hsl(270 80% 40%), hsl(270 60% 30%))"
-                      : "linear-gradient(135deg, hsl(270 70% 25%), hsl(152 60% 16%))",
-                  color: listening ? "white" : transcribing ? "white" : "hsl(270 100% 78%)",
-                  boxShadow: listening
-                    ? "0 0 0 3px hsl(0 85% 52% / 0.35), 0 0 18px hsl(0 85% 52% / 0.5)"
-                    : transcribing
-                      ? "0 0 12px hsl(270 80% 55% / 0.4)"
-                      : "0 0 10px hsl(270 100% 65% / 0.35), inset 0 1px 0 hsl(270 100% 70% / 0.15)",
+                    ? "0 0 0 3px hsl(270 100% 65% / 0.35), 0 0 20px hsl(270 100% 65% / 0.5)"
+                    : "0 0 10px hsl(270 100% 65% / 0.35), inset 0 1px 0 hsl(270 100% 70% / 0.15)",
                 }}
                 data-testid="button-dd-mic"
-                aria-label={transcribing ? "Transcribing…" : listening ? "Stop listening" : "Speak to Jac"}
-                disabled={anyPending || transcribing}
+                aria-label={liveMode ? "End conversation" : "Call JAC"}
+                disabled={anyPending}
               >
-                {listening && (
-                  <span className="absolute inset-0 rounded-full animate-ping opacity-40"
-                    style={{ background: "hsl(0 85% 52%)" }} />
+                {liveMode && (
+                  <span className="absolute inset-0 rounded-full animate-ping opacity-25"
+                    style={{ background: "hsl(270 100% 65%)" }} />
                 )}
-                {transcribing
-                  ? <Loader2 className="w-5 h-5 animate-spin" />
-                  : listening
-                    ? <MicOff className="w-5 h-5" />
-                    : <Mic className="w-5 h-5" />}
+                {liveMode
+                  ? liveState === "recording"
+                    ? <Mic className="w-6 h-6" />
+                    : liveState === "speaking"
+                      ? <Volume2 className="w-6 h-6" />
+                      : <Loader2 className="w-6 h-6 animate-spin" />
+                  : <Mic className="w-6 h-6" />}
               </button>
             )}
 

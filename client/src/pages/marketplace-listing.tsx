@@ -13,6 +13,7 @@ import { isStoreBuild } from "@/lib/platform";
 import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
 import type { MarketplaceItem } from "@shared/schema";
 import { BuyerOrderDetailsForm, EMPTY_BO_DETAILS } from "@/components/buyer-order-details-form";
+import SeeForMeAction from "@/components/see-for-me-action";
 
 function statusLabel(status: string | null | undefined) {
   if (status === "sold") return "Sold";
@@ -283,7 +284,7 @@ export default function MarketplaceListing() {
   // SEO copy
   const categoryLabel = item.category || "item";
   const seoTitle = `${item.title}${location ? ` for sale in ${location}` : ""} | GUBER`;
-  const seoDescription = `View this ${categoryLabel} listing on GUBER. Contact the seller, request a viewing, or use GUBER Verify & Inspect before buying.${item.description ? " " + item.description.slice(0, 100) : ""}`;
+  const seoDescription = `View this ${categoryLabel} listing on GUBER. Contact the seller, request a viewing, or use GUBER See For Me before buying.${item.description ? " " + item.description.slice(0, 100) : ""}`;
   const ogImage = photos && photos[0] ? photos[0] : "https://guberapp.app/icon-1024.png";
 
   const price = item.price
@@ -420,7 +421,22 @@ export default function MarketplaceListing() {
 
           {/* Title & price */}
           <p className="text-xs font-display font-bold text-muted-foreground tracking-wider mb-1">{item.category}</p>
-          <h1 className="text-2xl font-display font-extrabold leading-tight mb-2">{item.title}</h1>
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <h1 className="text-2xl font-display font-extrabold leading-tight flex-1">{item.title}</h1>
+            {isIndexable && (
+              <SeeForMeAction
+                variant="icon-label"
+                context={{
+                  title: item.title ?? undefined,
+                  category: item.category ?? undefined,
+                  location: item.zipcode ?? undefined,
+                  listingId: item.id,
+                  price: price,
+                  imageUrl: photos?.[0] ?? undefined,
+                }}
+              />
+            )}
+          </div>
           <p className="text-2xl font-display font-black text-primary mb-4">{price}
             {(item.makeOfferEnabled || item.askingType === "obo") && (
               <span className="text-sm font-normal text-muted-foreground ml-2 inline-flex items-center gap-0.5">· Open to Offers
@@ -457,7 +473,7 @@ export default function MarketplaceListing() {
                 {item.verifiedByName ? ` Verified by ${item.verifiedByName}.` : ""}
                 {item.verificationDate ? ` On ${new Date(item.verificationDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.` : ""}
               </p>
-              <p className="text-xs text-muted-foreground mt-2">Verify &amp; Inspect provides visual proof and documentation only. It is not a guarantee of condition, authenticity, ownership, functionality, or future performance.</p>
+              <p className="text-xs text-muted-foreground mt-2">See For Me provides remote visual assistance and documentation only. The provider reports only what they directly observe and does not guarantee condition, authenticity, ownership, functionality, or future performance.</p>
             </div>
           )}
 
@@ -768,7 +784,7 @@ export default function MarketplaceListing() {
                   Request third-party visual verification before money moves — GPS-verified presence, time-stamped photos, {isVehicleCategory ? "VIN" : "identifier"} confirmation, and proof package.
                 </p>
                 <a href="/biz/verify-inspect" className="inline-block mt-2 text-[10px] font-bold tracking-wide" style={{ color: "#00e676" }}>
-                  Request Verify &amp; Inspect for Companies →
+                  Request See For Me for Companies →
                 </a>
               </div>
             </div>
@@ -825,7 +841,7 @@ export default function MarketplaceListing() {
           <div className="rounded-2xl p-4 mb-6 text-xs text-muted-foreground leading-relaxed"
             style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(0,229,118,0.55)" }}>
             <span className="flex items-start gap-1">
-              <span>GUBER helps users list, discover, and verify items. GUBER does not own, inspect, guarantee, or process the sale of listed items unless a separate GUBER Verify &amp; Inspect service is requested. Meet in a safe public location when possible.</span>
+              <span>GUBER helps users list, discover, and verify items. GUBER does not own, inspect, guarantee, or process the sale of listed items unless a separate GUBER See For Me service is requested. Meet in a safe public location when possible.</span>
               <InfoHint title="GUBER Marketplace" description="GUBER provides visibility, coordination, and documentation tools. GUBER is not the buyer, seller, inspector, lender, or owner of listed items." />
             </span>
           </div>
@@ -836,13 +852,13 @@ export default function MarketplaceListing() {
               <Button className="w-full premium-btn font-display" onClick={() => navigate(`/marketplace`)}>
                 <MessageCircle className="w-4 h-4 mr-2" /> Open in GUBER App
               </Button>
-              <p className="text-center text-xs text-muted-foreground">Sign in to contact seller, make an offer, or request Verify &amp; Inspect</p>
+              <p className="text-center text-xs text-muted-foreground">Sign in to contact seller, make an offer, or request See For Me</p>
             </div>
           )}
 
           {/* GUBER branding */}
           <div className="mt-8 text-center">
-            <p className="text-xs text-muted-foreground">Listed on <span className="font-display font-bold text-primary">GUBER</span> · Local listings with Verify &amp; Inspect built in</p>
+            <p className="text-xs text-muted-foreground">Listed on <span className="font-display font-bold text-primary">GUBER</span> · Local listings with See For Me built in</p>
           </div>
         </div>
       </div>

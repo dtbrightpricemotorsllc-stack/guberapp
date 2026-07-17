@@ -193,7 +193,7 @@ export default function BuyerOrderPreview() {
           <div style={{ color: "#aeb7c7", fontSize: 7, lineHeight: 1.7 }}>
             Financial companies: Request GPS-verified, time-stamped visual confirmation of vehicles, property, equipment, and other assets before lending, buying, funding, or repossessing. Visual documentation only. GUBER does not certify condition, title, value, or ownership.
           </div>
-          <div style={{ color: "#00e676", fontSize: 7, fontWeight: 700, marginTop: 6 }}>guberapp.app/biz &nbsp;·&nbsp; Request Verify &amp; Inspect</div>
+          <div style={{ color: "#00e676", fontSize: 7, fontWeight: 700, marginTop: 6 }}>guberapp.app/biz &nbsp;·&nbsp; Request See For Me</div>
         </div>
 
         <div style={s.footer}>

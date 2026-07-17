@@ -101,7 +101,7 @@ export default function BizVerifyInspect() {
         assetLocation: "", packageType: "standard",
         requiredProof: "", budget: "", urgency: "standard", notes: "",
       });
-      toast({ title: "Request submitted", description: "Your Verify & Inspect request is under review." });
+      toast({ title: "Request submitted", description: "Your See For Me request is under review." });
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -133,7 +133,7 @@ export default function BizVerifyInspect() {
                 <ScanSearch className="w-5 h-5" style={{ color: GREEN }} />
               </div>
               <div>
-                <h1 className="text-xl font-black text-foreground">Verify &amp; Inspect</h1>
+                <h1 className="text-xl font-black text-foreground">See For Me</h1>
                 <p className="text-[11px]" style={{ color: TEXT_MUTED }}>For Companies</p>
               </div>
             </div>
@@ -205,7 +205,7 @@ export default function BizVerifyInspect() {
       {showForm && (
         <div className="px-5 mb-6">
           <div className="rounded-2xl p-6" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-            <p className="text-[9px] font-bold tracking-[0.22em] uppercase mb-5" style={{ color: TEXT_MUTED }}>New Verify &amp; Inspect Request</p>
+            <p className="text-[9px] font-bold tracking-[0.22em] uppercase mb-5" style={{ color: TEXT_MUTED }}>New See For Me Request</p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div>
@@ -345,7 +345,7 @@ export default function BizVerifyInspect() {
             <div className="rounded-2xl p-8 text-center" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
               <ScanSearch className="w-8 h-8 mx-auto mb-3 opacity-20" />
               <p className="text-sm font-bold text-foreground mb-1">No requests yet</p>
-              <p className="text-xs" style={{ color: TEXT_MUTED }}>Submit your first Verify &amp; Inspect request above.</p>
+              <p className="text-xs" style={{ color: TEXT_MUTED }}>Submit your first See For Me request above.</p>
             </div>
           ) : (
             <div className="space-y-3">

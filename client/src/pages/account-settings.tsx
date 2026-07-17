@@ -308,7 +308,6 @@ function JacSettingsSection() {
               else WakeWordDetector.disable();
             }}
             testId="switch-jac-voice-activation"
-            badge="Beta"
             disabled={jacDisabled}
           />
           <PrefRow
@@ -1084,7 +1083,7 @@ export default function AccountSettings() {
               </div>
             )}
             <p className="text-[10px] text-muted-foreground/80 leading-relaxed pt-1">
-              <strong className="text-muted-foreground">Not hearing alerts on iPhone?</strong> Check that your ringer switch is on, GUBER notifications are allowed in iOS Settings, and Focus / Do Not Disturb is off. iOS only plays GUBER's custom sounds while the app is open in the foreground — locked-screen alerts use your phone's default notification sound.
+              <strong className="text-muted-foreground">Not hearing alerts?</strong> Make sure GUBER notifications are allowed in your phone's Settings app and that Do Not Disturb / Focus mode is off. GUBER plays custom sounds while the app is open — locked-screen alerts use your phone's default notification sound.
             </p>
           </div>
         </div>

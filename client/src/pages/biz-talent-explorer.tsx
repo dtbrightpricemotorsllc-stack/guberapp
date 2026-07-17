@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { isIOS as iosBuild } from "@/lib/platform";
+import { useCommerceMode } from "@/lib/commerce-mode";
 import { BizLayout } from "@/components/biz-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Link } from "wouter";
 import {
   Search, Filter, MapPin, Star, CheckCircle2, Shield, Clock,
   Zap, Lock, Eye, Bookmark, Send, ChevronDown, X, TrendingUp,
@@ -235,6 +237,7 @@ function CandidateCard({
 
 export default function BizTalentExplorer() {
   const { isDemoUser } = useAuth();
+  const { canPurchase } = useCommerceMode();
   const { toast } = useToast();
   const [showFilters, setShowFilters] = useState(false);
   const [activeQuickFilter, setActiveQuickFilter] = useState<string | null>(null);
@@ -556,8 +559,15 @@ export default function BizTalentExplorer() {
               </div>
               <p className="text-sm font-black text-foreground mb-2">Unlock Full Scouting Access</p>
               <p className="text-xs mb-1 leading-relaxed max-w-md mx-auto" style={{ color: TEXT_SECONDARY }}>
-                {isDemoUser ? "Subscribe to the Scout Plan for full talent search, monthly profile unlocks, and direct outreach to proven workers." : "Subscribe to the Scout Plan ($99/mo) for full talent search, 20 monthly profile unlocks, and direct outreach to proven workers."}
+                {isDemoUser || !canPurchase
+                  ? "Unlock full talent search, monthly profile unlocks, and direct outreach to proven workers."
+                  : "Subscribe to the Scout Plan ($99/mo) for full talent search, 20 monthly profile unlocks, and direct outreach to proven workers."}
               </p>
+              {!isDemoUser && !canPurchase && (
+                <Link href="/earning-opportunities" className="inline-flex items-center gap-1.5 mt-3 text-xs font-display tracking-wider text-emerald-400/80 hover:text-emerald-400 transition-colors" data-testid="link-scout-earn">
+                  View Earning Opportunities →
+                </Link>
+              )}
             </div>
           </div>
         )}

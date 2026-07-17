@@ -53,7 +53,7 @@ interface PublicJob {
 const SLIDES = [
   { label: "EARN",       color: "#00E576", cta: "BROWSE JOBS",     href: "/browse-jobs",                                        img: heroEarnImg,    focus: "center" },
   { label: "HIRE",       color: "#3B82F6", cta: "POST A JOB",      href: "/post-job",                                           img: heroHireImg,    focus: "center" },
-  { label: "VERIFY",     color: "#8B5CF6", cta: "SEE V&I JOBS",    href: "/browse-jobs?category=Verify+%26+Inspect",            img: heroVerifyImg,  focus: "center" },
+  { label: "SEE FOR ME", color: "#8B5CF6", cta: "SEE FOR ME JOBS", href: "/browse-jobs?category=Verify+%26+Inspect",            img: heroVerifyImg,  focus: "center" },
   { label: "LOAD BOARD", color: "#0891b2", cta: "VIEW LOAD BOARD", href: "/load-board",                                         img: heroLoadImg,    focus: "center" },
   { label: "EXPLORE",    color: "#EC4899", cta: "EXPLORE ALL",     href: "/browse-jobs",                                        img: heroExploreImg, focus: "center" },
 ];
@@ -77,11 +77,11 @@ const FIVE_DOORS = [
     number: "2",
   },
   {
-    id: "verify",    color: "#8B5CF6", icon: ShieldCheck, label: "VERIFY",
+    id: "verify",    color: "#8B5CF6", icon: ShieldCheck, label: "SEE FOR ME",
     headline: "Eyes on the ground.",
     tagline: "Photo proof, property inspections.",
     features: ["Pre-purchase vehicle photos", "Property walk-throughs", "$40–$120+ per job"],
-    cta: "SEE V&I JOBS", href: "/browse-jobs?category=Verify+%26+Inspect",
+    cta: "SEE FOR ME JOBS", href: "/browse-jobs?category=Verify+%26+Inspect",
     number: "3",
   },
   {
@@ -335,7 +335,7 @@ function JobCard({ job, onAccept }: { job: PublicJob; onAccept: () => void }) {
           )}
         </div>
         <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <Badge variant="outline" className="text-[10px] font-display no-default-hover-elevate">{job.category}</Badge>
+          <Badge variant="outline" className="text-[10px] font-display no-default-hover-elevate">{job.category === "Verify & Inspect" ? "See For Me" : job.category}</Badge>
           <Badge variant="outline" className="text-[10px] font-display no-default-hover-elevate capitalize">{job.jobType}</Badge>
         </div>
         <div className="flex items-center justify-between mt-auto">
@@ -958,10 +958,12 @@ export default function Home() {
           Google Play <span className="text-emerald-400 font-bold">(Live)</span>
         </a>
         <span className="text-muted-foreground/40">|</span>
-        <span className="flex items-center gap-1.5 text-muted-foreground" data-testid="text-platform-ios">
+        <a href="https://apps.apple.com/us/app/guber/id6743511655" target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+          data-testid="text-platform-ios">
           <SiApple className="w-3.5 h-3.5" />
-          App Store <span className="text-amber-400/80 font-bold">(Coming Soon)</span>
-        </span>
+          App Store
+        </a>
         <span className="hidden sm:flex items-center gap-1.5 text-muted-foreground text-[10px]">
           <span className="text-muted-foreground/40">|</span>
           <span className="online-dot" aria-hidden />
@@ -1166,29 +1168,29 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── Verify & Inspect callout ── */}
+      {/* ── See For Me callout ── */}
       <section className="relative z-10 px-5 pb-20 max-w-6xl mx-auto w-full">
         <div className="rounded-2xl overflow-hidden relative"
           style={{ background: "linear-gradient(135deg,rgba(0,229,229,0.06) 0%,rgba(0,229,229,0.02) 100%)", border: "1px solid rgba(0,229,229,0.15)" }}>
           <div className="p-8 sm:p-12 flex flex-col sm:flex-row items-center gap-8">
             <div className="relative w-full sm:w-64 h-48 sm:h-48 shrink-0">
-              <img src={verifyInspectImg} alt="Verify & Inspect" className="w-full h-full object-cover rounded-xl" />
+              <img src={verifyInspectImg} alt="See For Me" className="w-full h-full object-cover rounded-xl" />
               <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-black/40 to-transparent" />
-              <img src={viLogoImg} alt="V&I" className="absolute bottom-2 right-2 w-16 h-16 object-contain drop-shadow-2xl" style={{ mixBlendMode: "screen" }} />
+              <img src={viLogoImg} alt="See For Me" className="absolute bottom-2 right-2 w-16 h-16 object-contain drop-shadow-2xl" style={{ mixBlendMode: "screen" }} />
             </div>
             <div className="flex-1">
               <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full text-[10px] font-display tracking-widest"
                 style={{ background: "rgba(0,229,229,0.1)", border: "1px solid rgba(0,229,229,0.2)", color: "#00E5E5" }}>
                 <ShieldCheck className="w-3 h-3" />GUBER EXCLUSIVE
               </div>
-              <h2 className="text-2xl font-display font-black tracking-wider mb-3">VERIFY &amp; INSPECT</h2>
+              <h2 className="text-2xl font-display font-black tracking-wider mb-3">SEE FOR ME</h2>
               <p className="text-muted-foreground text-sm leading-relaxed mb-6">
-                Get paid to show up and document — visual proof, eyes on the ground. Property walk-throughs,
+                Get paid to show up and be someone's eyes on location. Property walk-throughs,
                 pre-purchase photo runs, online listing verification. Helpers don't certify, diagnose, or appraise —
                 they take clear photos and short video. $40–$120+ per job.
               </p>
               <Link href="/browse-jobs?category=Verify+%26+Inspect" className="inline-flex items-center gap-2 h-11 px-6 rounded-xl text-sm font-display tracking-[0.15em] premium-btn" data-testid="link-vi-learn-more">
-                SEE V&I JOBS <ArrowRight className="w-4 h-4" />
+                SEE FOR ME JOBS <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
           </div>
@@ -1255,13 +1257,16 @@ export default function Home() {
             >
               <SiGoogleplay className="w-4 h-4" /> GET IT ON GOOGLE PLAY
             </a>
-            <span
-              className="flex items-center gap-2 h-10 px-4 rounded-xl text-[11px] font-display tracking-wider font-bold opacity-50 cursor-default"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}
-              data-testid="text-footer-app-store"
+            <a
+              href="https://apps.apple.com/us/app/guber/id6743511655"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 h-10 px-4 rounded-xl text-[11px] font-display tracking-wider font-bold"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.8)" }}
+              data-testid="link-footer-app-store"
             >
-              <SiApple className="w-4 h-4" /> APP STORE — COMING SOON
-            </span>
+              <SiApple className="w-4 h-4" /> APP STORE
+            </a>
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 w-full">

@@ -17,7 +17,7 @@ Last verified against codebase: July 2, 2026.
 - **Job creation model:** Strictly dropdown/structured-data driven — not freeform postings — to keep listings safe and searchable.
 - **Privacy:** GPS coordinates shown on public maps are fuzzed (see Section 15) to protect user location privacy.
 - **Platforms:** Web app plus native iOS and Android apps (Capacitor).
-- **Available product surfaces:** Finding Work / Hiring Help (jobs), Marketplace (general goods + Vehicles + Real Estate categories), Transport/Load Board, Verify & Inspect, GUBER Studio (AI media generation), Missions/Credits (Growth Engine), Day-1 OG membership, Cash Drops, Barter, Direct Offers, GUBER Business (recruiting tools).
+- **Available product surfaces:** Finding Work / Hiring Help (jobs), Marketplace (general goods + Vehicles + Real Estate categories), Transport/Load Board, See For Me (remote presence service, formerly called Verify & Inspect), GUBER Studio (AI media generation), Missions/Credits (Growth Engine), Day-1 OG membership, Cash Drops, Barter, Direct Offers, GUBER Business (recruiting tools).
 - Some of the above (Observation Marketplace, Cash Drops, Barter, Direct Offers, GUBER Business) are feature-flag gated and may not be visible to every user — **NEEDS OWNER REVIEW** if JAC should disclose flag-gated availability explicitly per user.
 
 ---
@@ -41,11 +41,11 @@ Last verified against codebase: July 2, 2026.
 ## 3. Finding Work
 
 - **Where to look:** Browse open jobs on the map or list view.
-- **Job categories:** Structured, dropdown-driven — not freeform. Categories include General Labor, Skilled Labor, On-Demand Help, Verify & Inspect, Barter Labor, and others defined in the job builder configuration.
+- **Job categories:** Structured, dropdown-driven — not freeform. Categories include General Labor, Skilled Labor, On-Demand Help, See For Me (also known as Verify & Inspect), Barter Labor, and others defined in the job builder configuration.
 - **Job structure a worker sees:** title, description, category, service type, location (fuzzed until assigned), budget, urgent flag, and required availability windows (if the poster set specific date/time slots).
 - **Accepting a job:**
   - Requires the worker to have **completed ID verification** and an **active Stripe Connect account** (`stripeAccountStatus === "active"`).
-  - Some categories (Skilled Labor, Verify & Inspect) require additional tier or credential verification.
+  - Some categories (Skilled Labor, See For Me) require additional tier or credential verification.
   - If the poster specified structured availability windows, the worker must then select a specific time slot before the job proceeds.
 - **Job lifecycle (from a worker's perspective):**
   1. Open/posted → worker accepts
@@ -57,7 +57,7 @@ Last verified against codebase: July 2, 2026.
 - **Proof submission:**
   - Workers submit photos/video plus notes as proof of job completion.
   - **Geofence rule:** Workers must be physically within 250 meters of the job site (verified server-side by GPS) to submit proof.
-  - Verify & Inspect jobs go through an additional review step where the poster can request a retake (capped at 3 retakes per job) or mark the proof satisfied.
+  - See For Me jobs go through an additional review step where the requester can request a retake (capped at 3 retakes per job) or mark the proof satisfied.
 - **Getting paid:** See Section 14 (Payments and Fees) for fee percentages and payout timing.
 - **Disputes:** If something goes wrong, either party can open a dispute — see Section 15 (Safety Rules).
 - **Urgent jobs:** Posters can mark a job "urgent" for a fee (free for Day-1 OG members) to boost visibility/priority.
@@ -78,8 +78,8 @@ Last verified against codebase: July 2, 2026.
 - **Confirming completion:**
   - You review the worker's submitted proof (photos/video + notes, with GPS/timestamp).
   - You can confirm the job is done (releases payment) or open a dispute if something's wrong.
-  - If you take no action, the job **auto-confirms** and pays out automatically after a review window: 24 hours for simple/Verify & Inspect jobs, 48 hours for Skilled Labor, 72 hours for high-value jobs over $500.
-- **Verify & Inspect requests:** Businesses can request GPS-verified visual inspection/proof of an asset (vehicle, property, etc.) through a dedicated request flow — see Section 9.
+  - If you take no action, the job **auto-confirms** and pays out automatically after a review window: 24 hours for simple/See For Me jobs, 48 hours for Skilled Labor, 72 hours for high-value jobs over $500.
+- **See For Me requests:** Businesses can request GPS-verified visual proof of an asset (vehicle, property, etc.) through a dedicated request flow — see Section 9.
 
 ---
 
@@ -89,7 +89,7 @@ Last verified against codebase: July 2, 2026.
 - **Listing fields:** title, description, category, condition, price, pricing type (fixed or open-to-offers / firm or negotiable), whether "Make Offer" is enabled, minimum acceptable offer (hidden from buyers), photos, approximate location/zip, and status (available, pending, sold, removed).
 - **Seller types:** dealer or private seller.
 - **Content rules:** Listings are screened to block off-platform contact info (phone/email/cash-app handles) in the title and description, same as job postings.
-- **GUBER Verified badge:** A listing can display a "GUBER Verified" badge if it's linked to a completed Verify & Inspect job for that specific item.
+- **GUBER Verified badge:** A listing can display a "GUBER Verified" badge if it's linked to a completed See For Me job for that specific item.
 - **Boosting a listing (paid):**
   - 24 hours — $2.99
   - 3 days — $6.99
@@ -114,16 +114,16 @@ Last verified against codebase: July 2, 2026.
   - If a vehicle listing is missing a VIN, a buyer can send a request asking the seller to complete missing details (VIN, mileage, engine, fuel type, drive type, trim, exterior/interior color).
   - Once details are provided, a buyer can purchase a Buyer's Order PDF (a vehicle information sheet) for **$1.00** via Stripe.
   - **Day-1 OG members get 2 free Buyer's Order PDFs per month.**
-  - If the vehicle listing is linked to a completed Verify & Inspect job, the PDF includes a GUBER Verified badge.
+  - If the vehicle listing is linked to a completed See For Me job, the PDF includes a GUBER Verified badge.
 - **VIN decoding:** GUBER can decode a VIN via an NHTSA lookup to help populate vehicle details.
-- **Verification:** A vehicle listing can be Verify & Inspect-certified, which sets `guberVerified: true` on the listing once the linked V&I job is completed and paid.
+- **Verification:** A vehicle listing can be See For Me-certified, which sets `guberVerified: true` on the listing once the linked See For Me job is completed and paid.
 
 ---
 
 ## 7. Real Estate Listings
 
 - Real Estate operates as a category within the same Marketplace/listings system described in Sections 5–6, using the shared listing schema (title, description, price, condition, photos, location, status, offers, deals, boosting).
-- Verify & Inspect requests can also be made against real estate assets (e.g., a property walkthrough/inspection) using asset type and identifier fields such as APN (Assessor's Parcel Number) — see Section 9.
+- See For Me requests can also be made against real estate assets (e.g., a property walkthrough/inspection) using asset type and identifier fields such as APN (Assessor's Parcel Number) — see Section 9.
 - **NEEDS OWNER REVIEW:** unlike Vehicles, no real-estate-specific dedicated fields (e.g., square footage, bedrooms, lot size) were found as distinct schema columns during this review — if such fields exist under a generic `details` JSON blob, GUBER's team should confirm exactly which structured fields are expected/required for Real Estate listings so JAC can guide users accurately.
 
 ---
@@ -145,21 +145,50 @@ Last verified against codebase: July 2, 2026.
 
 ---
 
-## 9. Verify & Inspect
+## 9. See For Me (Remote Presence)
 
-- **What it is:** A service where a GUBER worker physically visits a location and captures GPS-verified photo/video proof of an asset's condition — used for vehicles, real estate, and other assets a business or individual needs eyes on.
-- **Requesting a Verify & Inspect job (business flow):**
-  - Business submits a request specifying company/contact name, asset type, asset name, identifier type (e.g., VIN for a vehicle, APN for a property) and value, asset location, package type (basic/standard/comprehensive), required proof, budget, and urgency.
-  - This creates a business request record and simultaneously auto-posts a public job (category "Verify & Inspect", job type "vi") for workers to accept, with the budget defaulting to $50 if not specified.
-- **Checklists:** Each verification type has a defined proof checklist — each item specifies a label, instructions, whether it needs a photo or video, how many are required, and whether GPS-tagging is required for that item.
-- **Hands-Free (phone-as-glasses) capture:**
-  - **This feature is OFF by default platform-wide** (`handsfree_capture` feature flag defaults to disabled) — JAC should not assume every worker has access to it and should confirm it's enabled for that user/job before walking them through it.
-  - When enabled, a dedicated in-app capture mode lets the worker use their phone's back camera POV-style, guided through consent → ready → recording phases.
-  - Recording is capped at 15 minutes, keeps the screen awake, and periodically locks in the worker's GPS position during capture.
-  - **Anti-fraud checks:** Both the app and the server independently check for "cheating" patterns — clips under 5 seconds, GPS more than 5km from the job site, or footage older than 7 days are blocked.
-  - Workers who rack up 5+ blocked attempts total, or 3+ on a single job, are automatically flagged for admin review.
-- **Review:** After proof is submitted, the requesting party can approve it or request a retake (max 3 retakes per job).
-- **Disclaimer:** Verify & Inspect provides visual proof and documentation only — it is not a guarantee of condition, authenticity, ownership, functionality, or future performance. JAC should always include this disclaimer when describing V&I to users.
+**Official customer-facing name:** See For Me. **Legacy/internal name:** Verify & Inspect (V&I). Both terms refer to the same feature and workflow. JAC must use "See For Me" in all new customer-facing responses. If a user says "Verify & Inspect," JAC understands the request and replies using "See For Me." Do not treat them as separate features.
+
+**Recognized aliases JAC must route to See For Me:** Verify & Inspect, Verify and Inspect, inspection request, vehicle inspection, property check, item verification, visual verification, remote inspection, someone to look at something, someone to check something, someone to go see something, remote eyes, remote presence, see it for me.
+
+**Core positioning:** See For Me is GUBER's Remote Presence service. It allows a user to send someone to a location when the user cannot personally be there. The person completing the request acts as the user's eyes on location by following instructions, taking photos, recording video, providing a live walkthrough, and reporting only what they directly observe.
+
+**The provider is NOT automatically:** a mechanic, professional inspector, appraiser, engineer, contractor, certified property inspector, condition guarantor, or legal expert — unless a separately-verified professional service is requested. JAC must not describe See For Me as a professional inspection unless the user is specifically requesting a qualified professional.
+
+**Preferred JAC response:** "See For Me can send someone to the location to be your eyes. They can follow your instructions using photos, recorded video, or a live walkthrough."
+
+**JAC question flow — ask one at a time:**
+1. "What would you like someone to see for you?"
+2. Where is it located?
+3. Is this a vehicle, property, online item, or something else?
+4. Would you like photos, video, or a live walkthrough?
+5. What specific details do you want shown?
+6. When do you need someone there?
+
+**Worker-side language:** JAC should say "Someone needs eyes on location" or "This See For Me request asks you to follow the customer's visual checklist." Do NOT say: "You are inspecting the vehicle," "You are certifying the property," "You are approving the item."
+
+**Distance Deal integration:** See For Me → Agreement → Deposit → Transport → Delivery. When a user wants to buy a distant vehicle, JAC explains See For Me can help view it first before agreement/deposit.
+
+**Intent phrases JAC should recognize:**
+- Can someone go see this for me?
+- I found a vehicle far away.
+- I need someone to look at a car / house / boat / equipment.
+- I want pictures before I travel.
+- Can someone do a live video with me?
+- I need someone to check my property.
+- I cannot be there in person.
+- I want someone to be my eyes.
+- I found something on Facebook Marketplace.
+- I want someone to look at something before I buy it.
+
+**Technical details (for backend/routing — internal):**
+- Business flow: submits a request specifying asset type, identifier (e.g., VIN for vehicle, APN for property), location, package type (basic/standard/comprehensive), and budget.
+- Creates a business request record and auto-posts a public job (internal category "Verify & Inspect", job type "vi") for workers to accept. Budget defaults to $50 if not specified.
+- Checklists: each verification type has a defined proof checklist with photo/video requirements and GPS-tagging rules.
+- **Hands-Free (phone-as-glasses) capture:** OFF by default (`handsfree_capture` feature flag). When enabled, worker uses phone back camera POV-style through consent → ready → recording phases. Capped at 15 minutes. Anti-fraud: clips under 5 seconds, GPS >5km from job site, or footage older than 7 days are blocked. 5+ blocked attempts total or 3+ on one job flags the worker for admin review.
+- **Review:** After proof submitted, requesting party can approve or request retake (max 3 retakes per job).
+
+**Disclaimer JAC must include:** "See For Me provides remote visual assistance and documentation only. The provider reports only what they directly observe and does not guarantee condition, authenticity, ownership, functionality, or future performance."
 
 ---
 
@@ -332,8 +361,8 @@ GUBER fuzzes public map locations by roughly half a kilometer to protect user pr
 **Can I text a buyer/seller/worker my phone number instead of using the app?**
 No — GUBER automatically blocks contact info (phone numbers, emails, social handles) and off-platform payment mentions everywhere on the platform, including chat, to keep both sides protected.
 
-**What is Verify & Inspect?**
-A service where a GUBER worker visits a location in person and captures GPS-verified photo/video proof of an asset's condition (a vehicle, property, etc.). It provides documentation only — not a guarantee of condition, authenticity, ownership, or functionality.
+**What is See For Me?**
+GUBER's Remote Presence service — someone visits a location to be your eyes. They follow your instructions using photos, video, or a live walkthrough and report only what they directly observe. It provides documentation only — not a guarantee of condition, authenticity, ownership, or functionality. (Also known internally as Verify & Inspect.)
 
 **How do credits convert to cash?**
 1,000 credits = $1.00. You can request a cashout once you hit the minimum threshold — see Section 11 for the (currently unconfirmed) exact minimum.

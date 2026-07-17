@@ -1,17 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { isIOS, isWeb } from "@/lib/platform";
+import { isWeb } from "@/lib/platform";
 
 /**
- * GPS tracking indicator banner.
+ * GPS tracking indicator banner — shown on all platforms while a job is
+ * being tracked.
  *
- * Platform behaviour:
- *   iOS native   — shown: "🟢 Live GPS Tracking Active / Tracking for your active GUBER job."
- *                  iOS system location pill (top-right) also shows while bg-geo is running.
- *   Android native — hidden: the foreground-service system notification (GuberTrackingService)
- *                  already gives the persistent status-bar indicator.
- *   Web / PWA    — shown with a PWA-specific message: tracking only works while the tab is open.
- *                  Includes a nudge to download the native app for full background tracking.
+ * Web / PWA: includes a note that tracking only works while the tab is open.
+ * Native (iOS + Android): shows the live tracking indicator.
  */
 export function GpsTrackingBanner() {
   const [trackingJobId, setTrackingJobId] = useState<number | null>(null);
@@ -26,9 +22,6 @@ export function GpsTrackingBanner() {
   }, []);
 
   if (!trackingJobId) return null;
-
-  // Android uses the system foreground-service notification — no in-app banner needed.
-  if (!isIOS && !isWeb) return null;
 
   if (isWeb) {
     return (
@@ -49,7 +42,7 @@ export function GpsTrackingBanner() {
     );
   }
 
-  // iOS native
+  // Native app (iOS + Android)
   return (
     <Link href={`/jobs/${trackingJobId}`}>
       <div

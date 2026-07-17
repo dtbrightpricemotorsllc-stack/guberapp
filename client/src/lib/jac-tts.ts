@@ -61,10 +61,54 @@ let _currentAudio: HTMLAudioElement | null = null;
 let _audioUnlocked = false;
 let _currentAbort: AbortController | null = null;
 
+// AudioContext — routes to the loudspeaker on iOS instead of the earpiece
+// (the default for <audio> elements). Created inside the first user gesture
+// via unlockAudioContext() so iOS allows it.
+let _audioCtx: AudioContext | null = null;
+let _audioCtxSource: AudioBufferSourceNode | null = null;
+
+// ── User-controllable volume ───────────────────────────────────────────────
+// Stored in localStorage as "jac_volume" (float 0.5 – 6.0).
+// Gain pipeline: source → GainNode → Limiter → destination.
+// Gain goes FIRST so we amplify everything; the limiter then
+// catches only true peaks to prevent clipping — NOT an aggressive hard limiter.
+// v4 key — clears 3.0/8.0 savings; no limiter so higher gain stays clean.
+const JAC_VOLUME_KEY = "jac_volume_v4";
+const JAC_VOLUME_DEFAULT = 2.0;
+const JAC_VOLUME_MIN = 0.5;
+const JAC_VOLUME_MAX = 6.0;
+
+function _loadVolume(): number {
+  try {
+    const v = parseFloat(localStorage.getItem(JAC_VOLUME_KEY) ?? "");
+    if (!isNaN(v) && v >= JAC_VOLUME_MIN && v <= JAC_VOLUME_MAX) return v;
+  } catch {}
+  return JAC_VOLUME_DEFAULT;
+}
+
+let _jacVolume: number = JAC_VOLUME_DEFAULT;
+// Load persisted value once on module init (browser only).
+if (typeof window !== "undefined") {
+  _jacVolume = _loadVolume();
+}
+
+export function getJacVolume(): number { return _jacVolume; }
+
+export function setJacVolume(v: number) {
+  _jacVolume = Math.max(JAC_VOLUME_MIN, Math.min(JAC_VOLUME_MAX, v));
+  try { localStorage.setItem(JAC_VOLUME_KEY, String(_jacVolume)); } catch {}
+}
+
+export const JAC_VOLUME_BOUNDS = { min: JAC_VOLUME_MIN, max: JAC_VOLUME_MAX, default: JAC_VOLUME_DEFAULT };
+
 export function cancelElevenLabsAudio() {
   if (_currentAbort) {
     try { _currentAbort.abort(); } catch {}
     _currentAbort = null;
+  }
+  if (_audioCtxSource) {
+    try { _audioCtxSource.stop(); } catch {}
+    _audioCtxSource = null;
   }
   if (_currentAudio) {
     _currentAudio.pause();
@@ -79,6 +123,7 @@ export function cancelElevenLabsAudio() {
  * live-conversation engine to know when interruption should be armed.
  */
 export function isJacSpeaking(): boolean {
+  if (_audioCtxSource) return true;
   if (_currentAudio && !_currentAudio.paused) return true;
   try {
     return typeof window !== "undefined" && !!window.speechSynthesis?.speaking;
@@ -89,11 +134,51 @@ export function isJacSpeaking(): boolean {
 
 /**
  * Call this on ANY user interaction (button tap, send, mic press) before speaking.
- * Unlocks audio playback on mobile browsers that require a gesture.
+ * Unlocks audio playback on all platforms (mobile browsers, PWA, native Capacitor).
  */
 export function unlockAudioContext() {
-  // Unlock HTML5 audio (autoplay gate)
-  if (!_audioUnlocked) {
+  // Create / resume the Web Audio API context inside this user gesture.
+  // AudioContext routes audio through the main speaker on all platforms;
+  // raw <audio> elements can default to earpiece routing on some phones.
+  // Must be called synchronously inside the gesture handler — browsers block
+  // AudioContext creation/resume in async callbacks.
+  try {
+    if (typeof window !== "undefined") {
+      const AC = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext | undefined;
+      if (AC) {
+        if (!_audioCtx || _audioCtx.state === "closed") {
+          _audioCtx = new AC();
+        }
+        const ctx = _audioCtx;
+        if (ctx.state === "suspended") {
+          ctx.resume().catch(() => {});
+        }
+        // Play a 1-sample silent buffer to fully unlock the AudioContext
+        // inside a user gesture so that subsequent async calls (API fetch
+        // + play) are routed through the main speaker on all platforms.
+        if (ctx.state === "running" || ctx.state === "suspended") {
+          try {
+            const silent = ctx.createBuffer(1, 1, 22050);
+            const src = ctx.createBufferSource();
+            src.buffer = silent;
+            src.connect(ctx.destination);
+            src.start(0);
+          } catch { /* non-fatal */ }
+        }
+      }
+    }
+  } catch {}
+
+  // Unlock HTML5 audio (autoplay gate) — skipped ONLY on iOS Capacitor because
+  // playing an <audio> element there resets the AVAudioSession category from
+  // .playback (loudspeaker) back to .soloAmbient (earpiece).
+  // Android Capacitor, Android browser, PWA, and all desktop browsers need
+  // this unlock — it's NOT skipped there.
+  const onIosCapacitor =
+    typeof window !== "undefined" &&
+    !!(window as any).Capacitor?.isNativePlatform?.() &&
+    /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (!_audioUnlocked && !onIosCapacitor) {
     const SILENT_MP3 = "data:audio/mpeg;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAwAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
     const a = new Audio(SILENT_MP3);
     a.volume = 0;
@@ -180,18 +265,25 @@ export async function jacSpeak(
   }
 
   // ── Tier 2: live ElevenLabs via backend proxy ─────────────────────────────
-  // iOS WKWebView's MediaSource/streaming support is unreliable, but plain
-  // fetch → blob → <audio> playback works fine there, so iOS uses the
-  // buffered path (no streaming) while other platforms get progressive
-  // streaming playback for lower latency.
-  const played = isIOS
-    ? await tryLiveElevenLabsBuffered(text, opts.onStart)
-    : await tryLiveElevenLabs(text, opts.onStart);
+  // ALL platforms use the buffered path (fetch-all → ArrayBuffer → AudioContext).
+  //
+  // Why not the streaming path (MediaSource)?
+  //   The streaming path creates a plain `new Audio()` backed by a MediaSource
+  //   object URL — it never touches AudioContext, so it gets NO gain boost and
+  //   NO DynamicsCompressor.  On Android this is especially bad: the audio plays
+  //   at system default volume (quiet) through whatever routing Android chose.
+  //   The buffered path routes the decoded PCM through:
+  //     BufferSource → DynamicsCompressor → GainNode (4× default) → destination
+  //   which is audibly much louder and goes through the loudspeaker.
+  //
+  // Latency difference is negligible: ElevenLabs responses for typical
+  // utterances (~5 s audio) are ~80 KB and download in ~100–200 ms.
+  const played = await tryLiveElevenLabsBuffered(text, opts.onStart);
   if (played) return;
 
   // ── Tier 3: Web Speech (always available, no cost) ────────────────────────
   opts.onFallback?.();
-  reportFallback(isIOS ? "ios_elevenlabs_failed" : "live_elevenlabs_failed");
+  reportFallback("live_elevenlabs_failed");
   webSpeechFallback(text, opts.onStart);
 }
 
@@ -319,7 +411,7 @@ async function tryLiveElevenLabsStreaming(text: string, onStart?: () => void): P
   });
 }
 
-/** Full-blob buffering fallback — used when MediaSource streaming is unsupported or fails, and on iOS. */
+/** Full-blob buffering fallback — used when MediaSource streaming is unsupported or fails (e.g. iOS Safari). */
 async function tryLiveElevenLabsBuffered(text: string, onStart?: () => void): Promise<boolean> {
   const controller = new AbortController();
   _currentAbort = controller;
@@ -332,16 +424,86 @@ async function tryLiveElevenLabsBuffered(text: string, onStart?: () => void): Pr
     });
     if (_currentAbort === controller) _currentAbort = null;
     if (!res.ok) return false;
-    const blob = await res.blob();
-    if (!blob.size) return false;
+    const arrayBuffer = await res.arrayBuffer();
+    if (!arrayBuffer.byteLength) return false;
+    // Use AudioContext to route through the loudspeaker on iOS.
+    const played = await playViaAudioCtx(arrayBuffer, onStart);
+    if (played) return true;
+    // AudioContext not available — fall back to <audio> element.
+    const blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
     const url = URL.createObjectURL(blob);
-    return await tryPlayAudio(url, true, onStart);
+    return await playViaAudioElement(url, true, onStart);
   } catch {
     return false;
   }
 }
 
+/**
+ * Decode and play an ArrayBuffer via AudioContext (all platforms).
+ * AudioContext routes audio through the main speaker on all devices — raw
+ * <audio> elements can default to earpiece routing on some phones.
+ * Only used when the context is "running" — a suspended context hangs forever
+ * because source.onended never fires until the context is resumed, which
+ * breaks the greeting and any audio triggered from a non-gesture path.
+ * Returns false immediately if the context isn't running so callers fall
+ * back to <audio>.
+ */
+async function playViaAudioCtx(arrayBuffer: ArrayBuffer, onStart?: () => void): Promise<boolean> {
+  const ctx = _audioCtx;
+  if (!ctx) return false;
+  // After mic release/re-acquire the context can be suspended even though
+  // it was running at unlock time.  Try one resume before giving up.
+  if (ctx.state === "suspended") {
+    try { await ctx.resume(); } catch {}
+  }
+  if (ctx.state !== "running") return false;
+  try {
+    const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+    if (ctx.state !== "running") return false;
+    const source = ctx.createBufferSource();
+    source.buffer = decoded;
+
+    // ── Loudness pipeline: source → GainNode → destination ───────────────
+    // Plain gain only — NO DynamicsCompressor of any kind.
+    // Any compressor/limiter on speech causes audible pumping ("cassette-tape
+    // wind noise") because speech dynamics make it engage and release
+    // constantly.  A simple gain node is transparent and artefact-free.
+    // ElevenLabs audio is already well-levelled; 2× is enough to be
+    // clearly louder through the phone speaker without clipping.
+    const gain = ctx.createGain();
+    gain.gain.value = _jacVolume; // 0.5 – 6.0, default 2.0
+
+    source.connect(gain);
+    gain.connect(ctx.destination);
+    _audioCtxSource = source;
+    return new Promise<boolean>((resolve) => {
+      source.onended = () => {
+        if (_audioCtxSource === source) _audioCtxSource = null;
+        resolve(true);
+      };
+      source.start(0);
+      onStart?.();
+    });
+  } catch {
+    _audioCtxSource = null;
+    return false;
+  }
+}
+
 function tryPlayAudio(url: string, isBlob = false, onStart?: () => void): Promise<boolean> {
+  // Fetch the audio, then play via AudioContext (loudspeaker) when running.
+  // Falls back to <audio> element if AudioContext is not yet unlocked/running
+  // (e.g. greeting fired from useEffect before any user gesture).
+  if (_audioCtx && _audioCtx.state === "running") {
+    return fetch(url)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject()))
+      .then((buf) => playViaAudioCtx(buf, onStart))
+      .catch(() => playViaAudioElement(url, isBlob, onStart));
+  }
+  return playViaAudioElement(url, isBlob, onStart);
+}
+
+function playViaAudioElement(url: string, isBlob = false, onStart?: () => void): Promise<boolean> {
   return new Promise((resolve) => {
     const audio = new Audio(url);
     audio.preload = "auto";
@@ -349,7 +511,7 @@ function tryPlayAudio(url: string, isBlob = false, onStart?: () => void): Promis
     let started = false;
     const cleanup = () => {
       if (isBlob) URL.revokeObjectURL(url);
-      _currentAudio = null;
+      if (_currentAudio === audio) _currentAudio = null;
     };
     audio.onplay  = () => { if (!started) { started = true; onStart?.(); } };
     audio.onended = () => { cleanup(); resolve(true); };

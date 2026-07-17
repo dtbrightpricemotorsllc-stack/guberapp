@@ -46,6 +46,7 @@ import {
 } from "./growth-engine";
 import { getAmbassadorStatusForUser, maybeAwardAmbassadorForReferredUser } from "./ambassador-reward";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
+import { getCommerceMode, setCommerceMode, requireFullCommerce, requireCreditPurchaseEnabled, invalidateCommerceModeCache } from "./commerce-mode";
 import { demoGuard, getDemoUserIds, isDemoUser, viewerCanSeeJobSync } from "./demo-guard";
 import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword, handleLogin, handleSignup, handleForgotPassword, handleBusinessSignup, handleNativeGoogleAuth, handleNativeAppleAuth } from "./auth";
 import { detectDisallowedJobContent, detectOffPlatformPhrase, detectViLanguageHit, replaceViLanguage } from "@shared/liability";
@@ -879,6 +880,43 @@ export async function registerRoutes(
 
   app.get("/api/config", (_req: Request, res: Response) => {
     res.json({ googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "" });
+  });
+
+  // ── Commerce Mode public endpoint ──────────────────────────────────────────
+  app.get("/api/commerce-mode", async (_req: Request, res: Response) => {
+    try {
+      const mode = await getCommerceMode();
+      res.json({ mode });
+    } catch {
+      const { DEFAULT_COMMERCE_MODE } = await import("../shared/commerce-mode");
+      res.json({ mode: DEFAULT_COMMERCE_MODE });
+    }
+  });
+
+  // ── Commerce Mode admin control ────────────────────────────────────────────
+  app.put("/api/admin/commerce-mode", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { mode } = req.body as { mode?: string };
+      const valid = ["HIDDEN", "EARNED_CREDITS_ONLY", "FULL_COMMERCE"];
+      if (!mode || !valid.includes(mode)) {
+        return res.status(400).json({ message: "Invalid mode. Must be one of: " + valid.join(", ") });
+      }
+      await setCommerceMode(mode as any, req.session.userId!);
+      res.json({ ok: true, mode });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/commerce-mode/log", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const result = await pool.query(
+        "SELECT cl.*, u.email AS admin_email FROM commerce_mode_log cl LEFT JOIN users u ON u.id = cl.admin_id ORDER BY cl.changed_at DESC LIMIT 50"
+      );
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   // ── Dev/test-only: serve the native-auth bounce page with an arbitrary deep
@@ -1795,7 +1833,7 @@ export async function registerRoutes(
     res.json({ url: session.url });
   });
 
-  app.post("/api/business/create-scout-subscription", async (req: Request, res: Response) => {
+  app.post("/api/business/create-scout-subscription", requireFullCommerce, async (req: Request, res: Response) => {
     if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
     const acct = await storage.getBusinessAccount(req.session.userId);
     if (!acct) return res.status(404).json({ message: "No business account found" });
@@ -1831,7 +1869,7 @@ export async function registerRoutes(
     res.json({ url: session.url });
   });
 
-  app.post("/api/business/purchase-unlocks", async (req: Request, res: Response) => {
+  app.post("/api/business/purchase-unlocks", requireFullCommerce, async (req: Request, res: Response) => {
     if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
     const acct = await storage.getBusinessAccount(req.session.userId);
     if (!acct) return res.status(404).json({ message: "No business account found" });
@@ -12247,7 +12285,7 @@ export async function registerRoutes(
   // ───────────────────────────────────────────────────────────────────────────
   app.get("/api/studio/packs", studioPacksHandler);
 
-  app.post("/api/stripe/studio-credits-checkout", requireAuth, demoGuard, async (req: Request, res: Response) => {
+  app.post("/api/stripe/studio-credits-checkout", requireAuth, demoGuard, requireFullCommerce, async (req: Request, res: Response) => {
     try {
       const packId = String(req.body?.packId || "") as StudioPackId;
       const pack = STUDIO_CREDIT_PACKS[packId];
@@ -12430,7 +12468,7 @@ export async function registerRoutes(
   //      behalf of the identified user, then 302-redirects to the Stripe URL.
   //      The user never has to log in to the web — the JWT carries the auth.
 
-  app.post("/api/mobile/checkout-link", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/mobile/checkout-link", requireAuth, requireFullCommerce, async (req: Request, res: Response) => {
     try {
       const { product, options = {} } = req.body;
       if (!product || !isValidProduct(product)) {
@@ -14225,7 +14263,7 @@ export async function registerRoutes(
     });
   });
 
-  app.post("/api/stripe/trust-box-checkout", requireAuth, demoGuard, async (req: Request, res: Response) => {
+  app.post("/api/stripe/trust-box-checkout", requireAuth, demoGuard, requireFullCommerce, async (req: Request, res: Response) => {
     try {
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "User not found" });
@@ -15639,7 +15677,7 @@ Input body: ${JSON.stringify((body || "").trim())}`;
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 300,
+        max_completion_tokens: 300,
         temperature: 0.3,
       });
 
@@ -16642,7 +16680,7 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
         temperature: 0.3,
-        max_tokens: 600,
+        max_completion_tokens: 600,
         response_format: { type: "json_object" as const },
         messages: [{ role: "system", content: userContextSection + multiSourceSection + onboardPrompt }, ...sanitized],
       });
@@ -17073,7 +17111,7 @@ CRITICAL — respond with JSON ONLY, no other text:
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
         temperature: 0.4,
-        max_tokens: voiceMode ? 220 : 600,
+        max_completion_tokens: voiceMode ? 220 : 600,
         response_format: { type: "json_object" as const },
         messages: [
           { role: "system", content: systemPrompt },
@@ -17342,7 +17380,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
         temperature: 0.45,
-        max_tokens: 700,
+        max_completion_tokens: 700,
         response_format: { type: "json_object" as const },
         messages: [
           { role: "system", content: sysMsg },
@@ -18261,7 +18299,17 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         return bRate - aRate;
       });
 
-      const topItems = items.slice(0, 6);
+      // City Missions are a fallback, not a headline recommendation — real
+      // paying jobs/gigs must always be listed first. Take the top 2-3 real
+      // matches, and only pad with missions if there aren't enough real
+      // options to fill out the plan.
+      const realItems = items.filter(i => i.type !== "city_mission");
+      const missionItems = items.filter(i => i.type === "city_mission");
+      const topReal = realItems.slice(0, 3);
+      // Missions are fallback only — omit them entirely when 3+ real results exist.
+      const topItems = topReal.length >= 3
+        ? topReal
+        : topReal.concat(missionItems).slice(0, 6);
 
       // ── Realistic gap analysis ──────────────────────────────────────────
       const realisticEarnable = topItems.reduce((s, i) => s + i.estimatedPay, 0);
@@ -19960,7 +20008,7 @@ OUTPUT STYLE:
         const completion = await openai.chat.completions.create({
           model: "gpt-4.1",
           temperature: 0.2,
-          max_tokens: 1800,
+          max_completion_tokens: 1800,
           messages: conversation,
           tools,
           tool_choice: "auto",
@@ -19995,7 +20043,7 @@ OUTPUT STYLE:
           const finalCompletion = await openai.chat.completions.create({
             model: "gpt-4.1",
             temperature: 0.2,
-            max_tokens: 1800,
+            max_completion_tokens: 1800,
             messages: [
               ...conversation,
               {

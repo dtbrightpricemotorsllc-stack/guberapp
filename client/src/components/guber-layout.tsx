@@ -159,9 +159,9 @@ export function GuberLayout({ children, hideHeader, showBack, backHref, onBack, 
   const { data: notifications } = useQuery<Notification[]>({
     queryKey: ["/api/notifications"],
     enabled: !!user,
-    staleTime: 0,
-    refetchInterval: 20000,
-    refetchOnWindowFocus: true,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const unreadCount = notifications?.filter((n) => !n.read).length || 0;

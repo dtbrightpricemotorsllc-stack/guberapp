@@ -5,7 +5,7 @@
 
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
-import { Loader2, ShoppingCart, Sparkles, ArrowLeft, Coins, ExternalLink } from "lucide-react";
+import { Loader2, ShoppingCart, Sparkles, ArrowLeft, Coins, ExternalLink, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -13,6 +13,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { isStoreBuild } from "@/lib/platform";
 import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
 import { MobileReturnBanner } from "@/components/mobile-return-banner";
+import { useCommerceMode } from "@/lib/commerce-mode";
 
 type Pack = { id: string; credits: number; priceCents: number; label: string };
 type Tier = {
@@ -39,6 +40,7 @@ function perCreditDollars(priceCents: number, credits: number) {
 
 export default function StudioCreditsPage() {
   const { toast } = useToast();
+  const { canPurchase } = useCommerceMode();
   const searchStr = useSearch();
   const searchParams = new URLSearchParams(searchStr);
   const purchaseSuccess =
@@ -108,16 +110,36 @@ export default function StudioCreditsPage() {
             </div>
           )}
         </div>
-        <p className="text-white/60 text-sm mb-2">
-          Pick a pack for one-time credits, or subscribe for a monthly drop. Credits never expire.
-        </p>
-        {isStoreBuild && (
-          <p className="text-xs text-amber-300/80 mb-6 flex items-center gap-1.5" data-testid="text-store-external-notice">
-            <ExternalLink className="w-3 h-3 shrink-0" />
-            Purchases open in Safari — your credits sync back to the app automatically.
-          </p>
+        {canPurchase ? (
+          <>
+            <p className="text-white/60 text-sm mb-2">
+              Pick a pack for one-time credits, or subscribe for a monthly drop. Credits never expire.
+            </p>
+            {isStoreBuild && (
+              <p className="text-xs text-amber-300/80 mb-6 flex items-center gap-1.5" data-testid="text-store-external-notice">
+                <ExternalLink className="w-3 h-3 shrink-0" />
+                Purchases open in Safari — your credits sync back to the app automatically.
+              </p>
+            )}
+            {!isStoreBuild && <div className="mb-6" />}
+          </>
+        ) : (
+          <div className="mb-6">
+            <p className="text-white/60 text-sm mb-4">
+              Studio credits are earned through eligible GUBER activities. Complete jobs and missions to unlock AI generation tools.
+            </p>
+            <Link href="/earning-opportunities">
+              <Button
+                variant="outline"
+                className="flex items-center gap-2 rounded-xl font-display tracking-wider text-xs border-emerald-400/40 text-emerald-300 hover:bg-emerald-400/10"
+                data-testid="button-earn-credits"
+              >
+                <Trophy className="w-4 h-4" />
+                View Earning Opportunities
+              </Button>
+            </Link>
+          </div>
         )}
-        {!isStoreBuild && <div className="mb-6" />}
 
         {loading && (
           <div className="flex items-center justify-center py-20">
@@ -136,12 +158,18 @@ export default function StudioCreditsPage() {
                   data-testid={`card-pack-${p.id}`}
                 >
                   <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300/80">{p.label}</p>
-                  <p className="text-2xl font-black">{dollars(p.priceCents)}</p>
+                  {canPurchase && <p className="text-2xl font-black">{dollars(p.priceCents)}</p>}
                   <p className="text-sm text-white/80">
                     <span className="font-bold tabular-nums">{p.credits.toLocaleString()}</span> credits
                   </p>
-                  <p className="text-[10px] text-white/40">≈ {perCreditDollars(p.priceCents, p.credits)} / cr</p>
-                  {isStoreBuild ? (
+                  {canPurchase && <p className="text-[10px] text-white/40">≈ {perCreditDollars(p.priceCents, p.credits)} / cr</p>}
+                  {!canPurchase ? (
+                    <Link href="/earning-opportunities">
+                      <Button size="sm" variant="outline" className="mt-2 w-full text-emerald-300 border-emerald-400/30 hover:bg-emerald-400/10" data-testid={`button-earn-for-${p.id}`}>
+                        <Trophy className="w-3.5 h-3.5 mr-1" /> Earn Credits
+                      </Button>
+                    </Link>
+                  ) : isStoreBuild ? (
                     <ExternalPurchaseSheet product="studio_credits" options={{ packId: p.id }}>
                       {({ onPress, loading: btnLoading }) => (
                         <Button
@@ -170,7 +198,7 @@ export default function StudioCreditsPage() {
               ))}
             </div>
 
-            <h2 className="text-xs uppercase tracking-[0.25em] text-white/50 mb-3">Monthly Subscriptions</h2>
+            <h2 className="text-xs uppercase tracking-[0.25em] text-white/50 mb-3">{canPurchase ? "Monthly Subscriptions" : "Credit Tiers"}</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {tiers.map((t) => {
                 const isCurrent = me?.tier === t.id && !!me?.subscription;
@@ -184,10 +212,12 @@ export default function StudioCreditsPage() {
                       <p className="text-base font-bold">{t.label}</p>
                       {isCurrent && <Badge variant="outline" className="text-[10px]">CURRENT</Badge>}
                     </div>
-                    <p className="text-2xl font-black">
-                      {dollars(t.priceCents)}
-                      <span className="text-xs font-normal text-white/50"> / mo</span>
-                    </p>
+                    {canPurchase && (
+                      <p className="text-2xl font-black">
+                        {dollars(t.priceCents)}
+                        <span className="text-xs font-normal text-white/50"> / mo</span>
+                      </p>
+                    )}
                     <p className="text-sm text-white/80">
                       <span className="font-bold tabular-nums">{t.monthlyCredits.toLocaleString()}</span> credits / month
                     </p>
@@ -215,6 +245,12 @@ export default function StudioCreditsPage() {
                           {cancel.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Cancel"}
                         </Button>
                       )
+                    ) : !canPurchase ? (
+                      <Link href="/earning-opportunities">
+                        <Button size="sm" variant="outline" className="w-full text-emerald-300 border-emerald-400/30 hover:bg-emerald-400/10" data-testid={`button-earn-for-${t.id}`}>
+                          <Trophy className="w-3.5 h-3.5 mr-1" /> Earn Credits
+                        </Button>
+                      </Link>
                     ) : isStoreBuild ? (
                       <ExternalPurchaseSheet product="studio_subscription" options={{ tier: t.id }}>
                         {({ onPress, loading: btnLoading }) => (

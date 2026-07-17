@@ -36,6 +36,7 @@ import type { Job, ProofTemplate, ProofChecklistItem } from "@shared/schema";
 import { Link } from "wouter";
 import { HandsFreeCapture } from "@/components/handsfree-capture";
 import { Glasses } from "lucide-react";
+import SeeForMeAction from "@/components/see-for-me-action";
 import { uploadToCloudinarySigned, base64ToBlob } from "@/lib/cloudinary-upload";
 
 type TemplateWithItems = ProofTemplate & { checklistItems: ProofChecklistItem[] };
@@ -396,6 +397,19 @@ export default function WorkerClipboard() {
                 </p>
               </div>
             </div>
+          </div>
+        )}
+
+        {job.category === "Verify & Inspect" && (
+          <div className="mb-4">
+            <SeeForMeAction
+              variant="compact"
+              context={{
+                title: job.title ?? undefined,
+                category: job.category ?? undefined,
+                address: job.location ?? undefined,
+              }}
+            />
           </div>
         )}
 

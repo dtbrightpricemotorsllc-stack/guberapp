@@ -322,7 +322,7 @@ function VehicleTransparency({ item }: { item: MarketplaceItem }) {
         <div className="px-3 py-2 border-t border-white/5">
           <div className="flex items-center gap-1 mb-2">
             <p className="text-[10px] font-display font-bold text-muted-foreground tracking-wider">CONDITION FLAGS</p>
-            <InfoHint title="Condition Flags" description="Condition flags are seller-provided statements unless separately verified through GUBER Verify & Inspect." />
+            <InfoHint title="Condition Flags" description="Condition flags are seller-provided statements unless separately verified through GUBER See For Me." />
           </div>
           <div className="flex flex-wrap gap-1.5">
             {d.conditionFlags.map((f: string) => (
@@ -564,7 +564,7 @@ function RequestVIModal({ item, onClose }: { item: MarketplaceItem; onClose: () 
     <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
       <div className="w-full max-w-lg bg-card border border-border rounded-t-3xl px-5 pt-5 pb-[calc(20px+env(safe-area-inset-bottom,0px))]" onClick={e => e.stopPropagation()} data-testid="modal-request-vi">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-display font-extrabold">Request Verify & Inspect</h3>
+          <h3 className="text-base font-display font-extrabold">Request See For Me</h3>
           <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10"><X className="w-4 h-4 text-muted-foreground" /></button>
         </div>
         <div className="rounded-xl p-4 mb-4" style={{ background: "rgba(0,180,80,0.07)", border: "1px solid rgba(0,180,80,0.18)" }}>
@@ -582,10 +582,10 @@ function RequestVIModal({ item, onClose }: { item: MarketplaceItem; onClose: () 
         </div>
         <div className="rounded-xl p-3 mb-4 text-[11px] text-muted-foreground leading-relaxed"
           style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}>
-          Verify &amp; Inspect provides visual proof and documentation only. It is not a guarantee of condition, authenticity, ownership, functionality, or future performance.
+          See For Me provides remote visual assistance and documentation only. The provider reports what they directly observe and does not guarantee condition, authenticity, ownership, functionality, or future performance.
         </div>
         <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="w-full premium-btn font-display" data-testid="button-confirm-vi-request">
-          {mutation.isPending ? "Creating Task…" : "REQUEST VERIFY & INSPECT"}
+          {mutation.isPending ? "Creating Request…" : "REQUEST SEE FOR ME"}
         </Button>
       </div>
     </div>
@@ -968,7 +968,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                 <div className="absolute top-3 left-3">
                   <span className="text-[10px] font-display font-bold px-2 py-1 rounded-full"
                     style={{ background: "rgba(239,68,68,0.9)", color: "#fff" }}>
-                    SAMPLE / DELETE ME
+                    SAMPLE
                   </span>
                 </div>
               )}
@@ -1050,7 +1050,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                     {verificationDate ? ` on ${verificationDate}` : ""}.
                     {item.verificationNotes && ` Notes: ${item.verificationNotes}`}
                   </p>
-                  <p className="text-[10px] text-muted-foreground mt-1">Verify &amp; Inspect provides visual proof only — not a guarantee of condition, authenticity, or functionality.</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">See For Me provides remote visual assistance only — not a guarantee of condition, authenticity, or functionality.</p>
                 </>
               ) : (
                 <>
@@ -1059,7 +1059,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                     <span className="text-xs font-display font-bold text-muted-foreground">Not Yet Verified</span>
                     <InfoHint title="Not Yet Verified" description="This item has not been documented by a GUBER helper. Information shown was provided by the seller." />
                   </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">No on-site visual proof on file. Request V&amp;I below to get a local helper to document this item.</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">No on-site visual proof on file. Request See For Me to get a local helper to document this item.</p>
                 </>
               )}
             </div>
@@ -1217,7 +1217,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
             <div className="rounded-xl p-3 mb-4 text-[11px] text-muted-foreground leading-relaxed"
               style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(0,229,118,0.55)" }}>
               <span className="flex items-start gap-1">
-                <span>GUBER helps users list, discover, and verify items. GUBER does not own, inspect, guarantee, or process the sale of listed items unless a separate GUBER Verify &amp; Inspect service is requested.</span>
+                <span>GUBER helps users list, discover, and verify items. GUBER does not own, inspect, guarantee, or process the sale of listed items unless a separate GUBER See For Me service is requested.</span>
                 <InfoHint title="GUBER Marketplace" description="GUBER provides visibility, coordination, and documentation tools. GUBER is not the buyer, seller, inspector, lender, or owner of listed items." />
               </span>
             </div>
@@ -1512,7 +1512,7 @@ export default function Marketplace() {
         <div className="flex items-start justify-between mb-5">
           <div>
             <h1 className="text-2xl font-display font-extrabold tracking-tight">
-              Marketplace <span className="text-xs font-normal text-primary ml-1 align-middle inline-flex items-center gap-0.5">BETA<InfoHint title="Beta Feature" description="GUBER Marketplace is currently in beta. Core features are live — some tools are still being refined based on user feedback." bullets={["List items for free", "Local buyers only", "More features rolling out soon"]} /></span>
+              Marketplace
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">List items free · Find local deals · Verify before you buy</p>
           </div>

@@ -190,10 +190,10 @@ export default function LoadBoardDetail() {
 
     if (shouldTrack) {
       if (isIOS) {
-        void taskTrackingService.startTask(listingId);
+        void taskTrackingService.startTask(listingId, "load_board");
       } else {
         void ensureBackgroundLocation("load_board").then(() =>
-          taskTrackingService.startTask(listingId)
+          taskTrackingService.startTask(listingId, "load_board")
         );
       }
     } else {
@@ -577,7 +577,7 @@ export default function LoadBoardDetail() {
 
   return (
     <GuberLayout title="Load Detail" showBack backHref={isDemo ? "/load-board?demo=1" : "/load-board"}>
-      <div className="px-4 pb-28 pt-2 space-y-4">
+      <div className="px-4 pb-40 pt-2 space-y-4">
 
         {/* ── Demo mode banner ── */}
         {isDemo && (

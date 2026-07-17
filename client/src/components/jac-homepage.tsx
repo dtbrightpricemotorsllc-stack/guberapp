@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Link } from "wouter";
-import { Send, Mic, MicOff, ArrowRight, MessageSquare, Minus, Loader2, Zap } from "lucide-react";
+import { Send, Mic, Volume2, ArrowRight, MessageSquare, Minus, Loader2 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
-import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
+import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
 import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
 import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
@@ -201,6 +201,8 @@ export function JacHomepage() {
   // (no ElevenLabs Conversational Agents / per-minute billing).
   const [liveMode, setLiveMode] = useState(false);
   const [liveState, setLiveState] = useState<ConversationState>("idle");
+  const [jacVolume, setJacVolumeState] = useState(() => getJacVolume());
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const engineRef = useRef<ConversationEngine | null>(null);
 
   function getEngine(): ConversationEngine {
@@ -230,10 +232,23 @@ export function JacHomepage() {
       stopLiveMode();
       return;
     }
+    // unlockAudioContext() MUST run synchronously inside this gesture handler
+    // so the AudioContext is in "running" state before any async work starts.
+    // After this call, audio will route through the loudspeaker on iOS/Android.
     unlockAudioContext();
     cancelSpeech();
     cancelAllJacAudio();
     if (listening) stopListening();
+
+    // Play greeting NOW — AudioContext is running (unlocked above), so the
+    // audio goes through the loudspeaker on every platform.  The ref guard
+    // prevents double-play if the document click listener also fires.
+    if (!greetingSpokenRef.current) {
+      greetingSpokenRef.current = true;
+      const greetingText = messages[0]?.content ?? GREETING.content;
+      setTimeout(() => speak(greetingText), 200);
+    }
+
     setLiveMode(true);
     await getEngine().start();
   }
@@ -287,11 +302,17 @@ export function JacHomepage() {
     return () => clearTimeout(t);
   }, [showFloatHint]);
 
-  // Auto-speak greeting on homepage load.
-  // Browsers require a user gesture before audio plays (web PWA).
-  // On Capacitor (iOS/Android) audio is already unlocked — speak immediately.
-  // On web: speak on the very first user interaction anywhere on the page.
+  // Greeting spoken flag — shared between the useEffect listener path
+  // (user types before tapping mic) and toggleLiveMode (user taps mic first).
   const greetingSpokenRef = useRef(false);
+
+  // Auto-speak greeting on first user interaction.
+  // All platforms need a user gesture before audio plays — on iOS/Android the
+  // AudioContext starts suspended even in Capacitor native builds, so firing
+  // before a gesture sends audio to the earpiece (or nowhere).  Waiting for
+  // the gesture guarantees the AudioContext is running and audio goes to the
+  // loudspeaker.  The mic-button path is handled inside toggleLiveMode so this
+  // listener is only the fallback for users who type or tap elsewhere first.
   useEffect(() => {
     if (mode !== "chat") return;
     if (greetingSpokenRef.current) return;
@@ -305,11 +326,6 @@ export function JacHomepage() {
       setTimeout(() => speak(currentGreeting), 120);
     }
 
-    // Try immediately (works on Capacitor where audio is pre-unlocked)
-    const isCapacitor = typeof window !== "undefined" && !!(window as any).Capacitor;
-    if (isCapacitor) { speakGreeting(); return; }
-
-    // Web: wait for first gesture then speak once
     const opts = { once: true, passive: true } as const;
     const cleanup = () => {
       document.removeEventListener("click",      speakGreeting, opts);
@@ -867,6 +883,29 @@ export function JacHomepage() {
 
         {/* Input bar */}
         <div className="px-5 pb-5 pt-3 flex-shrink-0" style={{ borderTop: "1px solid hsl(222 47% 13%)" }}>
+          {/* Volume slider — shown when user taps the volume icon */}
+          {showVolumeSlider && (
+            <div className="flex items-center gap-3 mb-2 px-1">
+              <Volume2 className="w-4 h-4 flex-shrink-0" style={{ color: "hsl(270 100% 78%)" }} />
+              <input
+                type="range"
+                min={JAC_VOLUME_BOUNDS.min}
+                max={JAC_VOLUME_BOUNDS.max}
+                step={0.1}
+                value={jacVolume}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setJacVolume(v);
+                  setJacVolumeState(v);
+                }}
+                className="flex-1 accent-purple-400"
+                data-testid="slider-jac-volume"
+              />
+              <span className="text-xs w-6 text-right flex-shrink-0" style={{ color: "hsl(270 100% 78%)" }}>
+                {Math.round((jacVolume / JAC_VOLUME_BOUNDS.max) * 100)}%
+              </span>
+            </div>
+          )}
           <div className="flex items-end gap-2 rounded-2xl px-3 py-2" style={{ background: "hsl(222 47% 10%)", border: "1px solid hsl(222 47% 16%)" }}>
             <textarea
               ref={inputRef}
@@ -879,60 +918,47 @@ export function JacHomepage() {
               disabled={typing}
               data-testid="input-jac-homepage"
             />
+            {/* Volume toggle */}
+            <button
+              onClick={() => setShowVolumeSlider(v => !v)}
+              className="w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+              style={{ color: showVolumeSlider ? "hsl(270 100% 78%)" : "hsl(0 0% 45%)" }}
+              data-testid="button-jac-volume"
+              aria-label="Adjust JAC volume"
+            >
+              <Volume2 className="w-4 h-4" />
+            </button>
             {micSupported && (
               <button
                 onClick={toggleLiveMode}
-                className={`relative w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${
-                  liveMode ? "scale-110" : "hover:scale-105 active:scale-95"
-                }`}
+                className={`relative w-12 h-12 rounded-2xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${liveMode ? "scale-110" : "hover:scale-105 active:scale-95"}`}
                 style={{
                   background: liveMode
                     ? liveState === "speaking"
                       ? "linear-gradient(135deg, hsl(152 90% 40%), hsl(152 70% 30%))"
                       : liveState === "recording"
                         ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
-                        : "linear-gradient(135deg, hsl(45 100% 55%), hsl(35 95% 45%))"
-                    : "hsl(222 47% 15%)",
-                  color: liveMode ? "white" : "hsl(45 90% 60%)",
-                  boxShadow: liveMode ? "0 0 0 2px hsl(45 100% 55% / 0.3), 0 0 12px hsl(45 100% 55% / 0.4)" : "none",
-                }}
-                data-testid="button-live-conversation"
-                disabled={typing}
-                aria-label={liveMode ? "Stop live conversation" : "Start live conversation"}
-                title={liveMode ? "Live conversation on — tap to stop" : "Start live conversation (always listening)"}
-              >
-                {liveMode && (liveState === "recording" || liveState === "listening") && (
-                  <span className="absolute inset-0 rounded-xl animate-ping opacity-30" style={{ background: "hsl(45 100% 55%)" }} />
-                )}
-                <Zap className="w-3.5 h-3.5" fill={liveMode ? "currentColor" : "none"} />
-              </button>
-            )}
-            {micSupported && (
-              <button
-                onClick={() => {
-                  if (liveMode) stopLiveMode();
-                  if (listening) {
-                    stopListening();
-                  } else {
-                    cancelSpeech();
-                    cancelAllJacAudio();
-                    setTimeout(() => startListening(), 150);
-                  }
-                }}
-                className={`w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all ${listening ? "animate-pulse" : ""}`}
-                style={{
-                  background: listening ? "hsl(0 80% 55%)" : transcribing ? "hsl(270 60% 35%)" : "hsl(222 47% 15%)",
-                  color: listening || transcribing ? "white" : "hsl(0 0% 45%)",
+                        : "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))"
+                    : "linear-gradient(135deg, hsl(270 70% 25%), hsl(152 60% 16%))",
+                  color: "white",
+                  boxShadow: liveMode
+                    ? "0 0 0 3px hsl(270 100% 65% / 0.35), 0 0 20px hsl(270 100% 65% / 0.5)"
+                    : "0 0 10px hsl(270 100% 65% / 0.35), inset 0 1px 0 hsl(270 100% 70% / 0.15)",
                 }}
                 data-testid="button-jac-mic"
-                disabled={typing || transcribing}
-                aria-label={transcribing ? "Transcribing…" : listening ? "Stop" : "Speak"}
+                disabled={typing}
+                aria-label={liveMode ? "End conversation" : "Call JAC"}
               >
-                {transcribing
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : listening
-                    ? <MicOff className="w-3.5 h-3.5" />
-                    : <Mic className="w-3.5 h-3.5" />}
+                {liveMode && (
+                  <span className="absolute inset-0 rounded-2xl animate-ping opacity-25" style={{ background: "hsl(270 100% 65%)" }} />
+                )}
+                {liveMode
+                  ? liveState === "recording"
+                    ? <Mic className="w-6 h-6" />
+                    : liveState === "speaking"
+                      ? <Volume2 className="w-6 h-6" />
+                      : <Loader2 className="w-6 h-6 animate-spin" />
+                  : <Mic className="w-6 h-6" />}
               </button>
             )}
             <button

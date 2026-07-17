@@ -575,7 +575,7 @@ export function setupCampaignLabRoutes(app: Express) {
             { role: "system", content: systemPrompt },
             { role: "user", content: fullPrompt },
           ],
-          max_tokens: 1500,
+          max_completion_tokens: 1500,
         });
         result.content = completion.choices[0]?.message?.content || "";
 
