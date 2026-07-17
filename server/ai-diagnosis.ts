@@ -118,9 +118,9 @@ async function runDiagnosis(row: any): Promise<AiDiagnosis | null> {
     ].join("\n");
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini",
+      model: "gpt-4.1-mini",
       temperature: 0.2,
-      max_tokens: 500,
+      max_completion_tokens: 500,
       response_format: { type: "json_object" },
       messages: [
         {

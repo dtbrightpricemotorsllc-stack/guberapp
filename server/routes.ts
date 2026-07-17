@@ -15675,9 +15675,9 @@ Input title: ${JSON.stringify((title || "").trim())}
 Input body: ${JSON.stringify((body || "").trim())}`;
 
       const completion = await openai.chat.completions.create({
-        model: "gpt-5-mini",
+        model: "gpt-4.1-mini",
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 300,
+        max_completion_tokens: 300,
         temperature: 0.3,
       });
 
@@ -16678,9 +16678,9 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
 - proposedAction: null normally; {"type":"...","fields":{...}} only when a real workflow is ready to be staged for user confirmation (see EXECUTE WORKFLOWS section)`;
 
       const completion = await openai.chat.completions.create({
-        model: "gpt-5-mini",
+        model: "gpt-4.1-mini",
         temperature: 0.3,
-        max_tokens: 600,
+        max_completion_tokens: 600,
         response_format: { type: "json_object" as const },
         messages: [{ role: "system", content: userContextSection + multiSourceSection + onboardPrompt }, ...sanitized],
       });
@@ -17109,9 +17109,9 @@ CRITICAL — respond with JSON ONLY, no other text:
 - "feedbackDraft": null normally; {"ready":true,"category":"<type>","description":"<summary>"} when capturing an issue report.`;
 
       const completion = await openai.chat.completions.create({
-        model: "gpt-5-mini",
+        model: "gpt-4.1-mini",
         temperature: 0.4,
-        max_tokens: voiceMode ? 220 : 600,
+        max_completion_tokens: voiceMode ? 220 : 600,
         response_format: { type: "json_object" as const },
         messages: [
           { role: "system", content: systemPrompt },
@@ -17237,7 +17237,7 @@ CRITICAL — respond with JSON ONLY, no other text:
       }
 
       const body: any = req.body ?? {};
-      const model = typeof body.model === "string" && body.model ? body.model : "gpt-5-mini";
+      const model = typeof body.model === "string" && body.model ? body.model : "gpt-4.1-mini";
       const stream = body.stream !== false; // ElevenLabs streams by default
       const sanitized = sanitizeAssistMessages(Array.isArray(body.messages) ? body.messages : []);
       if (sanitized.length === 0) sanitized.push({ role: "user", content: "hello" });
@@ -17378,9 +17378,9 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         : SYSTEM;
 
       const completion = await openai.chat.completions.create({
-        model: "gpt-5-mini",
+        model: "gpt-4.1-mini",
         temperature: 0.45,
-        max_tokens: 700,
+        max_completion_tokens: 700,
         response_format: { type: "json_object" as const },
         messages: [
           { role: "system", content: sysMsg },
@@ -20006,9 +20006,9 @@ OUTPUT STYLE:
       const MAX_TOOL_ITERATIONS = 4;
       for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
         const completion = await openai.chat.completions.create({
-          model: "gpt-5",
+          model: "gpt-4.1",
           temperature: 0.2,
-          max_tokens: 1800,
+          max_completion_tokens: 1800,
           messages: conversation,
           tools,
           tool_choice: "auto",
@@ -20041,9 +20041,9 @@ OUTPUT STYLE:
       if (!reply) {
         try {
           const finalCompletion = await openai.chat.completions.create({
-            model: "gpt-5",
+            model: "gpt-4.1",
             temperature: 0.2,
-            max_tokens: 1800,
+            max_completion_tokens: 1800,
             messages: [
               ...conversation,
               {
