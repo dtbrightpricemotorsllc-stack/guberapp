@@ -1,8 +1,9 @@
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Crown, CheckCircle, Zap, Lock, Star, ArrowRight, ChevronLeft, Shield, Gift, Copy, Coins, Users } from "lucide-react";
+import { Crown, CheckCircle, Zap, Lock, Star, ArrowRight, ChevronLeft, Shield, Gift, Copy, Coins, Users, Trophy } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useCommerceMode } from "@/lib/commerce-mode";
 import logoImg from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
 import day1OGImg from "@assets/Gubergoldday1_1772434950756.png";
 
@@ -23,7 +24,7 @@ const PERKS = [
     icon: Star,
     color: "#fbbf24",
     title: "Early Supporter Status",
-    desc: "Priority access to new features, beta programs, and platform updates before they roll out to the general public.",
+    desc: "Priority access to new features and platform updates before they roll out to the general public.",
   },
   {
     icon: Gift,
@@ -187,6 +188,7 @@ export default function OgAdvantage() {
   const { data: me } = useQuery<AuthUser>({
     queryKey: ["/api/auth/me"],
   });
+  const { canPurchase } = useCommerceMode();
 
   const isLoggedIn = !!me;
   const isOG = !!(me as any)?.day1OG;
@@ -244,7 +246,7 @@ export default function OgAdvantage() {
               data-testid="link-og-get-started">
               VIEW YOUR CREDITS <ArrowRight className="w-4 h-4" />
             </Link>
-          ) : (
+          ) : canPurchase ? (
             <div className="flex flex-col items-center gap-3">
               <div className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-display tracking-wider"
                 style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", color: "#fbbf24" }}>
@@ -257,6 +259,17 @@ export default function OgAdvantage() {
                 UNLOCK OG STATUS — $2.00 <ArrowRight className="w-4 h-4" />
               </Link>
               <p className="text-[10px] text-muted-foreground">Secure payment via Stripe · No subscription · No hidden fees</p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3">
+              <Link href="/signup" className="inline-flex items-center gap-2 h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black"
+                style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 28px rgba(245,158,11,0.4), 0 4px 16px rgba(0,0,0,0.3)" }}
+                data-testid="link-og-get-started">
+                JOIN GUBER <ArrowRight className="w-4 h-4" />
+              </Link>
+              <Link href="/earning-opportunities" className="flex items-center gap-1.5 text-xs font-display tracking-wider text-amber-400/70 hover:text-amber-400 transition-colors mt-1" data-testid="link-og-earn">
+                <Trophy className="w-3.5 h-3.5" /> Earn OG status through GUBER activities
+              </Link>
             </div>
           )}
         </div>
@@ -322,7 +335,7 @@ export default function OgAdvantage() {
           {[
             { label: "Fee Discount", value: "5%", sub: "locked for life" },
             { label: "Badge", value: "OG", sub: "permanent gold" },
-            { label: "Access", value: "Early", sub: "beta & features" },
+            { label: "Access", value: "Early", sub: "features first" },
           ].map((s) => (
             <div key={s.label} className="rounded-xl p-4 text-center"
               style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.12)" }}>

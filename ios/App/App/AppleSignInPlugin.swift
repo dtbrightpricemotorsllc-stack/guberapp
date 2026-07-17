@@ -105,10 +105,25 @@ public class AppleSignInPlugin: CAPPlugin, CAPBridgedPlugin, ASAuthorizationCont
 
     @available(iOS 13.0, *)
     public func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        if let windowScene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
-           let window = windowScene.windows.first(where: { $0.isKeyWindow }) {
+        // Iterate all connected scenes (handles Split View / Stage Manager on iPad).
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene,
+                  windowScene.activationState == .foregroundActive else { continue }
+            // Prefer the key window; fall back to any window in this scene.
+            if let window = windowScene.windows.first(where: { $0.isKeyWindow }) {
+                return window
+            }
+            if let window = windowScene.windows.first {
+                return window
+            }
+        }
+        // Absolute fallback for single-scene apps on older OS.
+        if let window = UIApplication.shared.windows.first(where: { $0.isKeyWindow }) {
             return window
         }
-        return ASPresentationAnchor()
+        if let window = UIApplication.shared.windows.first {
+            return window
+        }
+        return UIWindow()
     }
 }
