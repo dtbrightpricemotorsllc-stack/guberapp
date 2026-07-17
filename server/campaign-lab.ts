@@ -570,7 +570,7 @@ export function setupCampaignLabRoutes(app: Express) {
           : "You are GUBER's marketing expert. Generate high-converting marketing copy.";
 
         const completion = await openai.chat.completions.create({
-          model: "gpt-4o",
+          model: "gpt-5",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: fullPrompt },

@@ -20006,7 +20006,7 @@ OUTPUT STYLE:
       const MAX_TOOL_ITERATIONS = 4;
       for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
         const completion = await openai.chat.completions.create({
-          model: "gpt-4.1",
+          model: "gpt-5",
           temperature: 0.2,
           max_tokens: 1800,
           messages: conversation,
@@ -20041,7 +20041,7 @@ OUTPUT STYLE:
       if (!reply) {
         try {
           const finalCompletion = await openai.chat.completions.create({
-            model: "gpt-4.1",
+            model: "gpt-5",
             temperature: 0.2,
             max_tokens: 1800,
             messages: [
