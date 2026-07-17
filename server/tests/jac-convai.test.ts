@@ -75,7 +75,7 @@ describe("jac-convai adapter helpers", () => {
       write: (s: string) => { writes.push(s); },
       end: () => { ended = true; },
     };
-    writeOpenAiStream(sink, { id: "id1", model: "gpt-4.1-mini", content: "Hello there" });
+    writeOpenAiStream(sink, { id: "id1", model: "gpt-5-mini", content: "Hello there" });
     expect(headers["Content-Type"]).toContain("text/event-stream");
     expect(ended).toBe(true);
     expect(writes[writes.length - 1]).toBe("data: [DONE]\n\n");
