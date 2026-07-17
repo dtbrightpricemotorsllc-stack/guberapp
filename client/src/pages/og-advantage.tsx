@@ -24,7 +24,7 @@ const PERKS = [
     icon: Star,
     color: "#fbbf24",
     title: "Early Supporter Status",
-    desc: "Priority access to new features, beta programs, and platform updates before they roll out to the general public.",
+    desc: "Priority access to new features and platform updates before they roll out to the general public.",
   },
   {
     icon: Gift,
@@ -335,7 +335,7 @@ export default function OgAdvantage() {
           {[
             { label: "Fee Discount", value: "5%", sub: "locked for life" },
             { label: "Badge", value: "OG", sub: "permanent gold" },
-            { label: "Access", value: "Early", sub: "beta & features" },
+            { label: "Access", value: "Early", sub: "features first" },
           ].map((s) => (
             <div key={s.label} className="rounded-xl p-4 text-center"
               style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.12)" }}>
