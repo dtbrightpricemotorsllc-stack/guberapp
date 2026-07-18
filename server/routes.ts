@@ -17464,6 +17464,305 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     }
   });
 
+  // ── ElevenLabs ConvAI Webhook (conversation capture → training data) ────────
+  app.post("/api/jac/convai/webhook", async (req: Request, res: Response) => {
+    try {
+      // Verify ElevenLabs signature if secret is configured
+      const secret = process.env.ELEVENLABS_WEBHOOK_SECRET;
+      if (secret) {
+        const sig = req.headers["elevenlabs-signature"] as string | undefined;
+        if (!sig) {
+          console.warn("[jac/webhook] missing signature — rejecting");
+          return res.status(401).json({ error: "Missing signature" });
+        }
+        const { createHmac } = await import("crypto");
+        const body = JSON.stringify(req.body);
+        const expected = createHmac("sha256", secret).update(body).digest("hex");
+        const provided = sig.replace(/^sha256=/, "");
+        if (expected !== provided) {
+          console.warn("[jac/webhook] signature mismatch — rejecting");
+          return res.status(401).json({ error: "Invalid signature" });
+        }
+      }
+
+      const payload = req.body as any;
+      const conversationId: string = payload?.conversation_id ?? payload?.conversationId ?? `evt_${Date.now()}`;
+      const agentId: string | null = payload?.agent_id ?? null;
+
+      // Extract transcript — ElevenLabs sends `transcript` as array of {role, message}
+      const rawTranscript: Array<{ role: string; message: string; time_in_call_secs?: number }> =
+        Array.isArray(payload?.transcript) ? payload.transcript :
+        Array.isArray(payload?.messages) ? payload.messages : [];
+
+      const durationSecs: number | null = payload?.call_duration_secs ?? payload?.duration_secs ?? null;
+      const turnCount = rawTranscript.length;
+
+      // Extract tool calls from transcript or metadata
+      const toolCallsMade: string[] = [];
+      for (const turn of rawTranscript) {
+        const msg = (turn.message || "").toLowerCase();
+        if (msg.includes("search_opportunities")) toolCallsMade.push("search_opportunities");
+        if (msg.includes("search_marketplace")) toolCallsMade.push("search_marketplace");
+        if (msg.includes("navigate_to")) toolCallsMade.push("navigate_to");
+        if (msg.includes("get_platform_info")) toolCallsMade.push("get_platform_info");
+      }
+      // Also pull from metadata.tool_calls if present
+      if (Array.isArray(payload?.metadata?.tool_calls)) {
+        for (const tc of payload.metadata.tool_calls) {
+          const n = tc?.name ?? tc?.tool_name;
+          if (n && !toolCallsMade.includes(n)) toolCallsMade.push(n);
+        }
+      }
+      const uniqueTools = [...new Set(toolCallsMade)];
+
+      // Detect navigation
+      let navigatedTo: string | null = null;
+      for (const turn of rawTranscript) {
+        const m = (turn.message || "").match(/navigating to ([\/\w\-?=&]+)/i);
+        if (m) { navigatedTo = m[1]; break; }
+      }
+
+      // Detect if user took action (navigated, or action word in JAC response)
+      const userTookAction = !!navigatedTo ||
+        rawTranscript.some(t => t.role !== "user" && /post|sign up|apply|browse|navigate|listing/i.test(t.message || ""));
+
+      // Auto-score (0–100)
+      let score = 40; // baseline
+      if (turnCount >= 3) score += 10;
+      if (turnCount >= 6) score += 10;
+      if (uniqueTools.length > 0) score += 15;
+      if (uniqueTools.length >= 2) score += 10;
+      if (userTookAction) score += 15;
+      if (durationSecs && durationSecs >= 30) score += 10;
+      score = Math.min(100, score);
+
+      const scoreReasons: string[] = [];
+      if (turnCount >= 3) scoreReasons.push(`${turnCount} turns`);
+      if (uniqueTools.length > 0) scoreReasons.push(`tools: ${uniqueTools.join(", ")}`);
+      if (userTookAction) scoreReasons.push("user took action");
+      if (navigatedTo) scoreReasons.push(`→ ${navigatedTo}`);
+      const scoreReason = scoreReasons.join("; ") || "baseline";
+
+      // PII scrub transcript before storage
+      function scrubPii(text: string): string {
+        return text
+          .replace(/\b\d{5}(-\d{4})?\b/g, "[ZIP]")
+          .replace(/\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g, "[PHONE]")
+          .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, "[EMAIL]")
+          .replace(/\b(SSN|social security)\b.{0,20}\d{3}[-\s]?\d{2}[-\s]?\d{4}/gi, "[SSN]");
+      }
+      const scrubbedTranscript = rawTranscript.map(t => ({
+        ...t,
+        message: scrubPii(t.message || ""),
+      }));
+
+      // Upsert conversation
+      await pool.query(
+        `INSERT INTO jac_conversations
+           (conversation_id, agent_id, platform, duration_secs, turn_count,
+            transcript, tool_calls_made, navigated_to, user_took_action,
+            auto_score, auto_score_reason, pii_scrubbed, raw_payload)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE,$12)
+         ON CONFLICT (conversation_id) DO UPDATE SET
+           duration_secs    = EXCLUDED.duration_secs,
+           turn_count       = EXCLUDED.turn_count,
+           transcript       = EXCLUDED.transcript,
+           tool_calls_made  = EXCLUDED.tool_calls_made,
+           navigated_to     = EXCLUDED.navigated_to,
+           user_took_action = EXCLUDED.user_took_action,
+           auto_score       = EXCLUDED.auto_score,
+           auto_score_reason = EXCLUDED.auto_score_reason,
+           raw_payload      = EXCLUDED.raw_payload`,
+        [
+          conversationId, agentId, "convai", durationSecs, turnCount,
+          JSON.stringify(scrubbedTranscript), JSON.stringify(uniqueTools),
+          navigatedTo, userTookAction, score, scoreReason,
+          JSON.stringify({ event_type: payload?.event_type, agent_id: agentId }),
+        ]
+      );
+
+      // Auto-extract training examples from high-quality turns
+      if (score >= 60 && scrubbedTranscript.length >= 2) {
+        const turns = scrubbedTranscript;
+        for (let i = 0; i < turns.length - 1; i++) {
+          const userTurn = turns[i];
+          const jacTurn = turns[i + 1];
+          if (userTurn.role !== "user" || !jacTurn || jacTurn.role === "user") continue;
+          if ((userTurn.message || "").length < 10 || (jacTurn.message || "").length < 15) continue;
+
+          const outcomeLabel = userTookAction ? "action_taken" : uniqueTools.length > 0 ? "tool_called" : "informed";
+          await pool.query(
+            `INSERT INTO jac_training_examples
+               (conversation_id, user_message, ideal_response, tool_calls_made,
+                outcome_label, source, pii_scrubbed)
+             VALUES ($1,$2,$3,$4,$5,'webhook',TRUE)
+             ON CONFLICT DO NOTHING`,
+            [
+              conversationId,
+              userTurn.message.slice(0, 1000),
+              jacTurn.message.slice(0, 2000),
+              JSON.stringify(uniqueTools),
+              outcomeLabel,
+            ]
+          );
+        }
+      }
+
+      console.log(`[jac/webhook] captured conversation ${conversationId} score=${score} turns=${turnCount}`);
+      res.json({ ok: true, conversationId, score });
+    } catch (err: any) {
+      console.error("[jac/webhook] error:", err?.message);
+      res.status(500).json({ error: "Webhook processing failed" });
+    }
+  });
+
+  // ── JAC Training Admin routes ─────────────────────────────────────────────
+  app.get("/api/admin/jac/conversations", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(
+        `SELECT id, conversation_id, user_id, agent_id, platform, duration_secs,
+                turn_count, transcript, tool_calls_made, navigated_to,
+                user_took_action, auto_score, auto_score_reason, pii_scrubbed, created_at
+         FROM jac_conversations ORDER BY created_at DESC LIMIT 100`
+      );
+      res.json(r.rows.map((row: any) => ({
+        id: row.id,
+        conversationId: row.conversation_id,
+        userId: row.user_id,
+        agentId: row.agent_id,
+        platform: row.platform,
+        durationSecs: row.duration_secs,
+        turnCount: row.turn_count,
+        transcript: row.transcript ?? [],
+        toolCallsMade: row.tool_calls_made ?? [],
+        navigatedTo: row.navigated_to,
+        userTookAction: row.user_took_action,
+        autoScore: row.auto_score,
+        autoScoreReason: row.auto_score_reason,
+        piiScrubbed: row.pii_scrubbed,
+        createdAt: row.created_at,
+      })));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/jac/training-examples", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(
+        `SELECT id, conversation_id, user_message, context_summary, ideal_response,
+                tool_calls_made, outcome_label, source, pii_scrubbed,
+                admin_approved, admin_rejected, reject_reason, exported_at, created_at
+         FROM jac_training_examples ORDER BY created_at DESC LIMIT 200`
+      );
+      res.json(r.rows.map((row: any) => ({
+        id: row.id,
+        conversationId: row.conversation_id,
+        userMessage: row.user_message,
+        contextSummary: row.context_summary,
+        idealResponse: row.ideal_response,
+        toolCallsMade: row.tool_calls_made ?? [],
+        outcomeLabel: row.outcome_label,
+        source: row.source,
+        piiScrubbed: row.pii_scrubbed,
+        adminApproved: row.admin_approved,
+        adminRejected: row.admin_rejected,
+        rejectReason: row.reject_reason,
+        exportedAt: row.exported_at,
+        createdAt: row.created_at,
+      })));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/jac/training-examples/:id/approve", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      await pool.query(
+        `UPDATE jac_training_examples SET admin_approved=TRUE, admin_rejected=FALSE WHERE id=$1`,
+        [id]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/jac/training-examples/:id/reject", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      await pool.query(
+        `UPDATE jac_training_examples SET admin_rejected=TRUE, admin_approved=FALSE, reject_reason=$2 WHERE id=$1`,
+        [id, reason || null]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/jac/training-examples/export", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(
+        `SELECT user_message, context_summary, ideal_response, tool_calls_made, outcome_label
+         FROM jac_training_examples WHERE admin_approved=TRUE AND admin_rejected=FALSE
+         ORDER BY created_at ASC`
+      );
+      // Mark as exported
+      await pool.query(
+        `UPDATE jac_training_examples SET exported_at=NOW()
+         WHERE admin_approved=TRUE AND admin_rejected=FALSE AND exported_at IS NULL`
+      );
+      const lines = r.rows.map((row: any) => JSON.stringify({
+        messages: [
+          { role: "system", content: "You are JAC — GUBER's Job and Action Coordinator." },
+          ...(row.context_summary ? [{ role: "system", content: `Context: ${row.context_summary}` }] : []),
+          { role: "user", content: row.user_message },
+          { role: "assistant", content: row.ideal_response },
+        ],
+        tools_used: row.tool_calls_made ?? [],
+        outcome: row.outcome_label,
+      }));
+      res.setHeader("Content-Type", "application/x-ndjson");
+      res.setHeader("Content-Disposition", `attachment; filename="jac-training-${Date.now()}.jsonl"`);
+      res.send(lines.join("\n"));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/jac/training-stats", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const [convR, exR] = await Promise.all([
+        pool.query(`SELECT COUNT(*) AS total, AVG(auto_score) AS avg_score FROM jac_conversations`),
+        pool.query(
+          `SELECT
+             COUNT(*) AS total,
+             SUM(CASE WHEN NOT admin_approved AND NOT admin_rejected THEN 1 ELSE 0 END) AS pending,
+             SUM(CASE WHEN admin_approved THEN 1 ELSE 0 END) AS approved,
+             SUM(CASE WHEN admin_rejected THEN 1 ELSE 0 END) AS rejected,
+             SUM(CASE WHEN exported_at IS NOT NULL THEN 1 ELSE 0 END) AS exported
+           FROM jac_training_examples`
+        ),
+      ]);
+      const c = convR.rows[0];
+      const e = exR.rows[0];
+      res.json({
+        totalConversations: parseInt(c.total) || 0,
+        avgScore: c.avg_score ? parseFloat(c.avg_score) : null,
+        totalExamples: parseInt(e.total) || 0,
+        pendingReview: parseInt(e.pending) || 0,
+        approved: parseInt(e.approved) || 0,
+        rejected: parseInt(e.rejected) || 0,
+        exported: parseInt(e.exported) || 0,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── JAC Feedback Reports (auth optional) ─────────────────────────────────
   app.post("/api/jac/feedback-report", async (req: Request, res: Response) => {
     try {

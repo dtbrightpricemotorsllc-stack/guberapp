@@ -115,6 +115,7 @@ const AdminUserProfile = lazy(() => import("@/pages/admin-user-profile"));
 const AdminStudio = lazy(() => import("@/pages/admin-studio"));
 const AdminGuberScout = lazy(() => import("@/pages/admin-guber-scout"));
 const AdminJacBrain = lazy(() => import("@/pages/admin-jac-brain"));
+const AdminJacTraining = lazy(() => import("@/pages/admin-jac-training"));
 const AiOrNot = lazy(() => import("@/pages/ai-or-not"));
 const VerifyInspect = lazy(() => import("@/pages/verify-inspect"));
 const BusinessOnboarding = lazy(() => import("@/pages/business-onboarding"));
@@ -379,6 +380,7 @@ function Router() {
       <Route path="/admin/studio" component={() => <AdminRoute component={AdminStudio} />} />
       <Route path="/admin/guber-scout" component={() => <AdminRoute component={AdminGuberScout} />} />
       <Route path="/admin/jac-brain" component={() => <AdminRoute component={AdminJacBrain} />} />
+      <Route path="/admin/jac-training" component={() => <AdminRoute component={AdminJacTraining} />} />
       <Route path="/admin/asset-protection" component={() => <AdminRoute component={AdminAssetProtection} />} />
       <Route path="/admin/campaign-lab" component={() => <AdminRoute component={AdminCampaignLab} />} />
       <Route path="/campaign-lab/campaigns/:id" component={() => <Suspense fallback={<PageLoader />}><CampaignLabCampaignDetail /></Suspense>} />

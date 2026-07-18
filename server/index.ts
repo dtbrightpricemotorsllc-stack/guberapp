@@ -1111,6 +1111,48 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_jac_feedback_status ON jac_feedback_reports(status, created_at DESC);
   `).catch(e => console.error("[migration] jac_feedback_reports error:", e));
 
+  // ── JAC Conversations + Training Examples ─────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_conversations (
+      id               SERIAL PRIMARY KEY,
+      conversation_id  TEXT UNIQUE NOT NULL,
+      user_id          INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      agent_id         TEXT,
+      platform         TEXT DEFAULT 'web',
+      duration_secs    INTEGER,
+      turn_count       INTEGER DEFAULT 0,
+      transcript       JSONB DEFAULT '[]',
+      tool_calls_made  JSONB DEFAULT '[]',
+      navigated_to     TEXT,
+      user_took_action BOOLEAN DEFAULT FALSE,
+      auto_score       INTEGER,
+      auto_score_reason TEXT,
+      pii_scrubbed     BOOLEAN DEFAULT FALSE,
+      raw_payload      JSONB DEFAULT '{}',
+      created_at       TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_conversations_user ON jac_conversations(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_jac_conversations_score ON jac_conversations(auto_score DESC NULLS LAST);
+
+    CREATE TABLE IF NOT EXISTS jac_training_examples (
+      id               SERIAL PRIMARY KEY,
+      conversation_id  TEXT REFERENCES jac_conversations(conversation_id) ON DELETE SET NULL,
+      user_message     TEXT NOT NULL,
+      context_summary  TEXT,
+      ideal_response   TEXT NOT NULL,
+      tool_calls_made  JSONB DEFAULT '[]',
+      outcome_label    TEXT,
+      source           TEXT NOT NULL DEFAULT 'webhook',
+      pii_scrubbed     BOOLEAN DEFAULT FALSE,
+      admin_approved   BOOLEAN DEFAULT FALSE,
+      admin_rejected   BOOLEAN DEFAULT FALSE,
+      reject_reason    TEXT,
+      exported_at      TIMESTAMP,
+      created_at       TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_training_review ON jac_training_examples(admin_approved, admin_rejected, created_at DESC);
+  `).catch(e => console.error("[migration] jac_conversations/training error:", e));
+
   // ── GUBER Campaign Lab ─────────────────────────────────────────────────────
   await pool.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS campaign_lab_role TEXT;
