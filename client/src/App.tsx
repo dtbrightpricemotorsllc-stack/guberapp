@@ -45,6 +45,7 @@ import JoinPage from "@/pages/join";
 import GpsTest from "@/pages/gps-test";
 import BgLocationDemo from "@/pages/bg-location-demo";
 import JacVoiceTest from "@/pages/jac-voice-test";
+const JacRealtimeTest = lazy(() => import("@/pages/jac-realtime-test"));
 import { LoadingSplash } from "@/components/loading-splash";
 
 // Authenticated consumer pages — lazy loaded
@@ -455,6 +456,7 @@ function Router() {
       <Route path="/gps-test" component={GpsTest} />
       <Route path="/bg-location-demo" component={BgLocationDemo} />
       <Route path="/jac-voice-test" component={() => <ProtectedRoute component={JacVoiceTest} />} />
+      <Route path="/jac-realtime-test" component={() => <ProtectedRoute component={JacRealtimeTest} />} />
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/acceptable-use" component={AcceptableUse} />

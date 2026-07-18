@@ -27,6 +27,7 @@ import {
 import { sendPushToUser } from "./push";
 import { tryLocalAnswer, promoteToCache, getJacBrainStats, getMultiSourceContext } from "./jac-brain";
 import { syncJacProfile, buildJacProfileContext, buildMorningBriefing, scanOpportunities } from "./jac-profile";
+import { createJacRealtimeSession, executeJacTool } from "./jac-realtime";
 import { reportIssue as recordSystemIssue, escalateCriticalIssue, tryAdminMonitoringAnswer, shouldDiagnose } from "./system-issues";
 import { maybeDiagnoseIssue } from "./ai-diagnosis";
 import { isValidActionType, validateAndSummarize, createPendingAction, executeAction } from "./jac-actions";
@@ -17417,6 +17418,49 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     } catch (err: any) {
       console.error("[JAC] listing-collect error:", err.message);
       res.status(500).json({ message: "Listing assistant unavailable, please try again." });
+    }
+  });
+
+  // ── JAC Realtime (OpenAI Realtime API / WebRTC) ──────────────────────────
+  app.post("/api/jac/realtime-session", async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any)?.userId ?? null;
+      let userCtx: Parameters<typeof createJacRealtimeSession>[0]["user"] = null;
+      if (userId) {
+        const row = await pool.query(
+          `SELECT display_name, id_verified, is_worker, is_hirer, zipcode FROM users WHERE id=$1`,
+          [userId]
+        );
+        if (row.rows[0]) {
+          const u = row.rows[0];
+          userCtx = {
+            displayName: u.display_name ?? undefined,
+            idVerified: !!u.id_verified,
+            isWorker: !!u.is_worker,
+            isHirer: !!u.is_hirer,
+            zip: u.zipcode ?? undefined,
+          };
+        }
+      }
+      const session = await createJacRealtimeSession({ user: userCtx });
+      res.json(session);
+    } catch (err: any) {
+      console.error("[jac-realtime] session error:", err?.message);
+      res.status(503).json({ message: "JAC Realtime unavailable: " + (err?.message || "unknown error") });
+    }
+  });
+
+  app.post("/api/jac/realtime-tool", async (req: Request, res: Response) => {
+    try {
+      const { name, args } = req.body;
+      if (!name || typeof name !== "string") {
+        return res.status(400).json({ error: "Tool name required" });
+      }
+      const result = await executeJacTool(name, args || {}, pool);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[jac-realtime] tool error:", err?.message);
+      res.status(500).json({ error: "Tool execution failed: " + (err?.message || "unknown") });
     }
   });
 
