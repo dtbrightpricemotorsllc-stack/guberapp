@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { App as CapApp } from "@capacitor/app";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
@@ -872,13 +873,19 @@ export default function Home() {
   const jobsSectionRef = useRef<HTMLDivElement>(null);
   const { enabled: investorPitchPublic } = useFeatureFlag("investor_pitch_public");
 
-  // Prevent iOS WKWebView from restoring a previous scroll position (e.g. the
-  // near-black MascotPowerUp section) which makes the app look like a black screen.
+  // Scroll to top on mount AND every time the app is foregrounded.
+  // iOS WKWebView preserves exact scroll position when backgrounded — the page
+  // is never reloaded on resume, so index.html/useEffect fixes don't fire.
+  // The Capacitor appStateChange event is the only reliable hook for this.
   useEffect(() => {
-    if ("scrollRestoration" in history) {
-      history.scrollRestoration = "manual";
-    }
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+
+    let cleanup: (() => void) | undefined;
+    CapApp.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+    }).then((handle) => { cleanup = () => handle.remove(); });
+    return () => { cleanup?.(); };
   }, []);
 
   const { data: jobs, isLoading: jobsLoading } = useQuery<PublicJob[]>({
