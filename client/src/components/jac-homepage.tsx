@@ -6,6 +6,7 @@ import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVo
 import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
 import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
+import { isStoreBuild } from "@/lib/platform";
 
 interface JacPendingAction {
   id: number;
@@ -177,7 +178,9 @@ export function JacHomepage() {
   // "splash" = gesture gate (required by browsers before any audio)
   // "chat"   = full chat panel + auto-speak fires immediately on enter
   // "intro"  = minimized chip selector (reached via minimize button)
-  const [mode, setMode] = useState<"splash" | "intro" | "chat">("chat");
+  // On native store builds start minimized so users see the hero content first,
+  // not a dark chat panel that looks like a black screen on first launch.
+  const [mode, setMode] = useState<"splash" | "intro" | "chat">(isStoreBuild ? "intro" : "chat");
   const [messages, setMessages] = useState<JacMsg[]>([GREETING]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
