@@ -872,6 +872,15 @@ export default function Home() {
   const jobsSectionRef = useRef<HTMLDivElement>(null);
   const { enabled: investorPitchPublic } = useFeatureFlag("investor_pitch_public");
 
+  // Prevent iOS WKWebView from restoring a previous scroll position (e.g. the
+  // near-black MascotPowerUp section) which makes the app look like a black screen.
+  useEffect(() => {
+    if ("scrollRestoration" in history) {
+      history.scrollRestoration = "manual";
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+  }, []);
+
   const { data: jobs, isLoading: jobsLoading } = useQuery<PublicJob[]>({
     queryKey: ["/api/public/jobs"],
   });
