@@ -17159,10 +17159,6 @@ CRITICAL — respond with JSON ONLY, no other text:
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "unauthorized" });
 
-      const { isFeatureEnabledFor } = await import("./feature-flags.js");
-      const enabled = await isFeatureEnabledFor("voice_pipeline_v2", { id: user.id, role: user.role });
-      if (!enabled) return res.status(403).json({ message: "voice pipeline not enabled for this account" });
-
       const agentId = process.env.ELEVENLABS_CONVAI_AGENT_ID;
       const apiKey = process.env.ELEVENLABS_API_KEY;
       if (!agentId || !apiKey) return res.status(503).json({ message: "voice agent not configured" });

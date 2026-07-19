@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
+import { JacConvaiBubble } from "@/components/jac/jac-convai-voice";
 import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
@@ -1354,41 +1355,8 @@ export function GUBERAssistant() {
               <Volume2 className="w-4 h-4" />
             </button>
 
-            {/* Mic button — tap to call JAC (live always-listening mode) */}
-            {micSupported && (
-              <button
-                onClick={toggleLiveMode}
-                className={`relative w-12 h-12 rounded-full flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${liveMode ? "scale-110" : "hover:scale-105 active:scale-95"}`}
-                style={{
-                  background: liveMode
-                    ? liveState === "speaking"
-                      ? "linear-gradient(135deg, hsl(152 90% 40%), hsl(152 70% 30%))"
-                      : liveState === "recording"
-                        ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
-                        : "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))"
-                    : "linear-gradient(135deg, hsl(270 70% 25%), hsl(152 60% 16%))",
-                  color: "white",
-                  boxShadow: liveMode
-                    ? "0 0 0 3px hsl(270 100% 65% / 0.35), 0 0 20px hsl(270 100% 65% / 0.5)"
-                    : "0 0 10px hsl(270 100% 65% / 0.35), inset 0 1px 0 hsl(270 100% 70% / 0.15)",
-                }}
-                data-testid="button-dd-mic"
-                aria-label={liveMode ? "End conversation" : "Call JAC"}
-                disabled={anyPending}
-              >
-                {liveMode && (
-                  <span className="absolute inset-0 rounded-full animate-ping opacity-25"
-                    style={{ background: "hsl(270 100% 65%)" }} />
-                )}
-                {liveMode
-                  ? liveState === "recording"
-                    ? <Mic className="w-6 h-6" />
-                    : liveState === "speaking"
-                      ? <Volume2 className="w-6 h-6" />
-                      : <Loader2 className="w-6 h-6 animate-spin" />
-                  : <Mic className="w-6 h-6" />}
-              </button>
-            )}
+            {/* Mic button — ElevenLabs ConvAI voice session */}
+            <JacConvaiBubble />
 
             {/* Send button */}
             <Button

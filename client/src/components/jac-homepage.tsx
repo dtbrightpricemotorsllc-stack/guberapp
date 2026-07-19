@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Link } from "wouter";
 import { Send, Mic, Volume2, ArrowRight, MessageSquare, Minus, Loader2 } from "lucide-react";
+import { JacConvaiVoice } from "@/components/jac/jac-convai-voice";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
 import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
@@ -638,20 +639,7 @@ export function JacHomepage() {
 
               {/* CTA buttons */}
               <div className="flex flex-wrap gap-2 justify-center md:justify-start mb-5">
-                {micSupported && (
-                  <button
-                    onClick={openChatMic}
-                    className="flex items-center gap-2 h-10 px-5 rounded-xl text-sm font-display font-bold tracking-wide transition-all active:scale-95"
-                    style={{
-                      background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))",
-                      color: "black",
-                      boxShadow: "0 0 20px hsl(270 100% 65% / 0.3)",
-                    }}
-                    data-testid="button-jac-talk"
-                  >
-                    <Mic className="w-3.5 h-3.5" /> Talk to JAC
-                  </button>
-                )}
+                <JacConvaiVoice />
                 <button
                   onClick={() => openChat()}
                   className="flex items-center gap-2 h-10 px-5 rounded-xl text-sm font-display font-bold tracking-wide transition-all active:scale-95"
