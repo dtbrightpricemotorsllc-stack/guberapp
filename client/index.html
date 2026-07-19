@@ -47,6 +47,10 @@
   <body>
     <div id="root"></div>
     <script>
+      // Prevent iOS WKWebView from restoring a stale scroll position on relaunch.
+      // This must run synchronously before React boots so WKWebView cannot
+      // override it with a saved position (e.g. the near-black mascot section).
+      try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch(e) {}
       // Apply saved theme immediately to avoid a flash of dark→light on load.
       (function() {
         try {
