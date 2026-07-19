@@ -17200,48 +17200,80 @@ CRITICAL — respond with JSON ONLY, no other text:
   // reply back as OpenAI chat.completion.chunk SSE, so voice on every platform
   // is the same JAC. Auth = per-conversation HMAC identity token (userId derived
   // ONLY from the token, never from the model/agent) + optional shared-secret
-  // header. Inert unless a valid token is minted; client is gated on voice_pipeline_v2.
+  // header.
+
+  // GET — ElevenLabs probes the custom LLM endpoint with GET before connecting.
+  // Must return a valid OpenAI-compatible models list, NOT HTML from the SPA.
+  app.get("/api/jac/convai/llm", (_req: Request, res: Response) => {
+    res.json({ object: "list", data: [{ id: "jac", object: "model", owned_by: "guber" }] });
+  });
+
   app.post("/api/jac/convai/llm", async (req: Request, res: Response) => {
+    const body: any = req.body ?? {};
+
+    // ── Verbose diagnostics — every field ElevenLabs sends ──────────────────
+    const hdrs: Record<string, string> = {};
+    for (const k of ["x-jac-voice-token", "x-secret-jac-voice-token", "x-guber-convai-secret",
+                      "authorization", "content-type", "user-agent"]) {
+      const v = req.headers[k];
+      if (v) hdrs[k] = k.includes("token") || k.includes("secret") || k.includes("authorization")
+        ? `[present ${String(v).length}ch]` : String(v);
+    }
+    const bodyKeys = Object.keys(body);
+    const extraBodyKeys = body.extra_body ? Object.keys(body.extra_body) : [];
+    const rawToken = resolveVoiceToken(req);
+    console.log("[jac/convai/llm] POST", JSON.stringify({
+      headers: hdrs,
+      bodyKeys,
+      extraBodyKeys,
+      userField: typeof body.user === "string" ? `[${body.user.length}ch]` : body.user,
+      hasToken: !!rawToken,
+      msgCount: Array.isArray(body.messages) ? body.messages.length : 0,
+      stream: body.stream,
+    }));
+    // ────────────────────────────────────────────────────────────────────────
+
     try {
       const cfgSecret = process.env.JAC_CONVAI_SHARED_SECRET;
       if (cfgSecret) {
         const provided = req.headers["x-guber-convai-secret"];
         if (provided !== cfgSecret) {
+          console.warn("[jac/convai/llm] shared-secret mismatch — returning 401");
           return res.status(401).json({ error: { message: "unauthorized", type: "invalid_request_error" } });
         }
       }
 
-      const rawToken = resolveVoiceToken(req);
       const claims = rawToken ? verifyJacVoiceToken(rawToken) : null;
       if (!claims) {
+        console.warn("[jac/convai/llm] token missing or invalid — rawToken present:", !!rawToken, "| bodyKeys:", bodyKeys.join(","), "| extraBodyKeys:", extraBodyKeys.join(","));
         return res.status(401).json({ error: { message: "invalid or missing voice token", type: "invalid_request_error" } });
       }
       if (claims.userId == null) {
-        // Anonymous onboarding voice is a later phase; staging is authed-only.
+        console.warn("[jac/convai/llm] anonymous token — refusing");
         return res.status(401).json({ error: { message: "authentication required", type: "invalid_request_error" } });
       }
       const user = await storage.getUser(claims.userId);
       if (!user) {
+        console.warn("[jac/convai/llm] userId", claims.userId, "not found");
         return res.status(401).json({ error: { message: "user not found", type: "invalid_request_error" } });
       }
 
-      // Per-conversation + per-user sliding-window cap: a minted token lives in
-      // the browser for up to 2h, so bound replay to keep LLM/voice spend safe.
       const rl = checkConvaiRateLimit(claims.userId, claims.cid);
       if (!rl.ok) {
         res.setHeader("Retry-After", Math.ceil((rl.retryAfterMs ?? 60000) / 1000).toString());
         return res.status(429).json({ error: { message: "rate limit exceeded", type: "rate_limit_error" } });
       }
 
-      const body: any = req.body ?? {};
+      console.log("[jac/convai/llm] authed userId:", claims.userId, "msgs:", Array.isArray(body.messages) ? body.messages.length : 0);
+
       const model = typeof body.model === "string" && body.model ? body.model : "gpt-4.1-mini";
-      const stream = body.stream !== false; // ElevenLabs streams by default
+      const stream = body.stream !== false;
       const sanitized = sanitizeAssistMessages(Array.isArray(body.messages) ? body.messages : []);
       if (sanitized.length === 0) sanitized.push({ role: "user", content: "hello" });
 
-      // voiceMode = true → brain keeps replies short + spoken-friendly.
       const result = await runGuberAssistBrain(user, sanitized, true);
       const content = (result?.reply || "Sorry, I didn't catch that — could you say that again?").toString();
+      console.log("[jac/convai/llm] reply", content.length, "chars, stream:", stream);
       const id = newCompletionId();
 
       if (stream) {
@@ -17250,7 +17282,7 @@ CRITICAL — respond with JSON ONLY, no other text:
         res.json(buildNonStreamCompletion({ id, model, content }));
       }
     } catch (err: any) {
-      console.error("[jac/convai/llm]", err?.message);
+      console.error("[jac/convai/llm] ERROR:", err?.message);
       if (!res.headersSent) {
         res.status(500).json({ error: { message: "adapter error", type: "server_error" } });
       } else {
