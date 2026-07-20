@@ -2,24 +2,23 @@
  * JAC Voice — ElevenLabs Conversational AI, production UI.
  *
  * ElevenLabs owns STT, TTS, the LLM, voice, personality, and guardrails.
- * GUBER provides a server-minted signed URL (auth + agent identity),
- * user context as a dynamic variable, and webhook endpoints the agent
- * tools may call for GUBER-specific actions.
+ * GUBER provides a server-minted session credential, user context as dynamic
+ * variables, and webhook endpoints the agent tools may call for GUBER actions.
  *
  * Exports:
- *   <JacConvaiVoice />    full "Talk to JAC" button + modal (hero / homepage)
+ *   <JacConvaiVoice />    full "Talk to JAC" button + panel (hero / homepage)
  *   <JacConvaiBubble />   compact mic bubble for toolbars (guber-assistant)
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import { apiRequest } from "@/lib/queryClient";
-import { Mic, MicOff, PhoneOff, Loader2, Radio } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Loader2, Radio, X, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Global session guard — only one ConvAI session at a time ─────────────────
 let _convaiSessions = 0;
 export function isConvaiActive(): boolean { return _convaiSessions > 0; }
-function _openSession() { _convaiSessions++; }
+function _openSession()  { _convaiSessions++; }
 function _closeSession() { _convaiSessions = Math.max(0, _convaiSessions - 1); }
 
 // ── Screen wake-lock (prevents screen sleeping mid-call) ─────────────────────
@@ -52,12 +51,19 @@ function useScreenWakeLock(active: boolean) {
   }, [active]);
 }
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 interface ConvaiSessionResponse {
   agentId: string;
-  signedUrl?: string;   // present for private agents; absent for public agents
+  signedUrl?: string;
   voiceToken: string;
   dynamicVariableName: string;
+  userContext?: { firstName?: string; role?: string; platform?: string };
+}
+
+interface TranscriptLine {
+  id: number;
+  source: "ai" | "user";
+  text: string;
 }
 
 type DisplayPhase =
@@ -69,27 +75,6 @@ type DisplayPhase =
   | "error"
   | "ended";
 
-function phaseLabel(p: DisplayPhase): string {
-  switch (p) {
-    case "connecting": return "Connecting…";
-    case "listening":  return "Listening…";
-    case "thinking":   return "JAC is thinking…";
-    case "speaking":   return "JAC is speaking";
-    case "muted":      return "Microphone muted";
-    case "error":      return "Connection failed";
-    case "ended":      return "Conversation ended";
-  }
-}
-
-function phaseSub(p: DisplayPhase): string | null {
-  switch (p) {
-    case "listening": return "Speak now — JAC is listening";
-    case "thinking":  return "JAC is working on a response…";
-    case "muted":     return "Tap the mic to unmute";
-    default:          return null;
-  }
-}
-
 const PHASE_COLOR: Record<DisplayPhase, string> = {
   connecting: "hsl(270 100% 65%)",
   listening:  "hsl(152 100% 44%)",
@@ -100,16 +85,35 @@ const PHASE_COLOR: Record<DisplayPhase, string> = {
   ended:      "hsl(0 0% 45%)",
 };
 
-// ── Modal inner (needs ConversationProvider above) ───────────────────────────
-function JacConvaiModal({ onClose }: { onClose: () => void }) {
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [reconnecting, setReconnecting] = useState(false);
-  const [ended, setEnded] = useState(false);
+const PHASE_LABEL: Record<DisplayPhase, string> = {
+  connecting: "Connecting…",
+  listening:  "Listening",
+  thinking:   "Thinking…",
+  speaking:   "JAC is speaking",
+  muted:      "Muted",
+  error:      "Connection failed",
+  ended:      "Conversation ended",
+};
 
-  // Register this session so other entry-points know ConvAI is active.
+let _lineId = 0;
+
+// ── Modal inner (needs ConversationProvider above) ────────────────────────────
+function JacConvaiModal({ onClose }: { onClose: () => void }) {
+  const [errorMsg, setErrorMsg]     = useState<string | null>(null);
+  const [ended, setEnded]           = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
+  const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
+  const transcriptEndRef            = useRef<HTMLDivElement>(null);
+  const bootRef                     = useRef<(() => void) | null>(null);
+
+  // Register session so other entry-points know ConvAI is active.
   useEffect(() => {
     _openSession();
     return () => _closeSession();
+  }, []);
+
+  const addLine = useCallback((source: "ai" | "user", text: string) => {
+    setTranscript(prev => [...prev, { id: _lineId++, source, text }]);
   }, []);
 
   const {
@@ -121,37 +125,50 @@ function JacConvaiModal({ onClose }: { onClose: () => void }) {
     isMuted,
     setMuted,
   } = useConversation({
-    onConnect:    () => {
-      console.log("[JAC] ✅ ElevenLabs connected");
+    onConnect: () => {
+      console.log("[JAC] ✅ Connected");
       setErrorMsg(null);
       setEnded(false);
       setReconnecting(false);
     },
     onDisconnect: () => {
-      console.log("[JAC] 🔴 ElevenLabs disconnected");
+      console.log("[JAC] 🔴 Disconnected");
       setEnded(true);
     },
     onError: (msg: string) => {
-      console.warn("[JAC] ⚠️ ElevenLabs error:", msg);
+      console.warn("[JAC] ⚠️ Error:", msg);
       setErrorMsg(msg || "Voice connection failed");
     },
-  });
+    onMessage: ({ source, message }: { source: "ai" | "user"; message: string }) => {
+      if (message?.trim()) {
+        console.log(`[JAC] 💬 ${source === "ai" ? "JAC" : "You"}: ${message}`);
+        addLine(source, message.trim());
+      }
+    },
+  } as any);
+
+  // Auto-scroll transcript to bottom whenever a new line arrives
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [transcript]);
 
   const connected = status === "connected";
   useScreenWakeLock(connected);
 
-  // Derive display phase
+  // Phase
   let phase: DisplayPhase;
-  if (errorMsg)         phase = "error";
-  else if (ended)       phase = "ended";
-  else if (!connected)  phase = "connecting";
-  else if (isMuted)     phase = "muted";
-  else if (isSpeaking)  phase = "speaking";
+  if (errorMsg)        phase = "error";
+  else if (ended)      phase = "ended";
+  else if (!connected) phase = "connecting";
+  else if (isMuted)    phase = "muted";
+  else if (isSpeaking) phase = "speaking";
   else if (isListening) phase = "listening";
-  else                  phase = "thinking";
+  else                 phase = "thinking";
 
-  // Boot / reconnect — shared function used by auto-start and the Reconnect button
-  const bootRef = useRef<(() => void) | null>(null);
+  const color = PHASE_COLOR[phase];
+  const pulse = phase === "listening" || phase === "speaking" || phase === "connecting";
+
+  // Boot — mic + session fetched in parallel for speed
   useEffect(() => {
     let cancelled = false;
 
@@ -159,31 +176,36 @@ function JacConvaiModal({ onClose }: { onClose: () => void }) {
       setErrorMsg(null);
       setEnded(false);
       try {
-        // Prime mic permission before the SDK opens its own stream
-        console.log("[JAC] 🎤 Requesting mic permission…");
-        try {
-          const prime = await navigator.mediaDevices.getUserMedia({ audio: true });
-          prime.getTracks().forEach(t => t.stop());
-          console.log("[JAC] 🎤 Mic permission granted");
-        } catch (micErr: any) {
-          throw new Error("Microphone access denied — please allow mic in browser settings");
+        console.log("[JAC] 🚀 Booting (mic + session in parallel)…");
+
+        // Kick both off simultaneously
+        const [micResult, sessionResult] = await Promise.allSettled([
+          navigator.mediaDevices.getUserMedia({ audio: true }),
+          apiRequest("POST", "/api/jac/convai/session", { platform: "web" }),
+        ]);
+
+        if (cancelled) return;
+
+        // Handle mic
+        if (micResult.status === "fulfilled") {
+          micResult.value.getTracks().forEach(t => t.stop());
+          console.log("[JAC] 🎤 Mic granted");
+        } else {
+          throw new Error("Microphone access denied — allow mic in browser settings");
         }
 
-        if (cancelled) return;
-        console.log("[JAC] 🔗 Requesting session credential…");
-        const t0 = Date.now();
-        const res = await apiRequest("POST", "/api/jac/convai/session", { platform: "web" });
-        if (!res.ok) throw new Error(`Session error ${res.status}`);
-        const session = (await res.json()) as ConvaiSessionResponse & { userContext?: any };
-        const sessionMs = Date.now() - t0;
+        // Handle session
+        if (sessionResult.status === "rejected" || !sessionResult.value.ok) {
+          const code = sessionResult.status === "fulfilled" ? sessionResult.value.status : 0;
+          throw new Error(`Session error ${code || "(network)"}`);
+        }
+        const session = (await sessionResult.value.json()) as ConvaiSessionResponse;
         if (cancelled) return;
 
-        // Verify and log agent ID (masked for security)
         const aid = session.agentId;
         const maskedAid = aid.length > 12 ? aid.slice(0, 8) + "…" + aid.slice(-4) : aid.slice(0, 4) + "…";
-        console.log(`[JAC] 🆔 Agent: ${maskedAid} | session ready in ${sessionMs}ms | mode: ${session.signedUrl ? "signed" : "public-agent"}`);
+        console.log(`[JAC] 🆔 Agent: ${maskedAid} | mode: ${session.signedUrl ? "signed" : "public"}`);
 
-        // Build dynamic variables: voice token + user context (non-secret)
         const dynVars: Record<string, string> = {
           [session.dynamicVariableName]: session.voiceToken,
         };
@@ -191,19 +213,16 @@ function JacConvaiModal({ onClose }: { onClose: () => void }) {
         if (session.userContext?.role)      dynVars["user_role"]        = session.userContext.role;
         if (session.userContext?.platform)  dynVars["user_platform"]    = session.userContext.platform;
 
-        const sessionParams: Record<string, any> = { dynamicVariables: dynVars };
-        if (session.signedUrl) {
-          sessionParams.signedUrl = session.signedUrl;
-        } else {
-          sessionParams.agentId = session.agentId;
-        }
+        const params: Record<string, any> = { dynamicVariables: dynVars };
+        if (session.signedUrl) params.signedUrl = session.signedUrl;
+        else                   params.agentId   = session.agentId;
 
-        console.log(`[JAC] 🚀 Starting ElevenLabs session (agentId confirmed: ${maskedAid})…`);
-        startSession(sessionParams as any);
+        console.log("[JAC] 🔗 Starting session…");
+        startSession(params as any);
       } catch (err: any) {
         if (!cancelled) {
-          console.error("[JAC] ❌ Boot failed:", err?.message);
-          setErrorMsg(err?.message || "Could not start voice session");
+          console.error("[JAC] ❌", err?.message);
+          setErrorMsg(err?.message || "Could not connect to JAC");
         }
       }
     }
@@ -217,42 +236,42 @@ function JacConvaiModal({ onClose }: { onClose: () => void }) {
     setReconnecting(true);
     setEnded(false);
     setErrorMsg(null);
+    setTranscript([]);
     try { endSession(); } catch { /* already closed */ }
-    setTimeout(() => { bootRef.current?.(); }, 300);
+    setTimeout(() => { bootRef.current?.(); setReconnecting(false); }, 400);
   }, [endSession]);
 
   const handleEnd = useCallback(() => {
-    console.log("[JAC] 📴 User ended conversation");
+    console.log("[JAC] 📴 User ended");
     try { endSession(); } catch { /* already closed */ }
     setEnded(true);
-    setTimeout(onClose, 800);
-  }, [endSession, onClose]);
+    // No auto-close — panel stays on screen showing transcript
+  }, [endSession]);
 
   const toggleMute = useCallback(() => {
     if (!connected) return;
     setMuted(!isMuted);
   }, [connected, isMuted, setMuted]);
 
-  const color = PHASE_COLOR[phase];
-  const pulse = phase === "listening" || phase === "speaking" || phase === "connecting";
   const isTerminal = ended || phase === "error";
 
   return (
     <div
       className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center"
       data-testid="jac-convai-modal"
-      style={{ background: "rgba(0,0,0,0.80)", backdropFilter: "blur(6px)" }}
+      style={{ background: "rgba(0,0,0,0.82)", backdropFilter: "blur(8px)" }}
     >
       <div
-        className="w-full sm:w-[380px] rounded-t-3xl sm:rounded-3xl px-6 pt-6 pb-8 flex flex-col items-center gap-5"
+        className="w-full sm:w-[400px] rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden"
         style={{
+          maxHeight: "90dvh",
           background: "linear-gradient(160deg, hsl(222 47% 8%), hsl(270 60% 6%))",
           border: "1px solid hsl(270 100% 65% / 0.22)",
           boxShadow: "0 -8px 64px hsl(270 100% 65% / 0.15), 0 0 120px rgba(0,0,0,0.7)",
         }}
       >
-        {/* Header row */}
-        <div className="flex items-center justify-between w-full">
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
           <div className="flex items-center gap-2">
             <Radio className="w-3.5 h-3.5" style={{ color }} />
             <span
@@ -262,100 +281,151 @@ function JacConvaiModal({ onClose }: { onClose: () => void }) {
               Talk to JAC
             </span>
           </div>
-          {isTerminal && (
-            <button
-              onClick={onClose}
-              className="text-xs text-muted-foreground hover:text-white transition-colors px-2 py-1"
-              data-testid="button-convai-close"
-            >
-              Close
-            </button>
-          )}
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all"
+            data-testid="button-convai-close"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Orb */}
-        <div className="relative flex items-center justify-center my-3">
-          {pulse && (
-            <>
+        {/* ── Orb + status row ── */}
+        <div className="flex items-center gap-4 px-5 pb-4 flex-shrink-0">
+          {/* Compact orb */}
+          <div className="relative flex-shrink-0 flex items-center justify-center">
+            {pulse && (
               <span
-                className="absolute w-32 h-32 rounded-full animate-ping opacity-[0.08]"
+                className="absolute w-16 h-16 rounded-full animate-ping opacity-[0.10]"
                 style={{ background: color }}
               />
-              <span
-                className="absolute w-22 h-22 rounded-full animate-pulse opacity-[0.12]"
-                style={{ background: color, width: 88, height: 88 }}
-              />
-            </>
-          )}
-          <div
-            className="relative w-18 h-18 rounded-full flex items-center justify-center transition-all duration-500"
-            style={{
-              width: 72, height: 72,
-              background: `radial-gradient(circle at 38% 32%, ${color}30, ${color}0d)`,
-              border: `2px solid ${color}44`,
-              boxShadow: pulse ? `0 0 48px ${color}44` : `0 0 18px ${color}1a`,
-            }}
-          >
-            {phase === "connecting" && (
-              <Loader2 className="w-8 h-8 animate-spin" style={{ color }} />
             )}
-            {(phase === "listening" || phase === "thinking") && (
-              <Mic className="w-8 h-8" style={{ color }} />
-            )}
-            {phase === "speaking" && (
-              <Radio className="w-8 h-8" style={{ color }} />
-            )}
-            {phase === "muted" && (
-              <MicOff className="w-8 h-8" style={{ color }} />
-            )}
-            {(phase === "error" || phase === "ended") && (
-              <PhoneOff className="w-8 h-8" style={{ color }} />
-            )}
+            <div
+              className="relative w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500"
+              style={{
+                background: `radial-gradient(circle at 38% 32%, ${color}28, ${color}0a)`,
+                border: `2px solid ${color}44`,
+                boxShadow: pulse ? `0 0 32px ${color}40` : `0 0 12px ${color}18`,
+              }}
+            >
+              {phase === "connecting" && <Loader2 className="w-5 h-5 animate-spin" style={{ color }} />}
+              {(phase === "listening" || phase === "thinking") && <Mic className="w-5 h-5" style={{ color }} />}
+              {phase === "speaking" && <Radio className="w-5 h-5" style={{ color }} />}
+              {phase === "muted" && <MicOff className="w-5 h-5" style={{ color }} />}
+              {(phase === "error" || phase === "ended") && <PhoneOff className="w-5 h-5" style={{ color }} />}
+            </div>
+          </div>
+
+          {/* Status text */}
+          <div className="flex-1 min-w-0">
+            <p
+              className="text-sm font-display font-bold truncate"
+              style={{ color }}
+              data-testid="status-convai-phase"
+            >
+              {PHASE_LABEL[phase]}
+            </p>
+            {errorMsg ? (
+              <p className="text-xs text-destructive leading-snug mt-0.5 line-clamp-2" data-testid="text-convai-error">
+                {errorMsg}
+              </p>
+            ) : phase === "listening" ? (
+              <p className="text-xs text-muted-foreground mt-0.5">Speak now…</p>
+            ) : phase === "connecting" ? (
+              <p className="text-xs text-muted-foreground mt-0.5">Starting Jac…</p>
+            ) : null}
           </div>
         </div>
 
-        {/* Status text */}
-        <div className="text-center space-y-1">
-          <p className="text-base font-display font-bold text-white" data-testid="status-convai-phase">
-            {phaseLabel(phase)}
-          </p>
-          {phaseSub(phase) && (
-            <p className="text-xs text-muted-foreground">{phaseSub(phase)}</p>
-          )}
-          {errorMsg && (
-            <p
-              className="text-xs text-destructive max-w-[240px] mx-auto leading-snug"
-              data-testid="text-convai-error"
-            >
-              {errorMsg}
+        {/* ── Transcript ── */}
+        <div
+          className="flex-1 overflow-y-auto px-4 pb-3 space-y-2"
+          style={{ minHeight: 120 }}
+          data-testid="jac-transcript"
+        >
+          {transcript.length === 0 && !ended && (
+            <p className="text-xs text-center text-muted-foreground/50 py-4 select-none">
+              {connected ? "Jac is ready — start talking" : "Connecting to Jac…"}
             </p>
           )}
+          {transcript.map(line => (
+            <div
+              key={line.id}
+              className={cn(
+                "flex",
+                line.source === "ai" ? "justify-start" : "justify-end"
+              )}
+              data-testid={`transcript-line-${line.source}`}
+            >
+              <div
+                className={cn(
+                  "max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-snug",
+                  line.source === "ai"
+                    ? "rounded-tl-sm text-white"
+                    : "rounded-tr-sm text-white/90"
+                )}
+                style={
+                  line.source === "ai"
+                    ? {
+                        background: "linear-gradient(135deg, hsl(270 60% 20%), hsl(270 60% 15%))",
+                        border: "1px solid hsl(270 100% 65% / 0.18)",
+                      }
+                    : {
+                        background: "hsl(222 47% 16%)",
+                        border: "1px solid hsl(222 47% 25%)",
+                      }
+                }
+              >
+                {line.text}
+              </div>
+            </div>
+          ))}
+          {ended && transcript.length > 0 && (
+            <p className="text-xs text-center text-muted-foreground/60 py-1 select-none">
+              — conversation ended —
+            </p>
+          )}
+          <div ref={transcriptEndRef} />
         </div>
 
-        {/* Live controls */}
-        {!isTerminal && (
-          <div className="flex items-center gap-5 mt-1">
-            {/* Mute / unmute */}
-            <button
-              onClick={toggleMute}
-              disabled={!connected}
-              className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 disabled:opacity-40"
-              style={{
-                background: isMuted ? "hsl(0 0% 16%)" : "hsl(222 47% 15%)",
-                border: isMuted
-                  ? "1px solid hsl(0 0% 32%)"
-                  : "1px solid hsl(270 100% 65% / 0.28)",
-                color: isMuted ? "hsl(0 0% 58%)" : "hsl(270 100% 78%)",
-              }}
-              data-testid="button-convai-mute"
-              aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
-            >
-              {isMuted
-                ? <MicOff className="w-5 h-5" />
-                : <Mic className="w-5 h-5" />}
-            </button>
+        {/* ── Controls ── */}
+        <div
+          className="flex-shrink-0 px-5 py-4 flex items-center justify-between gap-3"
+          style={{ borderTop: "1px solid hsl(270 100% 65% / 0.10)" }}
+        >
+          {/* Mute */}
+          <button
+            onClick={toggleMute}
+            disabled={!connected}
+            className="w-11 h-11 rounded-full flex items-center justify-center transition-all active:scale-95 disabled:opacity-30"
+            style={{
+              background: isMuted ? "hsl(0 0% 16%)" : "hsl(222 47% 15%)",
+              border: isMuted ? "1px solid hsl(0 0% 32%)" : "1px solid hsl(270 100% 65% / 0.28)",
+              color: isMuted ? "hsl(0 0% 58%)" : "hsl(270 100% 78%)",
+            }}
+            data-testid="button-convai-mute"
+            aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
+          >
+            {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          </button>
 
-            {/* End call */}
+          {/* Reconnect (terminal) or End (active) */}
+          {isTerminal ? (
+            <button
+              onClick={handleReconnect}
+              disabled={reconnecting}
+              className="flex-1 h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-display font-bold transition-all active:scale-95 disabled:opacity-60"
+              style={{
+                background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))",
+                color: "black",
+              }}
+              data-testid="button-convai-reconnect"
+            >
+              <RefreshCw className={cn("w-4 h-4", reconnecting && "animate-spin")} />
+              {reconnecting ? "Reconnecting…" : "Reconnect"}
+            </button>
+          ) : (
             <button
               onClick={handleEnd}
               className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-95"
@@ -367,46 +437,19 @@ function JacConvaiModal({ onClose }: { onClose: () => void }) {
               data-testid="button-convai-end"
               aria-label="End conversation"
             >
-              <PhoneOff className="w-6 h-6" />
+              <PhoneOff className="w-5 h-5" />
             </button>
-          </div>
-        )}
+          )}
 
-        {/* Terminal state: Reconnect + Close */}
-        {isTerminal && (
-          <div className="flex flex-col items-center gap-2 w-full mt-1">
-            <button
-              onClick={handleReconnect}
-              disabled={reconnecting}
-              className="w-full text-sm font-display font-bold px-6 py-2.5 rounded-xl transition-all active:scale-95"
-              style={{
-                background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))",
-                color: "black",
-                opacity: reconnecting ? 0.7 : 1,
-              }}
-              data-testid="button-convai-reconnect"
-            >
-              {reconnecting ? "Reconnecting…" : "Reconnect"}
-            </button>
-            <button
-              onClick={onClose}
-              className="text-xs text-muted-foreground hover:text-white transition-colors px-4 py-1.5"
-              data-testid="button-convai-dismiss"
-            >
-              {ended && !errorMsg ? "Done" : "Dismiss"}
-            </button>
-          </div>
-        )}
+          {/* Volume / spacer to keep layout balanced */}
+          <div className="w-11 h-11" />
+        </div>
       </div>
     </div>
   );
 }
 
-// ── Public: hero / homepage button + modal ───────────────────────────────────
-/**
- * "Talk to JAC" button — tapping opens the full-screen voice modal and
- * auto-starts the session. No feature flags required.
- */
+// ── Public: hero / homepage button + panel ────────────────────────────────────
 export function JacConvaiVoice({
   className,
   label = "Talk to JAC",
@@ -443,11 +486,7 @@ export function JacConvaiVoice({
   );
 }
 
-// ── Public: compact mic bubble for toolbars ──────────────────────────────────
-/**
- * Round mic button for use inside the guber-assistant toolbar.
- * Shares the same modal as JacConvaiVoice.
- */
+// ── Public: compact mic bubble for toolbars ───────────────────────────────────
 export function JacConvaiBubble({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   return (
@@ -461,8 +500,7 @@ export function JacConvaiBubble({ className }: { className?: string }) {
         style={{
           background: "linear-gradient(135deg, hsl(270 70% 25%), hsl(152 60% 16%))",
           color: "white",
-          boxShadow:
-            "0 0 10px hsl(270 100% 65% / 0.35), inset 0 1px 0 hsl(270 100% 70% / 0.15)",
+          boxShadow: "0 0 10px hsl(270 100% 65% / 0.35), inset 0 1px 0 hsl(270 100% 70% / 0.15)",
         }}
         data-testid="button-dd-mic"
         aria-label="Talk to JAC"
