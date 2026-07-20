@@ -11,7 +11,7 @@ env:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 60
 
     steps:
@@ -125,7 +125,6 @@ jobs:
             -scheme          App \
             -configuration   Release \
             -archivePath     /tmp/App.xcarchive \
-            -destination     "generic/platform=iOS" \
             -sdk             iphoneos \
             -derivedDataPath /tmp/dd \
             -allowProvisioningUpdates \
@@ -329,3 +328,4 @@ jobs:
           print('Next step: go to App Store Connect → GUBER → iOS App → 1.0.0')
           print('and click "Submit for Review" when ready.')
           PYEOF
+
