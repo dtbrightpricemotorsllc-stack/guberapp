@@ -16,6 +16,12 @@ import { apiRequest } from "@/lib/queryClient";
 import { Mic, MicOff, PhoneOff, Loader2, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// ── Global session guard — only one ConvAI session at a time ─────────────────
+let _convaiSessions = 0;
+export function isConvaiActive(): boolean { return _convaiSessions > 0; }
+function _openSession() { _convaiSessions++; }
+function _closeSession() { _convaiSessions = Math.max(0, _convaiSessions - 1); }
+
 // ── Screen wake-lock (prevents screen sleeping mid-call) ─────────────────────
 function useScreenWakeLock(active: boolean) {
   const sentinelRef = useRef<any>(null);
@@ -49,7 +55,7 @@ function useScreenWakeLock(active: boolean) {
 // ── Types ────────────────────────────────────────────────────────────────────
 interface ConvaiSessionResponse {
   agentId: string;
-  signedUrl: string;
+  signedUrl?: string;   // present for private agents; absent for public agents
   voiceToken: string;
   dynamicVariableName: string;
 }
@@ -99,6 +105,12 @@ function JacConvaiModal({ onClose }: { onClose: () => void }) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [ended, setEnded] = useState(false);
 
+  // Register this session so other entry-points know ConvAI is active.
+  useEffect(() => {
+    _openSession();
+    return () => _closeSession();
+  }, []);
+
   const {
     startSession,
     endSession,
@@ -138,10 +150,15 @@ function JacConvaiModal({ onClose }: { onClose: () => void }) {
         const res = await apiRequest("POST", "/api/jac/convai/session", { platform: "web" });
         const session = (await res.json()) as ConvaiSessionResponse;
         if (cancelled) return;
-        startSession({
-          signedUrl: session.signedUrl,
+        const sessionParams: Record<string, any> = {
           dynamicVariables: { [session.dynamicVariableName]: session.voiceToken },
-        });
+        };
+        if (session.signedUrl) {
+          sessionParams.signedUrl = session.signedUrl;
+        } else {
+          sessionParams.agentId = session.agentId;
+        }
+        startSession(sessionParams as any);
       } catch (err: any) {
         if (!cancelled) setErrorMsg(err?.message || "Could not start voice session");
       }
@@ -336,7 +353,7 @@ export function JacConvaiVoice({
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => { if (!isConvaiActive()) setOpen(true); }}
         className={cn(
           "flex items-center gap-2 h-10 px-5 rounded-xl text-sm font-display font-bold tracking-wide transition-all active:scale-95",
           className
@@ -371,7 +388,7 @@ export function JacConvaiBubble({ className }: { className?: string }) {
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => { if (!isConvaiActive()) setOpen(true); }}
         className={cn(
           "relative w-12 h-12 rounded-full flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95",
           className

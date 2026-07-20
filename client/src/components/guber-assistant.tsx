@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
-import { JacConvaiBubble } from "@/components/jac/jac-convai-voice";
+import { JacConvaiBubble, isConvaiActive } from "@/components/jac/jac-convai-voice";
 import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
@@ -470,14 +470,15 @@ export function GUBERAssistant() {
 
   useEffect(() => () => { engineRef.current?.stop(); }, []);
 
-  // Wake word listener — "Hey JAC" opens the panel and starts listening
+  // Wake word listener — "Hey JAC" opens the panel and starts listening.
+  // Skip the old STT if ConvAI is already handling voice.
   useEffect(() => {
     function onWake() {
       if (!store.open) {
         markSeen();
         patchStore({ open: true });
       }
-      setTimeout(() => startListening(), 400);
+      if (!isConvaiActive()) setTimeout(() => startListening(), 400);
     }
     window.addEventListener("jac:wake", onWake);
     return () => window.removeEventListener("jac:wake", onWake);

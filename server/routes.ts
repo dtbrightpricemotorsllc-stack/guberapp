@@ -17169,23 +17169,28 @@ CRITICAL — respond with JSON ONLY, no other text:
       const role: "admin" | "user" = user.role === "admin" ? "admin" : "user";
       const voiceToken = signJacVoiceToken({ userId: user.id, role, platform });
 
-      // Private agent → mint a short-lived signed URL server-side.
-      const signedRes = await fetch(
-        `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
-        { headers: { "xi-api-key": apiKey } },
-      );
-      if (!signedRes.ok) {
-        console.error("[jac/convai/session] signed-url failed", signedRes.status);
-        return res.status(502).json({ message: "voice provider unavailable" });
-      }
-      const signedJson: any = await signedRes.json().catch(() => ({}));
-      if (!signedJson?.signed_url) {
-        return res.status(502).json({ message: "voice provider returned no url" });
+      // Try to mint a signed URL (works for private agents).
+      // Public agents reject this endpoint with 4xx — fall back to returning
+      // the agentId directly so the client connects without a signed URL.
+      let signedUrl: string | null = null;
+      try {
+        const signedRes = await fetch(
+          `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
+          { headers: { "xi-api-key": apiKey } },
+        );
+        if (signedRes.ok) {
+          const signedJson: any = await signedRes.json().catch(() => ({}));
+          signedUrl = signedJson?.signed_url ?? null;
+        } else {
+          console.warn("[jac/convai/session] signed-url", signedRes.status, "— using public-agent mode");
+        }
+      } catch (fetchErr: any) {
+        console.warn("[jac/convai/session] signed-url fetch error:", fetchErr?.message, "— using public-agent mode");
       }
 
       return res.json({
         agentId,
-        signedUrl: signedJson.signed_url,
+        ...(signedUrl ? { signedUrl } : {}),
         voiceToken,
         dynamicVariableName: "secret__jac_voice_token",
       });
