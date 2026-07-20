@@ -16,7 +16,7 @@ import { GoogleAuthOverlay } from "@/components/google-auth-overlay";
 import AnnouncementPopup from "@/components/announcement-popup";
 import { GpsTrackingBanner } from "@/components/gps-tracking-banner";
 import { Capacitor } from "@capacitor/core";
-import { isStoreBuild } from "@/lib/platform";
+import { isStoreBuild, isNativeApp } from "@/lib/platform";
 import { WakeWordDetector } from "@/lib/voice";
 import { App as CapApp } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
@@ -45,6 +45,7 @@ import JoinPage from "@/pages/join";
 import GpsTest from "@/pages/gps-test";
 import BgLocationDemo from "@/pages/bg-location-demo";
 import JacVoiceTest from "@/pages/jac-voice-test";
+const JacRealtimeTest = lazy(() => import("@/pages/jac-realtime-test"));
 import { LoadingSplash } from "@/components/loading-splash";
 
 // Authenticated consumer pages — lazy loaded
@@ -114,6 +115,7 @@ const AdminUserProfile = lazy(() => import("@/pages/admin-user-profile"));
 const AdminStudio = lazy(() => import("@/pages/admin-studio"));
 const AdminGuberScout = lazy(() => import("@/pages/admin-guber-scout"));
 const AdminJacBrain = lazy(() => import("@/pages/admin-jac-brain"));
+const AdminJacTraining = lazy(() => import("@/pages/admin-jac-training"));
 const AiOrNot = lazy(() => import("@/pages/ai-or-not"));
 const VerifyInspect = lazy(() => import("@/pages/verify-inspect"));
 const BusinessOnboarding = lazy(() => import("@/pages/business-onboarding"));
@@ -378,6 +380,7 @@ function Router() {
       <Route path="/admin/studio" component={() => <AdminRoute component={AdminStudio} />} />
       <Route path="/admin/guber-scout" component={() => <AdminRoute component={AdminGuberScout} />} />
       <Route path="/admin/jac-brain" component={() => <AdminRoute component={AdminJacBrain} />} />
+      <Route path="/admin/jac-training" component={() => <AdminRoute component={AdminJacTraining} />} />
       <Route path="/admin/asset-protection" component={() => <AdminRoute component={AdminAssetProtection} />} />
       <Route path="/admin/campaign-lab" component={() => <AdminRoute component={AdminCampaignLab} />} />
       <Route path="/campaign-lab/campaigns/:id" component={() => <Suspense fallback={<PageLoader />}><CampaignLabCampaignDetail /></Suspense>} />
@@ -455,6 +458,7 @@ function Router() {
       <Route path="/gps-test" component={GpsTest} />
       <Route path="/bg-location-demo" component={BgLocationDemo} />
       <Route path="/jac-voice-test" component={() => <ProtectedRoute component={JacVoiceTest} />} />
+      <Route path="/jac-realtime-test" component={() => <ProtectedRoute component={JacRealtimeTest} />} />
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/acceptable-use" component={AcceptableUse} />
@@ -652,6 +656,7 @@ function WakeWordInit() {
 
 function App() {
   const [splashDone, setSplashDone] = useState(() => {
+    if (isNativeApp) return true;
     if (import.meta.env.DEV && typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       if (params.has("nosplash")) return true;
