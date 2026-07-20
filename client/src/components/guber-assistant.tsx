@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
-import { JacConvaiBubble, isConvaiActive } from "@/components/jac/jac-convai-voice";
+import { isConvaiActive } from "@/components/jac/jac-convai-voice";
 import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
@@ -1356,8 +1356,37 @@ export function GUBERAssistant() {
               <Volume2 className="w-4 h-4" />
             </button>
 
-            {/* Mic button — ElevenLabs ConvAI voice session */}
-            <JacConvaiBubble />
+            {/* Mic button — inline voice (STT → JAC brain → ElevenLabs TTS) */}
+            {micSupported && (
+              <button
+                onClick={toggleLiveMode}
+                className="relative w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95"
+                style={{
+                  background: liveMode
+                    ? "linear-gradient(135deg, hsl(270 100% 55%), hsl(152 100% 38%))"
+                    : "hsl(222 47% 14%)",
+                  border: liveMode
+                    ? "none"
+                    : "1px solid hsl(270 100% 65% / 0.22)",
+                  color: liveMode ? "black" : "hsl(270 100% 72%)",
+                  boxShadow: liveMode ? "0 0 14px hsl(270 100% 65% / 0.45)" : "none",
+                }}
+                data-testid="button-dd-mic"
+                aria-label={liveMode ? "Stop voice" : "Start voice"}
+              >
+                {(liveState === "processing") ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (liveState === "recording" || liveState === "listening") ? (
+                  <span className="relative flex h-3.5 w-3.5 items-center justify-center">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-40"
+                      style={{ background: "currentColor" }} />
+                    <Mic className="w-3.5 h-3.5 relative" />
+                  </span>
+                ) : (
+                  <Mic className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
 
             {/* Send button */}
             <Button
