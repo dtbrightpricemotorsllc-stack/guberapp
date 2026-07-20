@@ -24,3 +24,38 @@ The project's `Main.storyboard` has `toolsVersion="14111"` (Xcode 9 era) and `La
 
 **How to apply:**
 In `build-ios-ipa.yml`, `runs-on: macos-15`. "Select Xcode" step checks for `Xcode_26.0.app` then `Xcode_26.app` first; glob-excludes `Xcode_16*` in the fallback. No platform download step needed.
+
+## Xcode 26 actool simulator thinning failure (July 2026)
+
+**Symptom:** Archive fails at `CompileAssetCatalogVariant thinned` with:
+```
+error: No simulator runtime version from ["23C54", "23E254a", "23F77"] available to use with iphonesimulator SDK version 23A339
+```
+
+**Cause:** Xcode 26's `actool` thinning pass (triggered by `ENABLE_ON_DEMAND_RESOURCES=YES`) tries to compile asset catalog variants for iOS simulator runtimes that aren't installed on headless CI runners.
+
+**Fix:** Add `ENABLE_ON_DEMAND_RESOURCES=NO` to the `xcodebuild archive` build-setting overrides. This skips the simulator thinning pass entirely.
+
+## macos-15 vs macos-latest instability (July 2026)
+
+`macos-latest` is unstable — different runner instances may or may not have the iOS 26 platform pre-installed alongside Xcode 26. Pin `runs-on: macos-15` explicitly for reproducible builds.
+
+## -destination "generic/platform=iOS" vs -sdk iphoneos
+
+`-destination "generic/platform=iOS"` does a device-list lookup which fails if the iOS platform isn't registered in Xcode's device database. `-sdk iphoneos` bypasses device registration and points directly to the SDK path. When both are specified, `-destination` fails first if the platform isn't registered. **Use `-sdk iphoneos` only — drop `-destination` for archive builds.**
+
+## Working archive command (as of July 2026)
+
+```
+xcodebuild archive \
+  -workspace ios/App/App.xcworkspace \
+  -scheme App \
+  -configuration Release \
+  -archivePath /tmp/App.xcarchive \
+  -sdk iphoneos \
+  -derivedDataPath /tmp/dd \
+  -allowProvisioningUpdates \
+  ... \
+  ENABLE_ON_DEMAND_RESOURCES=NO \
+  APP_THINNING=None
+```
