@@ -1,27 +1,24 @@
 /**
  * JAC Voice — ElevenLabs Conversational AI, production UI.
  *
- * ElevenLabs owns STT, TTS, the LLM, voice, personality, and guardrails.
- * GUBER provides a server-minted session credential, user context as dynamic
- * variables, and webhook endpoints the agent tools may call for GUBER actions.
- *
  * Exports:
  *   <JacConvaiVoice />    full "Talk to JAC" button + panel (hero / homepage)
  *   <JacConvaiBubble />   compact mic bubble for toolbars (guber-assistant)
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import { apiRequest } from "@/lib/queryClient";
 import { Mic, MicOff, PhoneOff, Loader2, Radio, X, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// ── Global session guard — only one ConvAI session at a time ─────────────────
+// ── Global session guard ──────────────────────────────────────────────────────
 let _convaiSessions = 0;
 export function isConvaiActive(): boolean { return _convaiSessions > 0; }
 function _openSession()  { _convaiSessions++; }
 function _closeSession() { _convaiSessions = Math.max(0, _convaiSessions - 1); }
 
-// ── Screen wake-lock (prevents screen sleeping mid-call) ─────────────────────
+// ── Screen wake-lock ──────────────────────────────────────────────────────────
 function useScreenWakeLock(active: boolean) {
   const sentinelRef = useRef<any>(null);
   useEffect(() => {
@@ -33,7 +30,7 @@ function useScreenWakeLock(active: boolean) {
         const s = await nav.wakeLock.request("screen");
         if (cancelled) { s.release?.().catch(() => {}); return; }
         sentinelRef.current = s;
-      } catch { /* unsupported / backgrounded — non-fatal */ }
+      } catch { /* unsupported */ }
     }
     function release() {
       sentinelRef.current?.release?.().catch(() => {});
@@ -51,6 +48,42 @@ function useScreenWakeLock(active: boolean) {
   }, [active]);
 }
 
+// ── ErrorBoundary — catches SDK crashes so the page never white-screens ───────
+interface EBState { crashed: boolean }
+class ConvaiErrorBoundary extends Component<{ children: ReactNode; onReset: () => void }, EBState> {
+  state: EBState = { crashed: false };
+  static getDerivedStateFromError() { return { crashed: true }; }
+  componentDidCatch(err: Error) { console.error("[JAC] ConvAI SDK crash caught:", err.message); }
+  render() {
+    if (this.state.crashed) {
+      return (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-[300] sm:left-auto sm:right-6 sm:bottom-6 sm:w-[360px]"
+        >
+          <div
+            className="rounded-t-2xl sm:rounded-2xl px-5 py-4 flex flex-col gap-3"
+            style={{
+              background: "linear-gradient(160deg, hsl(222 47% 8%), hsl(270 60% 6%))",
+              border: "1px solid hsl(270 100% 65% / 0.22)",
+              boxShadow: "0 -4px 32px hsl(270 100% 65% / 0.12)",
+            }}
+          >
+            <p className="text-sm text-white/80">Connection error — tap to retry.</p>
+            <button
+              onClick={() => { this.setState({ crashed: false }); this.props.onReset(); }}
+              className="w-full py-2 rounded-xl text-sm font-bold"
+              style={{ background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))", color: "black" }}
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ConvaiSessionResponse {
   agentId: string;
@@ -66,14 +99,7 @@ interface TranscriptLine {
   text: string;
 }
 
-type DisplayPhase =
-  | "connecting"
-  | "listening"
-  | "thinking"
-  | "speaking"
-  | "muted"
-  | "error"
-  | "ended";
+type DisplayPhase = "connecting" | "listening" | "thinking" | "speaking" | "muted" | "error" | "ended";
 
 const PHASE_COLOR: Record<DisplayPhase, string> = {
   connecting: "hsl(270 100% 65%)",
@@ -85,32 +111,18 @@ const PHASE_COLOR: Record<DisplayPhase, string> = {
   ended:      "hsl(0 0% 45%)",
 };
 
-const PHASE_LABEL: Record<DisplayPhase, string> = {
-  connecting: "Connecting…",
-  listening:  "Listening",
-  thinking:   "Thinking…",
-  speaking:   "JAC is speaking",
-  muted:      "Muted",
-  error:      "Connection failed",
-  ended:      "Conversation ended",
-};
-
 let _lineId = 0;
 
-// ── Modal inner (needs ConversationProvider above) ────────────────────────────
-function JacConvaiModal({ onClose }: { onClose: () => void }) {
-  const [errorMsg, setErrorMsg]     = useState<string | null>(null);
-  const [ended, setEnded]           = useState(false);
+// ── Panel inner (needs ConversationProvider above) ────────────────────────────
+function JacConvaiPanel({ onClose }: { onClose: () => void }) {
+  const [errorMsg, setErrorMsg]         = useState<string | null>(null);
+  const [ended, setEnded]               = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
-  const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
-  const transcriptEndRef            = useRef<HTMLDivElement>(null);
-  const bootRef                     = useRef<(() => void) | null>(null);
+  const [transcript, setTranscript]     = useState<TranscriptLine[]>([]);
+  const transcriptEndRef                = useRef<HTMLDivElement>(null);
+  const bootRef                         = useRef<(() => void) | null>(null);
 
-  // Register session so other entry-points know ConvAI is active.
-  useEffect(() => {
-    _openSession();
-    return () => _closeSession();
-  }, []);
+  useEffect(() => { _openSession(); return () => _closeSession(); }, []);
 
   const addLine = useCallback((source: "ai" | "user", text: string) => {
     setTranscript(prev => [...prev, { id: _lineId++, source, text }]);
@@ -125,29 +137,14 @@ function JacConvaiModal({ onClose }: { onClose: () => void }) {
     isMuted,
     setMuted,
   } = useConversation({
-    onConnect: () => {
-      console.log("[JAC] ✅ Connected");
-      setErrorMsg(null);
-      setEnded(false);
-      setReconnecting(false);
-    },
-    onDisconnect: () => {
-      console.log("[JAC] 🔴 Disconnected");
-      setEnded(true);
-    },
-    onError: (msg: string) => {
-      console.warn("[JAC] ⚠️ Error:", msg);
-      setErrorMsg(msg || "Voice connection failed");
-    },
-    onMessage: ({ source, message }: { source: "ai" | "user"; message: string }) => {
-      if (message?.trim()) {
-        console.log(`[JAC] 💬 ${source === "ai" ? "JAC" : "You"}: ${message}`);
-        addLine(source, message.trim());
-      }
-    },
-  } as any);
+    onConnect:    () => { setErrorMsg(null); setEnded(false); setReconnecting(false); },
+    onDisconnect: () => { setEnded(true); },
+    onError:      (msg: string) => { setErrorMsg(msg || "Connection failed"); },
+    onMessage:    (({ source, message }: { source: "ai" | "user"; message: string }) => {
+      if (message?.trim()) addLine(source, message.trim());
+    }) as any,
+  });
 
-  // Auto-scroll transcript to bottom whenever a new line arrives
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript]);
@@ -155,60 +152,44 @@ function JacConvaiModal({ onClose }: { onClose: () => void }) {
   const connected = status === "connected";
   useScreenWakeLock(connected);
 
-  // Phase
   let phase: DisplayPhase;
-  if (errorMsg)        phase = "error";
-  else if (ended)      phase = "ended";
-  else if (!connected) phase = "connecting";
-  else if (isMuted)    phase = "muted";
-  else if (isSpeaking) phase = "speaking";
+  if (errorMsg)         phase = "error";
+  else if (ended)       phase = "ended";
+  else if (!connected)  phase = "connecting";
+  else if (isMuted)     phase = "muted";
+  else if (isSpeaking)  phase = "speaking";
   else if (isListening) phase = "listening";
-  else                 phase = "thinking";
+  else                  phase = "thinking";
 
   const color = PHASE_COLOR[phase];
   const pulse = phase === "listening" || phase === "speaking" || phase === "connecting";
+  const isTerminal = ended || phase === "error";
 
-  // Boot — mic + session fetched in parallel for speed
+  // Boot — mic + session in parallel
   useEffect(() => {
     let cancelled = false;
-
     async function boot() {
       setErrorMsg(null);
       setEnded(false);
       try {
-        console.log("[JAC] 🚀 Booting (mic + session in parallel)…");
-
-        // Kick both off simultaneously
         const [micResult, sessionResult] = await Promise.allSettled([
           navigator.mediaDevices.getUserMedia({ audio: true }),
           apiRequest("POST", "/api/jac/convai/session", { platform: "web" }),
         ]);
-
         if (cancelled) return;
 
-        // Handle mic
-        if (micResult.status === "fulfilled") {
-          micResult.value.getTracks().forEach(t => t.stop());
-          console.log("[JAC] 🎤 Mic granted");
-        } else {
-          throw new Error("Microphone access denied — allow mic in browser settings");
+        if (micResult.status === "rejected") {
+          throw new Error("Mic access denied — allow mic in browser settings");
         }
+        micResult.value.getTracks().forEach(t => t.stop());
 
-        // Handle session
         if (sessionResult.status === "rejected" || !sessionResult.value.ok) {
-          const code = sessionResult.status === "fulfilled" ? sessionResult.value.status : 0;
-          throw new Error(`Session error ${code || "(network)"}`);
+          throw new Error(`Session error ${sessionResult.status === "fulfilled" ? sessionResult.value.status : 0}`);
         }
         const session = (await sessionResult.value.json()) as ConvaiSessionResponse;
         if (cancelled) return;
 
-        const aid = session.agentId;
-        const maskedAid = aid.length > 12 ? aid.slice(0, 8) + "…" + aid.slice(-4) : aid.slice(0, 4) + "…";
-        console.log(`[JAC] 🆔 Agent: ${maskedAid} | mode: ${session.signedUrl ? "signed" : "public"}`);
-
-        const dynVars: Record<string, string> = {
-          [session.dynamicVariableName]: session.voiceToken,
-        };
+        const dynVars: Record<string, string> = { [session.dynamicVariableName]: session.voiceToken };
         if (session.userContext?.firstName) dynVars["user_first_name"] = session.userContext.firstName;
         if (session.userContext?.role)      dynVars["user_role"]        = session.userContext.role;
         if (session.userContext?.platform)  dynVars["user_platform"]    = session.userContext.platform;
@@ -217,16 +198,11 @@ function JacConvaiModal({ onClose }: { onClose: () => void }) {
         if (session.signedUrl) params.signedUrl = session.signedUrl;
         else                   params.agentId   = session.agentId;
 
-        console.log("[JAC] 🔗 Starting session…");
         startSession(params as any);
       } catch (err: any) {
-        if (!cancelled) {
-          console.error("[JAC] ❌", err?.message);
-          setErrorMsg(err?.message || "Could not connect to JAC");
-        }
+        if (!cancelled) setErrorMsg(err?.message || "Could not connect to JAC");
       }
     }
-
     bootRef.current = boot;
     boot();
     return () => { cancelled = true; };
@@ -242,10 +218,8 @@ function JacConvaiModal({ onClose }: { onClose: () => void }) {
   }, [endSession]);
 
   const handleEnd = useCallback(() => {
-    console.log("[JAC] 📴 User ended");
     try { endSession(); } catch { /* already closed */ }
     setEnded(true);
-    // No auto-close — panel stays on screen showing transcript
   }, [endSession]);
 
   const toggleMute = useCallback(() => {
@@ -253,203 +227,188 @@ function JacConvaiModal({ onClose }: { onClose: () => void }) {
     setMuted(!isMuted);
   }, [connected, isMuted, setMuted]);
 
-  const isTerminal = ended || phase === "error";
+  const phaseLabel =
+    phase === "connecting" ? "Connecting…" :
+    phase === "listening"  ? "Listening…" :
+    phase === "thinking"   ? "Thinking…" :
+    phase === "speaking"   ? "JAC is speaking" :
+    phase === "muted"      ? "Muted" :
+    phase === "error"      ? "Connection failed" :
+                             "Conversation ended";
 
   return (
+    // Bottom-anchored panel — doesn't cover the page, just slides up from the bottom
     <div
-      className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center"
+      className="fixed bottom-0 left-0 right-0 z-[300] sm:left-auto sm:right-5 sm:bottom-5 sm:w-[380px]"
       data-testid="jac-convai-modal"
-      style={{ background: "rgba(0,0,0,0.82)", backdropFilter: "blur(8px)" }}
     >
       <div
-        className="w-full sm:w-[400px] rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden"
+        className="rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden"
         style={{
-          maxHeight: "90dvh",
+          maxHeight: "70dvh",
           background: "linear-gradient(160deg, hsl(222 47% 8%), hsl(270 60% 6%))",
           border: "1px solid hsl(270 100% 65% / 0.22)",
-          boxShadow: "0 -8px 64px hsl(270 100% 65% / 0.15), 0 0 120px rgba(0,0,0,0.7)",
+          boxShadow: "0 -6px 40px hsl(270 100% 65% / 0.18), 0 0 0 1px hsl(270 100% 65% / 0.06)",
         }}
       >
-        {/* ── Header ── */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 pt-4 pb-2 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <Radio className="w-3.5 h-3.5" style={{ color }} />
-            <span
-              className="text-[10px] font-display font-black tracking-[0.22em] uppercase"
-              style={{ color }}
-            >
+            {pulse ? (
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-50" style={{ background: color }} />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5" style={{ background: color }} />
+              </span>
+            ) : (
+              <Radio className="w-3 h-3" style={{ color }} />
+            )}
+            <span className="text-[10px] font-display font-black tracking-[0.2em] uppercase" style={{ color }}>
               Talk to JAC
             </span>
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all"
+            className="w-6 h-6 rounded-full flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all"
             data-testid="button-convai-close"
             aria-label="Close"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        {/* ── Orb + status row ── */}
-        <div className="flex items-center gap-4 px-5 pb-4 flex-shrink-0">
-          {/* Compact orb */}
+        {/* Orb + status */}
+        <div className="flex items-center gap-3 px-4 pb-3 flex-shrink-0">
           <div className="relative flex-shrink-0 flex items-center justify-center">
             {pulse && (
               <span
-                className="absolute w-16 h-16 rounded-full animate-ping opacity-[0.10]"
+                className="absolute w-12 h-12 rounded-full animate-ping opacity-[0.12]"
                 style={{ background: color }}
               />
             )}
             <div
-              className="relative w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500"
+              className="relative w-10 h-10 rounded-full flex items-center justify-center"
               style={{
-                background: `radial-gradient(circle at 38% 32%, ${color}28, ${color}0a)`,
-                border: `2px solid ${color}44`,
-                boxShadow: pulse ? `0 0 32px ${color}40` : `0 0 12px ${color}18`,
+                background: `radial-gradient(circle at 38% 32%, ${color}22, ${color}08)`,
+                border: `2px solid ${color}40`,
+                boxShadow: pulse ? `0 0 20px ${color}38` : `0 0 8px ${color}18`,
               }}
             >
-              {phase === "connecting" && <Loader2 className="w-5 h-5 animate-spin" style={{ color }} />}
-              {(phase === "listening" || phase === "thinking") && <Mic className="w-5 h-5" style={{ color }} />}
-              {phase === "speaking" && <Radio className="w-5 h-5" style={{ color }} />}
-              {phase === "muted" && <MicOff className="w-5 h-5" style={{ color }} />}
-              {(phase === "error" || phase === "ended") && <PhoneOff className="w-5 h-5" style={{ color }} />}
+              {phase === "connecting" && <Loader2 className="w-4 h-4 animate-spin" style={{ color }} />}
+              {(phase === "listening" || phase === "thinking") && <Mic className="w-4 h-4" style={{ color }} />}
+              {phase === "speaking"  && <Radio className="w-4 h-4" style={{ color }} />}
+              {phase === "muted"     && <MicOff className="w-4 h-4" style={{ color }} />}
+              {(phase === "error" || phase === "ended") && <PhoneOff className="w-4 h-4" style={{ color }} />}
             </div>
           </div>
-
-          {/* Status text */}
           <div className="flex-1 min-w-0">
-            <p
-              className="text-sm font-display font-bold truncate"
-              style={{ color }}
-              data-testid="status-convai-phase"
-            >
-              {PHASE_LABEL[phase]}
+            <p className="text-xs font-display font-bold" style={{ color }} data-testid="status-convai-phase">
+              {phaseLabel}
             </p>
             {errorMsg ? (
-              <p className="text-xs text-destructive leading-snug mt-0.5 line-clamp-2" data-testid="text-convai-error">
-                {errorMsg}
-              </p>
-            ) : phase === "listening" ? (
-              <p className="text-xs text-muted-foreground mt-0.5">Speak now…</p>
+              <p className="text-[11px] text-destructive leading-snug mt-0.5 line-clamp-2" data-testid="text-convai-error">{errorMsg}</p>
             ) : phase === "connecting" ? (
-              <p className="text-xs text-muted-foreground mt-0.5">Starting Jac…</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Starting…</p>
             ) : null}
           </div>
         </div>
 
-        {/* ── Transcript ── */}
+        {/* Transcript */}
         <div
-          className="flex-1 overflow-y-auto px-4 pb-3 space-y-2"
-          style={{ minHeight: 120 }}
+          className="flex-1 overflow-y-auto px-3 pb-2 space-y-1.5"
+          style={{ minHeight: 80 }}
           data-testid="jac-transcript"
         >
-          {transcript.length === 0 && !ended && (
-            <p className="text-xs text-center text-muted-foreground/50 py-4 select-none">
-              {connected ? "Jac is ready — start talking" : "Connecting to Jac…"}
+          {transcript.length === 0 && (
+            <p className="text-[11px] text-center text-muted-foreground/40 py-3 select-none">
+              {connected ? "Start talking to JAC" : "Connecting…"}
             </p>
           )}
           {transcript.map(line => (
-            <div
-              key={line.id}
-              className={cn(
-                "flex",
-                line.source === "ai" ? "justify-start" : "justify-end"
-              )}
-              data-testid={`transcript-line-${line.source}`}
-            >
+            <div key={line.id} className={cn("flex", line.source === "ai" ? "justify-start" : "justify-end")}>
               <div
                 className={cn(
-                  "max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-snug",
-                  line.source === "ai"
-                    ? "rounded-tl-sm text-white"
-                    : "rounded-tr-sm text-white/90"
+                  "max-w-[85%] px-2.5 py-1.5 rounded-xl text-xs leading-snug",
+                  line.source === "ai" ? "rounded-tl-sm" : "rounded-tr-sm"
                 )}
                 style={
                   line.source === "ai"
-                    ? {
-                        background: "linear-gradient(135deg, hsl(270 60% 20%), hsl(270 60% 15%))",
-                        border: "1px solid hsl(270 100% 65% / 0.18)",
-                      }
-                    : {
-                        background: "hsl(222 47% 16%)",
-                        border: "1px solid hsl(222 47% 25%)",
-                      }
+                    ? { background: "hsl(270 60% 18%)", border: "1px solid hsl(270 100% 65% / 0.15)", color: "white" }
+                    : { background: "hsl(222 47% 15%)", border: "1px solid hsl(222 47% 22%)", color: "hsl(0 0% 80%)" }
                 }
+                data-testid={`transcript-line-${line.source}`}
               >
                 {line.text}
               </div>
             </div>
           ))}
           {ended && transcript.length > 0 && (
-            <p className="text-xs text-center text-muted-foreground/60 py-1 select-none">
-              — conversation ended —
-            </p>
+            <p className="text-[10px] text-center text-muted-foreground/50 py-1 select-none">— ended —</p>
           )}
           <div ref={transcriptEndRef} />
         </div>
 
-        {/* ── Controls ── */}
+        {/* Controls */}
         <div
-          className="flex-shrink-0 px-5 py-4 flex items-center justify-between gap-3"
+          className="flex-shrink-0 px-4 py-3 flex items-center gap-3"
           style={{ borderTop: "1px solid hsl(270 100% 65% / 0.10)" }}
         >
-          {/* Mute */}
           <button
             onClick={toggleMute}
             disabled={!connected}
-            className="w-11 h-11 rounded-full flex items-center justify-center transition-all active:scale-95 disabled:opacity-30"
+            className="w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-95 disabled:opacity-30"
             style={{
-              background: isMuted ? "hsl(0 0% 16%)" : "hsl(222 47% 15%)",
-              border: isMuted ? "1px solid hsl(0 0% 32%)" : "1px solid hsl(270 100% 65% / 0.28)",
-              color: isMuted ? "hsl(0 0% 58%)" : "hsl(270 100% 78%)",
+              background: isMuted ? "hsl(0 0% 14%)" : "hsl(222 47% 14%)",
+              border: isMuted ? "1px solid hsl(0 0% 28%)" : "1px solid hsl(270 100% 65% / 0.24)",
+              color: isMuted ? "hsl(0 0% 55%)" : "hsl(270 100% 78%)",
             }}
             data-testid="button-convai-mute"
-            aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
+            aria-label={isMuted ? "Unmute" : "Mute"}
           >
-            {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            {isMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
           </button>
 
-          {/* Reconnect (terminal) or End (active) */}
           {isTerminal ? (
             <button
               onClick={handleReconnect}
               disabled={reconnecting}
-              className="flex-1 h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-display font-bold transition-all active:scale-95 disabled:opacity-60"
-              style={{
-                background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))",
-                color: "black",
-              }}
+              className="flex-1 h-9 rounded-xl flex items-center justify-center gap-1.5 text-xs font-display font-bold transition-all active:scale-95 disabled:opacity-60"
+              style={{ background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))", color: "black" }}
               data-testid="button-convai-reconnect"
             >
-              <RefreshCw className={cn("w-4 h-4", reconnecting && "animate-spin")} />
+              <RefreshCw className={cn("w-3.5 h-3.5", reconnecting && "animate-spin")} />
               {reconnecting ? "Reconnecting…" : "Reconnect"}
             </button>
           ) : (
             <button
               onClick={handleEnd}
-              className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-95"
-              style={{
-                background: "hsl(0 85% 50%)",
-                boxShadow: "0 0 24px hsl(0 85% 50% / 0.45)",
-                color: "white",
-              }}
+              className="flex-1 h-9 rounded-xl flex items-center justify-center gap-1.5 text-xs font-display font-bold transition-all active:scale-95"
+              style={{ background: "hsl(0 85% 48%)", color: "white", boxShadow: "0 0 16px hsl(0 85% 48% / 0.35)" }}
               data-testid="button-convai-end"
-              aria-label="End conversation"
+              aria-label="End"
             >
-              <PhoneOff className="w-5 h-5" />
+              <PhoneOff className="w-3.5 h-3.5" />
+              End
             </button>
           )}
-
-          {/* Volume / spacer to keep layout balanced */}
-          <div className="w-11 h-11" />
         </div>
       </div>
     </div>
   );
 }
 
-// ── Public: hero / homepage button + panel ────────────────────────────────────
+// ── Wrapper with ConversationProvider + ErrorBoundary ─────────────────────────
+function JacConvaiWrapper({ onClose }: { onClose: () => void }) {
+  const [key, setKey] = useState(0);
+  return (
+    <ConvaiErrorBoundary onReset={() => setKey(k => k + 1)}>
+      <ConversationProvider key={key}>
+        <JacConvaiPanel onClose={onClose} />
+      </ConversationProvider>
+    </ConvaiErrorBoundary>
+  );
+}
+
+// ── Public: hero / homepage button ────────────────────────────────────────────
 export function JacConvaiVoice({
   className,
   label = "Talk to JAC",
@@ -476,12 +435,7 @@ export function JacConvaiVoice({
         <Mic className="w-3.5 h-3.5" />
         {label}
       </button>
-
-      {open && (
-        <ConversationProvider>
-          <JacConvaiModal onClose={() => setOpen(false)} />
-        </ConversationProvider>
-      )}
+      {open && <JacConvaiWrapper onClose={() => setOpen(false)} />}
     </>
   );
 }
@@ -507,12 +461,7 @@ export function JacConvaiBubble({ className }: { className?: string }) {
       >
         <Mic className="w-6 h-6" />
       </button>
-
-      {open && (
-        <ConversationProvider>
-          <JacConvaiModal onClose={() => setOpen(false)} />
-        </ConversationProvider>
-      )}
+      {open && <JacConvaiWrapper onClose={() => setOpen(false)} />}
     </>
   );
 }
