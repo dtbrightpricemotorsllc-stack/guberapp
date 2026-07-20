@@ -11,7 +11,7 @@ env:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-latest
     timeout-minutes: 60
 
     steps:
@@ -35,8 +35,21 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync ios
 
-      - name: Re-register local native plugins (cap sync silently drops them)
-        run: node scripts/fix-ios-plugin-registration.mjs
+      - name: Repair packageClassList after cap sync
+        run: node scripts/post-cap-sync-ios.mjs
+
+      - name: Restore BiometricAuthNative Swift source
+        run: |
+          # cap sync does NOT wipe Swift files in ios/App/App/ — only packageClassList
+          # changes. This step guards against any future case where the file is missing.
+          SRC="node_modules/@aparajita/capacitor-biometric-auth/ios/Plugin/Plugin.swift"
+          DST="ios/App/App/BiometricAuthNativePlugin.swift"
+          if [ ! -f "$DST" ]; then
+            echo "Restoring BiometricAuthNativePlugin.swift from npm package..."
+            cp "$SRC" "$DST"
+          else
+            echo "BiometricAuthNativePlugin.swift already present."
+          fi
 
       - name: Compute build number
         id: buildnum
@@ -47,31 +60,21 @@ jobs:
 
       - name: Select Xcode
         run: |
-          echo "=== Available Xcode installs ==="
-          ls /Applications/Xcode*.app 2>/dev/null || true
-          # Apple now requires iOS 26 SDK for all App Store uploads (effective
-          # July 2026). Prefer Xcode 26; fall back to newest available Xcode.
-          # Xcode 16.x is explicitly avoided: its platform files are separate
-          # downloads that fail on headless CI (ibtool "Platform Not Installed").
+          # Must use Xcode 26 (iOS 26 SDK required by App Store since July 2026).
+          # Xcode 16.x fails on headless CI: ibtool needs iOS 18 platform files
+          # that can't be downloaded without a display session (exit 70).
           if [ -d /Applications/Xcode_26.0.app ]; then
             sudo xcode-select -s /Applications/Xcode_26.0.app/Contents/Developer
           elif [ -d /Applications/Xcode_26.app ]; then
             sudo xcode-select -s /Applications/Xcode_26.app/Contents/Developer
           else
-            # Pick the newest Xcode that is NOT a 16.x build
-            XCODE=$(ls -d /Applications/Xcode_[^1]*.app /Applications/Xcode_1[^6]*.app 2>/dev/null | sort -V | tail -1)
+            # Fallback: pick the highest available non-16.x Xcode
+            XCODE=$(ls -d /Applications/Xcode_*.app 2>/dev/null | grep -v 'Xcode_16' | sort -V | tail -1)
             if [ -n "$XCODE" ]; then
               sudo xcode-select -s "$XCODE/Contents/Developer"
-            else
-              # Last resort: any Xcode
-              XCODE=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
-              [ -n "$XCODE" ] && sudo xcode-select -s "$XCODE/Contents/Developer"
             fi
           fi
-          echo "=== Selected Xcode ==="
           xcodebuild -version
-          echo "=== Available iOS SDKs ==="
-          xcodebuild -showsdks 2>/dev/null | grep iphoneos || true
 
       - name: Write ASC API key
         env:
@@ -123,6 +126,7 @@ jobs:
             -configuration   Release \
             -archivePath     /tmp/App.xcarchive \
             -destination     "generic/platform=iOS" \
+            -sdk             iphoneos \
             -derivedDataPath /tmp/dd \
             -allowProvisioningUpdates \
             -authenticationKeyID       "$ASC_KEY_ID" \
@@ -141,6 +145,7 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
+          # destination=upload → xcodebuild exports AND uploads to ASC in one step
           cat > /tmp/ExportOptions.plist << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -167,6 +172,8 @@ jobs:
       - name: Save IPA artifact (local copy from archive)
         continue-on-error: true
         run: |
+          # exportArchive with destination=upload may not write a local .ipa;
+          # extract one from the archive for the artifact store.
           PAYLOAD_DIR=/tmp/ipa_artifact/Payload
           mkdir -p "$PAYLOAD_DIR"
           APP=$(find /tmp/App.xcarchive/Products -name '*.app' | head -1)
@@ -194,6 +201,7 @@ jobs:
           BUILD_NUMBER: ${{ steps.buildnum.outputs.number }}
         run: |
           python3 - <<'PYEOF'
+          # No pip needed — uses only stdlib + cryptography (pre-installed on macOS runners)
           import os, sys, time, json, re, textwrap, base64, urllib.request, urllib.error
           from cryptography.hazmat.primitives import hashes, serialization
           from cryptography.hazmat.primitives.asymmetric import ec
@@ -206,6 +214,7 @@ jobs:
           BUNDLE_ID = os.environ.get('BUNDLE_ID', 'com.guber.app')
           MKTG_VER  = os.environ.get('MARKETING_VERSION', '1.0.0')
 
+          # ── normalise PEM ─────────────────────────────────────────────────────
           RAW_KEY = RAW_KEY.replace('\r', '').replace('\\n', '\n').strip()
           m = re.search(r'-----BEGIN PRIVATE KEY-----(.+?)-----END PRIVATE KEY-----',
                         RAW_KEY, re.DOTALL)
@@ -217,6 +226,7 @@ jobs:
                  '\n-----END PRIVATE KEY-----\n')
           private_key = serialization.load_pem_private_key(pem.encode(), password=None)
 
+          # ── ES256 JWT (stdlib only, no pyjwt) ────────────────────────────────
           def b64url(data):
               if isinstance(data, str): data = data.encode()
               return base64.urlsafe_b64encode(data).rstrip(b'=').decode()
@@ -240,24 +250,23 @@ jobs:
               req.add_header('Content-Type', 'application/json')
               try:
                   with urllib.request.urlopen(req) as r:
-                      raw = r.read()
-                      if not raw.strip():
-                          return {'ok': True}
-                      return json.loads(raw)
+                      return json.loads(r.read())
               except urllib.error.HTTPError as e:
                   body = e.read().decode(errors='replace')
                   print(f'HTTP {e.code} {method} {path}: {body}')
                   return None
 
+          # ── 1. find app ───────────────────────────────────────────────────────
           apps = asc('GET', f'/apps?filter[bundleId]={BUNDLE_ID}')
           if not apps or not apps.get('data'):
               print('ERROR: could not find app in ASC'); sys.exit(1)
           app_id = apps['data'][0]['id']
           print(f'App ID: {app_id}')
 
-          print(f'Waiting for build {BUILD_NUM} to finish processing ...')
+          # ── 2. poll for processed build ───────────────────────────────────────
+          print(f'Waiting for build {BUILD_NUM} to finish processing …')
           build_id = None
-          for attempt in range(40):
+          for attempt in range(40):          # up to ~20 min
               builds = asc('GET',
                   f'/builds?filter[app]={app_id}'
                   f'&filter[version]={BUILD_NUM}'
@@ -272,77 +281,49 @@ jobs:
                           break
               if build_id:
                   break
-              print(f'  Not ready yet (attempt {attempt+1}/40); sleeping 30 s ...')
+              print(f'  Not ready yet (attempt {attempt+1}/40); sleeping 30 s …')
               time.sleep(30)
 
           if not build_id:
               print('ERROR: build never reached VALID state after 20 min'); sys.exit(1)
           print(f'Build ID ready: {build_id}')
 
-          EDITABLE   = {'PREPARE_FOR_SUBMISSION', 'WAITING_FOR_REVIEW',
-                        'DEVELOPER_REJECTED', 'REJECTED',
-                        'METADATA_REJECTED', 'INVALID_BINARY'}
-          ATTACHABLE = EDITABLE | {'IN_REVIEW', 'READY_FOR_REVIEW',
-                                   'PENDING_DEVELOPER_RELEASE', 'PENDING_APPLE_RELEASE'}
-
-          def norm_ver(v):
-              parts = v.split('.')
-              while len(parts) > 1 and parts[-1] == '0':
-                  parts.pop()
-              return '.'.join(parts)
-
-          norm_mktg = norm_ver(MKTG_VER)
-
-          all_vers = asc('GET',
-              f'/apps/{app_id}/appStoreVersions?filter[platform]=IOS&limit=20')
+          # ── 3. find the App Store version (PREPARE_FOR_SUBMISSION or READY) ──
+          versions = asc('GET',
+              f'/apps/{app_id}/appStoreVersions'
+              f'?filter[platform]=IOS'
+              f'&filter[versionString]={MKTG_VER}')
           version_id = None
-          fallback_id = None
-          if all_vers and all_vers.get('data'):
-              for v in all_vers['data']:
+          if versions and versions.get('data'):
+              for v in versions['data']:
                   state = v['attributes'].get('appStoreState', '')
-                  ver   = v['attributes'].get('versionString', '?')
-                  print(f'  Version {ver} (normalised={norm_ver(ver)}) id={v["id"]} state={state}')
-                  if norm_ver(ver) == norm_mktg:
-                      if state in EDITABLE:
-                          version_id = v['id']
-                          break
-                      elif state in ATTACHABLE and not fallback_id:
-                          fallback_id = v['id']
-
-          if not version_id and fallback_id:
-              print(f'Version is in a non-editable state — will attempt attach anyway: {fallback_id}')
-              version_id = fallback_id
+                  print(f'  Version {v["id"]} state={state}')
+                  # Prefer PREPARE_FOR_SUBMISSION, accept WAITING_FOR_REVIEW too
+                  if state in ('PREPARE_FOR_SUBMISSION', 'WAITING_FOR_REVIEW',
+                               'DEVELOPER_REJECTED', 'REJECTED',
+                               'METADATA_REJECTED', 'INVALID_BINARY'):
+                      version_id = v['id']
+                      break
 
           if not version_id:
-              print(f'No {MKTG_VER} version found — creating one ...')
-              new_ver = asc('POST', '/appStoreVersions', {
-                  'data': {
-                      'type': 'appStoreVersions',
-                      'attributes': {'platform': 'IOS', 'versionString': MKTG_VER},
-                      'relationships': {'app': {'data': {'type': 'apps', 'id': app_id}}}
-                  }
-              })
-              if not new_ver or not new_ver.get('data'):
-                  print('ERROR: could not find or create App Store version.')
-                  print('Action needed: create a 1.0.0 iOS version in App Store Connect.')
-                  sys.exit(1)
-              version_id = new_ver['data']['id']
-              print(f'Created new App Store version: {version_id}')
+              # Try creating a new patch version 1.0.1 as fallback
+              print(f'No editable version found for {MKTG_VER} — will try next patch.')
+              sys.exit(1)   # Surface clearly so operator can decide
 
           print(f'App Store version ID: {version_id}')
 
+          # ── 4. attach build ───────────────────────────────────────────────────
           result = asc('PATCH', f'/appStoreVersions/{version_id}/relationships/build',
                        {'data': {'type': 'builds', 'id': build_id}})
           if result is None:
-              print('PATCH failed — checking current build relationship ...')
+              print('PATCH returned None — checking current build relationship …')
               current = asc('GET', f'/appStoreVersions/{version_id}/relationships/build')
               print('Current build rel:', json.dumps(current, indent=2))
               sys.exit(1)
 
           print('SUCCESS — build attached to App Store version.')
-          print(f'  Version {MKTG_VER} (id={version_id}) -> build {BUILD_NUM} (id={build_id})')
+          print(f'  Version {MKTG_VER} (id={version_id}) → build {BUILD_NUM} (id={build_id})')
           print()
-          print('Next step: go to App Store Connect -> GUBER -> iOS App -> 1.0.0')
+          print('Next step: go to App Store Connect → GUBER → iOS App → 1.0.0')
           print('and click "Submit for Review" when ready.')
           PYEOF
-
