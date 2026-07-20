@@ -38,3 +38,4 @@
 - [Native camera capture coverage](native-camera-capture-coverage.md) — `capture="environment"` alone silently fails in Capacitor WKWebView; must call @capacitor/camera; a fix on one screen doesn't cover others using the same raw pattern.
 - [createAuditLog schema mismatch](createaudit-log-schema.md) — only pass userId/action/details/ipAddress; wrong field names (actorId/entityType/metadata) crash inserts with a misleading unrelated-looking error.
 - [Capacitor WKWebView black screen](capacitor-wkwebview-black-screen.md) — three bugs in ViewController.swift cause instant black screen; fix: dark bg in capacitorDidLoad(), deferred retry for NSURLErrorCancelled, anchor overlay to self.view.
+- [iPad black screen diagnosis](ipad-black-screen.md) — LoadingSplash (#000 fixed overlay) + no auth fetch timeout = permanent black on Autoscale cold starts; fix: timeout + skip splash on native.

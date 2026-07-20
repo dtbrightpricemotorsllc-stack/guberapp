@@ -27,11 +27,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const token = await getToken();
         const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-        const res = await fetch("/api/auth/me", { headers, credentials: "include" });
+        const controller = new AbortController();
+        const tid = setTimeout(() => controller.abort(), 10_000);
+        let res: Response;
+        try {
+          res = await fetch("/api/auth/me", { headers, credentials: "include", signal: controller.signal });
+        } finally {
+          clearTimeout(tid);
+        }
         if (res.status === 401) return null;
         if (!res.ok) throw new Error(`auth/me ${res.status}`);
         return await res.json();
-      } catch (err) {
+      } catch (err: any) {
+        if (err?.name === "AbortError") return null;
         throw err;
       }
     },

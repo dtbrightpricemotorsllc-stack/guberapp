@@ -3,11 +3,16 @@ import App from "./App";
 import "./index.css";
 import { migrateToken } from "@/lib/token-storage";
 import { installGlobalErrorReporting } from "@/lib/report-issue";
+import { RootErrorBoundary } from "@/components/root-error-boundary";
 
 installGlobalErrorReporting();
 
 migrateToken().finally(() => {
-  createRoot(document.getElementById("root")!).render(<App />);
+  createRoot(document.getElementById("root")!).render(
+    <RootErrorBoundary>
+      <App />
+    </RootErrorBoundary>
+  );
 });
 
 if ("serviceWorker" in navigator) {

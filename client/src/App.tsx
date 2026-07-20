@@ -16,7 +16,7 @@ import { GoogleAuthOverlay } from "@/components/google-auth-overlay";
 import AnnouncementPopup from "@/components/announcement-popup";
 import { GpsTrackingBanner } from "@/components/gps-tracking-banner";
 import { Capacitor } from "@capacitor/core";
-import { isStoreBuild } from "@/lib/platform";
+import { isStoreBuild, isNativeApp } from "@/lib/platform";
 import { WakeWordDetector } from "@/lib/voice";
 import { App as CapApp } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
@@ -656,6 +656,7 @@ function WakeWordInit() {
 
 function App() {
   const [splashDone, setSplashDone] = useState(() => {
+    if (isNativeApp) return true;
     if (import.meta.env.DEV && typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       if (params.has("nosplash")) return true;
