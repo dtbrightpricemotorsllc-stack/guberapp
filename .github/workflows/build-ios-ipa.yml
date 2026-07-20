@@ -139,6 +139,7 @@ jobs:
             DEVELOPMENT_TEAM=${{ env.TEAM_ID }} \
             PROVISIONING_PROFILE_SPECIFIER="" \
             COMPILER_INDEX_STORE_ENABLE=NO \
+            ENABLE_ON_DEMAND_RESOURCES=NO \
             APP_THINNING=None
 
       - name: Export IPA and upload to App Store Connect

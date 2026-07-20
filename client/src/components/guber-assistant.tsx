@@ -6,12 +6,13 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Send, Loader2, Mic, MicOff, Volume2, VolumeX, ChevronRight, X, Navigation, ClipboardList,
+  Send, Loader2, Mic, Volume2, VolumeX, ChevronRight, X, Navigation, ClipboardList,
   Target, TrendingUp, Zap,
 } from "lucide-react";
-import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
+import { useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
-import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
+import { ConversationProvider } from "@elevenlabs/react";
+import { JacConvaiSession, type ConvaiPhase, type JacConvaiSessionHandle } from "@/components/jac/jac-convai-session";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { saveListingPrefill, clearListingPrefill } from "@/lib/jac-listing-prefill";
@@ -100,6 +101,25 @@ const LISTING_PATTERNS = [
 function hasListingIntent(text: string): boolean {
   return LISTING_PATTERNS.some((p) => p.test(text));
 }
+
+const CONVAI_PHASE_COLOR: Record<ConvaiPhase, string> = {
+  idle:       "hsl(0 0% 45%)",
+  connecting: "hsl(270 100% 65%)",
+  listening:  "hsl(152 100% 44%)",
+  thinking:   "hsl(270 100% 65%)",
+  speaking:   "hsl(270 100% 78%)",
+  muted:      "hsl(0 0% 50%)",
+  error:      "hsl(0 85% 60%)",
+};
+const CONVAI_PHASE_LABEL: Record<ConvaiPhase, string> = {
+  idle:       "",
+  connecting: "Connecting…",
+  listening:  "Listening…",
+  thinking:   "Thinking…",
+  speaking:   "Speaking…",
+  muted:      "Muted",
+  error:      "Connection failed",
+};
 
 const INITIAL_CHIPS = [
   "I need $500 by Friday",
@@ -356,102 +376,55 @@ export function GUBERAssistant() {
   const { cancel: cancelSpeech, muted, toggleMute, supported: ttsSupported } =
     useSpeechOutput();
 
-  // Auto-send when mic result arrives — no send button tap needed
-  const { listening, transcribing, start: startListening, stop: stopListening, supported: micSupported } =
-    useSpeechInput((text) => {
-      lastInputWasVoiceRef.current = true;
-      doSend(text);
-    });
+  // ── ConvAI session state ───────────────────────────────────────────────────
+  const [convaiActive, setConvaiActive] = useState(false);
+  const [convaiPhase, setConvaiPhase] = useState<ConvaiPhase>("idle");
+  const [convaiError, setConvaiError] = useState<string | null>(null);
+  const convaiActiveRef = useRef(false);
+  const convaiSessionRef = useRef<JacConvaiSessionHandle | null>(null);
+  const [convaiKey, setConvaiKey] = useState(0);
+  useEffect(() => { convaiActiveRef.current = convaiActive; }, [convaiActive]);
 
-  // ── Live Conversation Mode — always-listening, interruptible voice loop ──
-  // Reuses the existing per-character ElevenLabs TTS + Whisper STT stack
-  // (no ElevenLabs Conversational Agents / per-minute billing).
-  const [liveMode, setLiveMode] = useState(false);
-  const [liveState, setLiveState] = useState<ConversationState>("idle");
   const [jacVolume, setJacVolumeState] = useState(() => getJacVolume());
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
-  const engineRef = useRef<ConversationEngine | null>(null);
-  const mutedRef = useRef(muted);
-  useEffect(() => { mutedRef.current = muted; }, [muted]);
 
-  function getEngine(): ConversationEngine {
-    if (!engineRef.current) {
-      engineRef.current = new ConversationEngine({
-        onUtterance: (text) => {
-          lastInputWasVoiceRef.current = true;
-          doSend(text);
-        },
-        onStateChange: setLiveState,
-        onError: (reason) => {
-          // Hard-stop the engine FIRST so that the speak() call in doSend()
-          // below doesn't call notifySpeakingStarted() on a live engine —
-          // which would re-open the mic after TTS ends even though liveMode
-          // is being set to false.
-          engineRef.current?.stop();
-          setLiveMode(false);
-          setLiveState("idle");
-          const sentinel = reason === "mic_denied" ? "__mic_denied__" : reason === "unsupported" ? "__mic_error__" : "__mic_error__";
-          doSend(sentinel);
-        },
-      });
-    }
-    return engineRef.current;
-  }
-
-  function stopLiveMode() {
-    engineRef.current?.stop();
-    setLiveMode(false);
-    setLiveState("idle");
-  }
-
-  async function toggleLiveMode() {
-    if (liveMode) {
-      stopLiveMode();
-      return;
-    }
-    // unlockAudioContext() MUST run synchronously inside this gesture handler
-    // so the AudioContext is in "running" state — audio routes to the
-    // loudspeaker on iOS/Android instead of the earpiece or going silent.
+  function startConvai() {
     unlockAudioContext();
     cancelSpeech();
     cancelAllJacAudio();
-    if (listening) stopListening();
-
-    // Play greeting now, inside the gesture — AudioContext is running so it
-    // comes out of the loudspeaker.  The ref prevents double-play.
-    if (!greetingSpokenRef.current && messages.length === 1) {
-      greetingSpokenRef.current = true;
-      const greetingText = messages[0]?.content ?? DD_GREETING;
-      setTimeout(() => speak(greetingText), 200);
-    }
-
-    setLiveMode(true);
-    await getEngine().start();
+    setConvaiError(null);
+    setConvaiActive(true);
   }
 
-  // Wrapper around jacSpeak that keeps the live-mode VAD in sync with
-  // playback so it knows when to arm interruption detection and when to
-  // go back to plain listening once JAC finishes talking.
-  const speak = useCallback((text: string) => {
-    if (mutedRef.current) return;
-    const engine = engineRef.current;
-    jacSpeak(text, {
-      muted: mutedRef.current,
-      onStart: () => engine?.notifySpeakingStarted(),
-    }).then(() => engine?.notifySpeakingEnded()).catch(() => engine?.notifySpeakingEnded());
-  }, []);
+  function stopConvai() {
+    setConvaiActive(false);
+    setConvaiPhase("idle");
+    setConvaiError(null);
+  }
 
-  // Tear down the live mic stream whenever the assistant sheet closes, the
-  // app is backgrounded (native), or the tab goes hidden (web) — never leave
-  // an open mic stream running unattended.
+  function handleConvaiReconnect() {
+    setConvaiError(null);
+    setConvaiPhase("connecting");
+    convaiSessionRef.current?.reconnect();
+    setConvaiKey(k => k + 1);
+  }
+
+  // speak — text-mode TTS only; no-ops when ConvAI is handling voice
+  function speak(text: string) {
+    if (muted || convaiActiveRef.current) return;
+    jacSpeak(text, { muted });
+  }
+
+  // Tear down the ConvAI session whenever JAC closes, the app is backgrounded,
+  // or the tab goes hidden — never leave an open mic stream running unattended.
   useEffect(() => {
-    if (!s.open) stopLiveMode();
+    if (!s.open) stopConvai();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.open]);
 
   useEffect(() => {
     function onVisibility() {
-      if (document.visibilityState === "hidden") stopLiveMode();
+      if (document.visibilityState === "hidden") stopConvai();
     }
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
@@ -461,26 +434,21 @@ export function GUBERAssistant() {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     const handle = CapApp.addListener("appStateChange", ({ isActive }) => {
-      if (!isActive) stopLiveMode();
+      if (!isActive) stopConvai();
     });
     return () => { handle.then((h) => h.remove()).catch(() => {}); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => () => { engineRef.current?.stop(); }, []);
-
-  // Wake word listener — "Hey JAC" opens the panel and starts listening
+  // Wake word — "Hey JAC" opens JAC and starts the ConvAI voice session
   useEffect(() => {
     function onWake() {
-      if (!store.open) {
-        markSeen();
-        patchStore({ open: true });
-      }
-      setTimeout(() => startListening(), 400);
+      if (!store.open) { markSeen(); patchStore({ open: true }); }
+      setTimeout(() => startConvai(), 400);
     }
     window.addEventListener("jac:wake", onWake);
     return () => window.removeEventListener("jac:wake", onWake);
-  }, [startListening]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(messages)); } catch {}
@@ -601,22 +569,11 @@ export function GUBERAssistant() {
         const chatMs = Math.round(performance.now() - timing.start);
         console.log(`[JAC voice] STT→chat-response: ${chatMs}ms (server reported ${data.latencyMs ?? "?"}ms)`);
       }
-      if (!muted) {
-        const engine = engineRef.current;
-        jacSpeak(msg.content, {
-          muted,
-          onStart: () => {
-            engine?.notifySpeakingStarted();
-            if (timing) {
-              const totalMs = Math.round(performance.now() - timing.start);
-              console.log(`[JAC voice] STT→first-audio: ${totalMs}ms`);
-              voiceTimingRef.current = null;
-            }
-          },
-        }).then(() => engine?.notifySpeakingEnded()).catch(() => engine?.notifySpeakingEnded());
-      } else {
-        voiceTimingRef.current = null;
+      // Text-mode TTS — skipped when ConvAI is active (ElevenLabs handles voice)
+      if (!muted && !convaiActiveRef.current) {
+        jacSpeak(msg.content, { muted });
       }
+      voiceTimingRef.current = null;
       if (userRef.current && lastUserInputRef.current) {
         extractAndSaveMemory(lastUserInputRef.current, msg.content);
       }
@@ -887,7 +844,28 @@ export function GUBERAssistant() {
   const showInitialChips = messages.length === 1 && !sendMutation.isPending;
   const isOnlyGreeting = messages.length === 1;
 
+  const handleConvaiPhaseChange = useCallback((phase: ConvaiPhase) => {
+    setConvaiPhase(phase);
+    if (phase === "error") setConvaiActive(false);
+  }, []);
+  const handleConvaiUserTranscript = useCallback((text: string) => {
+    setMessages(prev => [...prev, { role: "user" as const, content: text }]);
+  }, []);
+  const handleConvaiJacResponse = useCallback((text: string) => {
+    setMessages(prev => [...prev, { role: "assistant" as const, content: text }]);
+  }, []);
+  const handleConvaiError = useCallback((msg: string) => {
+    setConvaiError(msg);
+    setConvaiPhase("error");
+    setConvaiActive(false);
+  }, []);
+
+  const convaiColor = CONVAI_PHASE_COLOR[convaiPhase];
+  const convaiLabel = CONVAI_PHASE_LABEL[convaiPhase];
+  const convaiPulsing = convaiPhase === "connecting" || convaiPhase === "listening" || convaiPhase === "speaking";
+
   return (
+    <ConversationProvider>
     <Sheet
       open={s.open}
       onOpenChange={(v) => {
@@ -900,6 +878,15 @@ export function GUBERAssistant() {
         className="h-[88vh] p-0 rounded-t-3xl border-0 flex flex-col"
         style={{ background: "hsl(222 47% 5%)", borderTop: "1px solid hsl(270 100% 65% / 0.2)" }}
       >
+        <JacConvaiSession
+          key={convaiKey}
+          ref={convaiSessionRef}
+          active={convaiActive}
+          onPhaseChange={handleConvaiPhaseChange}
+          onUserTranscript={handleConvaiUserTranscript}
+          onJacResponse={handleConvaiJacResponse}
+          onError={handleConvaiError}
+        />
         {/* ── Header ── */}
         <SheetHeader className="px-5 pt-4 pb-3 flex-shrink-0 border-b border-white/[0.05]">
           <div className="flex items-center justify-between">
@@ -1327,6 +1314,59 @@ export function GUBERAssistant() {
               </span>
             </div>
           )}
+          {/* Voice status strip — inline in JAC, visible only when ConvAI session is active */}
+          {convaiActive && (
+            <div className="flex items-center gap-2 mb-2 px-1">
+              <span className="relative flex h-2 w-2 flex-shrink-0">
+                {convaiPulsing && (
+                  <span
+                    className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-40"
+                    style={{ background: convaiColor }}
+                  />
+                )}
+                <span
+                  className="relative inline-flex rounded-full h-2 w-2"
+                  style={{ background: convaiColor }}
+                />
+              </span>
+              {convaiPhase === "thinking" ? (
+                <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" style={{ color: convaiColor }} />
+              ) : null}
+              <span
+                className="text-[11px] font-display font-bold leading-none"
+                style={{ color: convaiColor }}
+                data-testid="status-convai-phase"
+              >
+                {convaiLabel}
+              </span>
+              {convaiError && (
+                <span className="text-[10px] text-destructive ml-1 truncate flex-1" data-testid="text-convai-error">
+                  {convaiError}
+                </span>
+              )}
+              <div className="ml-auto flex items-center gap-1.5">
+                {convaiPhase === "error" && (
+                  <button
+                    onClick={handleConvaiReconnect}
+                    className="text-[10px] px-2 py-0.5 rounded-lg font-display font-semibold"
+                    style={{ background: "hsl(270 100% 65% / 0.15)", color: "hsl(270 100% 78%)" }}
+                    data-testid="button-convai-reconnect"
+                  >
+                    Retry
+                  </button>
+                )}
+                <button
+                  onClick={stopConvai}
+                  className="text-[10px] px-2 py-0.5 rounded-lg font-display font-semibold"
+                  style={{ background: "hsl(0 85% 48% / 0.15)", color: "hsl(0 85% 60%)" }}
+                  data-testid="button-convai-end"
+                >
+                  End
+                </button>
+              </div>
+            </div>
+          )}
+
           <div
             className="flex items-end gap-2 rounded-2xl px-3 py-2"
             style={{ background: "hsl(222 47% 9%)", border: "1px solid hsl(222 47% 16%)" }}
@@ -1354,41 +1394,33 @@ export function GUBERAssistant() {
               <Volume2 className="w-4 h-4" />
             </button>
 
-            {/* Mic button — tap to call JAC (live always-listening mode) */}
-            {micSupported && (
-              <button
-                onClick={toggleLiveMode}
-                className={`relative w-12 h-12 rounded-full flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${liveMode ? "scale-110" : "hover:scale-105 active:scale-95"}`}
-                style={{
-                  background: liveMode
-                    ? liveState === "speaking"
-                      ? "linear-gradient(135deg, hsl(152 90% 40%), hsl(152 70% 30%))"
-                      : liveState === "recording"
-                        ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
-                        : "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))"
-                    : "linear-gradient(135deg, hsl(270 70% 25%), hsl(152 60% 16%))",
-                  color: "white",
-                  boxShadow: liveMode
-                    ? "0 0 0 3px hsl(270 100% 65% / 0.35), 0 0 20px hsl(270 100% 65% / 0.5)"
-                    : "0 0 10px hsl(270 100% 65% / 0.35), inset 0 1px 0 hsl(270 100% 70% / 0.15)",
-                }}
-                data-testid="button-dd-mic"
-                aria-label={liveMode ? "End conversation" : "Call JAC"}
-                disabled={anyPending}
-              >
-                {liveMode && (
-                  <span className="absolute inset-0 rounded-full animate-ping opacity-25"
-                    style={{ background: "hsl(270 100% 65%)" }} />
-                )}
-                {liveMode
-                  ? liveState === "recording"
-                    ? <Mic className="w-6 h-6" />
-                    : liveState === "speaking"
-                      ? <Volume2 className="w-6 h-6" />
-                      : <Loader2 className="w-6 h-6 animate-spin" />
-                  : <Mic className="w-6 h-6" />}
-              </button>
-            )}
+            {/* Mic button — ElevenLabs ConvAI voice session */}
+            <button
+              onClick={convaiActive ? stopConvai : startConvai}
+              className="relative w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95"
+              style={{
+                background: convaiActive
+                  ? "linear-gradient(135deg, hsl(270 100% 55%), hsl(152 100% 38%))"
+                  : "hsl(222 47% 14%)",
+                border: convaiActive ? "none" : "1px solid hsl(270 100% 65% / 0.22)",
+                color: convaiActive ? "black" : "hsl(270 100% 72%)",
+                boxShadow: convaiActive ? "0 0 14px hsl(270 100% 65% / 0.45)" : "none",
+              }}
+              data-testid="button-dd-mic"
+              aria-label={convaiActive ? "End voice" : "Start voice"}
+            >
+              {(convaiPhase === "connecting" || convaiPhase === "thinking") ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (convaiPhase === "listening" || convaiPhase === "speaking") ? (
+                <span className="relative flex h-3.5 w-3.5 items-center justify-center">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-40"
+                    style={{ background: "currentColor" }} />
+                  <Mic className="w-3.5 h-3.5 relative" />
+                </span>
+              ) : (
+                <Mic className="w-3.5 h-3.5" />
+              )}
+            </button>
 
             {/* Send button */}
             <Button
@@ -1414,5 +1446,6 @@ export function GUBERAssistant() {
         </div>
       </SheetContent>
     </Sheet>
+    </ConversationProvider>
   );
 }
