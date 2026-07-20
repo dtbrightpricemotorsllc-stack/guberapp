@@ -22,6 +22,7 @@
 - [Android CI pipeline setup](android-ci-pipeline.md) — .github/ gitignored; push workflows via Git Trees API + workflow-scoped PAT; untracked assets break Vite build; decode keystore secret pre-Gradle.
 - [iOS CI Xcode version strategy](ios-ci-xcode-strategy.md) — Apple mandated iOS 26 SDK (July 2026); must use Xcode 26 on macos-15; Xcode 16.x fails (ibtool needs separate platform download, simulator daemon won't start on headless CI); Xcode 15.x archive succeeds but upload rejected.
 - [JAC voice on ElevenLabs (custom LLM)](jac-voice-elevenlabs.md) — one shared brain fn for text + voice (never fork); identity only from HMAC voice token; execution stays client-confirm; gated on voice_pipeline_v2.
+- [ElevenLabs ConvAI custom-LLM auth trap](elevenlabs-convai-auth-trap.md) — ElevenLabs does NOT forward shared-secret headers or secret__ dynamic vars to custom LLM endpoint; returning 401 terminates the conversation; must warn+continue.
 - [JAC Brain system](jac-brain-system.md) — local KB + intent + cache bypass; confidence ≥0.85 skips OpenAI; admin UI at /admin/jac-brain. (Both-surface rule → jac-system-guardian.md.)
 - [JAC Deep Profile system](jac-deep-profile.md) — syncJacProfile() auto-syncs DB→jac_memory on every context fetch; buildJacProfileContext() reads back for prompt enrichment; briefing+opportunities are separate auth-gated endpoints.
 - [Cross-platform voice STT](voice-stt-cross-platform.md) — silent failures from swallowed sentinels + 5/min rate limit + MediaRecorder MIME fallback required for iOS.

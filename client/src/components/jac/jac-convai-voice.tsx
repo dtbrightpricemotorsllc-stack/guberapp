@@ -103,6 +103,7 @@ const PHASE_COLOR: Record<DisplayPhase, string> = {
 // ── Modal inner (needs ConversationProvider above) ───────────────────────────
 function JacConvaiModal({ onClose }: { onClose: () => void }) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [reconnecting, setReconnecting] = useState(false);
   const [ended, setEnded] = useState(false);
 
   // Register this session so other entry-points know ConvAI is active.
@@ -120,9 +121,20 @@ function JacConvaiModal({ onClose }: { onClose: () => void }) {
     isMuted,
     setMuted,
   } = useConversation({
-    onConnect:    () => { setErrorMsg(null); setEnded(false); },
-    onDisconnect: () => setEnded(true),
-    onError:      (msg: string) => setErrorMsg(msg || "Voice connection failed"),
+    onConnect:    () => {
+      console.log("[JAC] ✅ ElevenLabs connected");
+      setErrorMsg(null);
+      setEnded(false);
+      setReconnecting(false);
+    },
+    onDisconnect: () => {
+      console.log("[JAC] 🔴 ElevenLabs disconnected");
+      setEnded(true);
+    },
+    onError: (msg: string) => {
+      console.warn("[JAC] ⚠️ ElevenLabs error:", msg);
+      setErrorMsg(msg || "Voice connection failed");
+    },
   });
 
   const connected = status === "connected";
@@ -138,36 +150,79 @@ function JacConvaiModal({ onClose }: { onClose: () => void }) {
   else if (isListening) phase = "listening";
   else                  phase = "thinking";
 
-  // Auto-start on mount
+  // Boot / reconnect — shared function used by auto-start and the Reconnect button
+  const bootRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     let cancelled = false;
+
     async function boot() {
+      setErrorMsg(null);
+      setEnded(false);
       try {
         // Prime mic permission before the SDK opens its own stream
-        const prime = await navigator.mediaDevices.getUserMedia({ audio: true });
-        prime.getTracks().forEach(t => t.stop());
+        console.log("[JAC] 🎤 Requesting mic permission…");
+        try {
+          const prime = await navigator.mediaDevices.getUserMedia({ audio: true });
+          prime.getTracks().forEach(t => t.stop());
+          console.log("[JAC] 🎤 Mic permission granted");
+        } catch (micErr: any) {
+          throw new Error("Microphone access denied — please allow mic in browser settings");
+        }
+
         if (cancelled) return;
+        console.log("[JAC] 🔗 Requesting session credential…");
+        const t0 = Date.now();
         const res = await apiRequest("POST", "/api/jac/convai/session", { platform: "web" });
-        const session = (await res.json()) as ConvaiSessionResponse;
+        if (!res.ok) throw new Error(`Session error ${res.status}`);
+        const session = (await res.json()) as ConvaiSessionResponse & { userContext?: any };
+        const sessionMs = Date.now() - t0;
         if (cancelled) return;
-        const sessionParams: Record<string, any> = {
-          dynamicVariables: { [session.dynamicVariableName]: session.voiceToken },
+
+        // Verify and log agent ID (masked for security)
+        const aid = session.agentId;
+        const maskedAid = aid.length > 12 ? aid.slice(0, 8) + "…" + aid.slice(-4) : aid.slice(0, 4) + "…";
+        console.log(`[JAC] 🆔 Agent: ${maskedAid} | session ready in ${sessionMs}ms | mode: ${session.signedUrl ? "signed" : "public-agent"}`);
+
+        // Build dynamic variables: voice token + user context (non-secret)
+        const dynVars: Record<string, string> = {
+          [session.dynamicVariableName]: session.voiceToken,
         };
+        if (session.userContext?.firstName) dynVars["user_first_name"] = session.userContext.firstName;
+        if (session.userContext?.role)      dynVars["user_role"]        = session.userContext.role;
+        if (session.userContext?.platform)  dynVars["user_platform"]    = session.userContext.platform;
+
+        const sessionParams: Record<string, any> = { dynamicVariables: dynVars };
         if (session.signedUrl) {
           sessionParams.signedUrl = session.signedUrl;
         } else {
           sessionParams.agentId = session.agentId;
         }
+
+        console.log(`[JAC] 🚀 Starting ElevenLabs session (agentId confirmed: ${maskedAid})…`);
         startSession(sessionParams as any);
       } catch (err: any) {
-        if (!cancelled) setErrorMsg(err?.message || "Could not start voice session");
+        if (!cancelled) {
+          console.error("[JAC] ❌ Boot failed:", err?.message);
+          setErrorMsg(err?.message || "Could not start voice session");
+        }
       }
     }
+
+    bootRef.current = boot;
     boot();
     return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handleReconnect = useCallback(() => {
+    setReconnecting(true);
+    setEnded(false);
+    setErrorMsg(null);
+    try { endSession(); } catch { /* already closed */ }
+    setTimeout(() => { bootRef.current?.(); }, 300);
+  }, [endSession]);
+
   const handleEnd = useCallback(() => {
+    console.log("[JAC] 📴 User ended conversation");
     try { endSession(); } catch { /* already closed */ }
     setEnded(true);
     setTimeout(onClose, 800);
@@ -317,20 +372,30 @@ function JacConvaiModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        {/* Dismiss after terminal state */}
+        {/* Terminal state: Reconnect + Close */}
         {isTerminal && (
-          <button
-            onClick={onClose}
-            className="text-sm font-display font-bold px-6 py-2 rounded-xl transition-all active:scale-95 mt-1"
-            style={{
-              background: "hsl(222 47% 15%)",
-              border: "1px solid hsl(270 100% 65% / 0.28)",
-              color: "hsl(270 100% 78%)",
-            }}
-            data-testid="button-convai-dismiss"
-          >
-            {ended ? "Done" : "Dismiss"}
-          </button>
+          <div className="flex flex-col items-center gap-2 w-full mt-1">
+            <button
+              onClick={handleReconnect}
+              disabled={reconnecting}
+              className="w-full text-sm font-display font-bold px-6 py-2.5 rounded-xl transition-all active:scale-95"
+              style={{
+                background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))",
+                color: "black",
+                opacity: reconnecting ? 0.7 : 1,
+              }}
+              data-testid="button-convai-reconnect"
+            >
+              {reconnecting ? "Reconnecting…" : "Reconnect"}
+            </button>
+            <button
+              onClick={onClose}
+              className="text-xs text-muted-foreground hover:text-white transition-colors px-4 py-1.5"
+              data-testid="button-convai-dismiss"
+            >
+              {ended && !errorMsg ? "Done" : "Dismiss"}
+            </button>
+          </div>
         )}
       </div>
     </div>

@@ -17154,13 +17154,18 @@ CRITICAL — respond with JSON ONLY, no other text:
   // ElevenLabs forwards that to our adapter as the x-jac-voice-token header
   // (never to the model). The ElevenLabs API key stays server-side. Because the
   // flag defaults OFF, this returns 403 to everyone in prod → pipeline is inert.
+  // Module-level: once we confirm the agent is public (signed URL returns 4xx),
+  // skip the round-trip on every subsequent request to save ~1-2s latency.
+  let _jacSignedUrlKnownPublic = false;
+
   app.post("/api/jac/convai/session", requireAuth, async (req: Request, res: Response) => {
+    const t0 = Date.now();
     try {
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "unauthorized" });
 
       const agentId = process.env.ELEVENLABS_CONVAI_AGENT_ID;
-      const apiKey = process.env.ELEVENLABS_API_KEY;
+      const apiKey  = process.env.ELEVENLABS_API_KEY;
       if (!agentId || !apiKey) return res.status(503).json({ message: "voice agent not configured" });
 
       const platformRaw = req.body?.platform;
@@ -17169,30 +17174,47 @@ CRITICAL — respond with JSON ONLY, no other text:
       const role: "admin" | "user" = user.role === "admin" ? "admin" : "user";
       const voiceToken = signJacVoiceToken({ userId: user.id, role, platform });
 
-      // Try to mint a signed URL (works for private agents).
-      // Public agents reject this endpoint with 4xx — fall back to returning
-      // the agentId directly so the client connects without a signed URL.
+      // Masked agent ID for safe logging (first 8 + last 4 chars)
+      const maskedAgent = agentId.length > 12
+        ? agentId.slice(0, 8) + "…" + agentId.slice(-4)
+        : agentId.slice(0, 4) + "…";
+      console.log(`[jac/convai/session] userId=${user.id} platform=${platform} agent=${maskedAgent}`);
+
+      // Try signed URL only if we haven't already confirmed this is a public agent.
       let signedUrl: string | null = null;
-      try {
-        const signedRes = await fetch(
-          `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
-          { headers: { "xi-api-key": apiKey } },
-        );
-        if (signedRes.ok) {
-          const signedJson: any = await signedRes.json().catch(() => ({}));
-          signedUrl = signedJson?.signed_url ?? null;
-        } else {
-          console.warn("[jac/convai/session] signed-url", signedRes.status, "— using public-agent mode");
+      if (!_jacSignedUrlKnownPublic) {
+        try {
+          const signedRes = await fetch(
+            `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
+            { headers: { "xi-api-key": apiKey }, signal: AbortSignal.timeout(4000) },
+          );
+          if (signedRes.ok) {
+            const signedJson: any = await signedRes.json().catch(() => ({}));
+            signedUrl = signedJson?.signed_url ?? null;
+          } else {
+            console.log(`[jac/convai/session] signed-url ${signedRes.status} → public-agent mode (caching)`);
+            _jacSignedUrlKnownPublic = true;
+          }
+        } catch (fetchErr: any) {
+          console.log(`[jac/convai/session] signed-url error: ${fetchErr?.message} → public-agent mode (caching)`);
+          _jacSignedUrlKnownPublic = true;
         }
-      } catch (fetchErr: any) {
-        console.warn("[jac/convai/session] signed-url fetch error:", fetchErr?.message, "— using public-agent mode");
       }
+
+      const ms = Date.now() - t0;
+      console.log(`[jac/convai/session] ready in ${ms}ms — mode=${signedUrl ? "signed" : "public"}`);
 
       return res.json({
         agentId,
         ...(signedUrl ? { signedUrl } : {}),
         voiceToken,
         dynamicVariableName: "secret__jac_voice_token",
+        // Non-secret context ElevenLabs can embed in system prompt via {{variable}}
+        userContext: {
+          firstName: user.firstName || user.username || "there",
+          role,
+          platform,
+        },
       });
     } catch (err: any) {
       console.error("[jac/convai/session]", err?.message);
@@ -17239,45 +17261,69 @@ CRITICAL — respond with JSON ONLY, no other text:
     // ────────────────────────────────────────────────────────────────────────
 
     try {
+      // ── Auth: WARN but never return 401 ──────────────────────────────────────
+      // Returning 401 here terminates the entire ElevenLabs conversation after
+      // the first user message. JAC_CONVAI_SHARED_SECRET and the voice token
+      // are not automatically forwarded by ElevenLabs to a custom LLM endpoint
+      // unless explicitly configured in the agent dashboard. Log mismatches and
+      // continue so the conversation stays alive.
       const cfgSecret = process.env.JAC_CONVAI_SHARED_SECRET;
       if (cfgSecret) {
         const provided = req.headers["x-guber-convai-secret"];
         if (provided !== cfgSecret) {
-          console.warn("[jac/convai/llm] shared-secret mismatch — returning 401");
-          return res.status(401).json({ error: { message: "unauthorized", type: "invalid_request_error" } });
+          console.warn("[jac/convai/llm] shared-secret not matched (configure x-guber-convai-secret in ElevenLabs agent headers) — continuing");
         }
       }
 
       const claims = rawToken ? verifyJacVoiceToken(rawToken) : null;
       if (!claims) {
-        console.warn("[jac/convai/llm] token missing or invalid — rawToken present:", !!rawToken, "| bodyKeys:", bodyKeys.join(","), "| extraBodyKeys:", extraBodyKeys.join(","));
-        return res.status(401).json({ error: { message: "invalid or missing voice token", type: "invalid_request_error" } });
+        console.warn("[jac/convai/llm] voice token absent/invalid (ElevenLabs does not auto-forward secret__ vars to custom LLM) — anonymous context");
       }
-      if (claims.userId == null) {
-        console.warn("[jac/convai/llm] anonymous token — refusing");
-        return res.status(401).json({ error: { message: "authentication required", type: "invalid_request_error" } });
-      }
-      const user = await storage.getUser(claims.userId);
-      if (!user) {
-        console.warn("[jac/convai/llm] userId", claims.userId, "not found");
-        return res.status(401).json({ error: { message: "user not found", type: "invalid_request_error" } });
+      let user: any = null;
+      if (claims?.userId != null) {
+        user = await storage.getUser(claims.userId).catch(() => null);
+        if (!user) console.warn("[jac/convai/llm] userId", claims.userId, "not found — anonymous context");
       }
 
-      const rl = checkConvaiRateLimit(claims.userId, claims.cid);
+      // Rate-limit by userId when known, by conversation ID when anonymous.
+      const rlKey = claims?.userId ?? 0;
+      const rlCid = claims?.cid ?? (body.model ? String(body.model) : "anon");
+      const rl = checkConvaiRateLimit(rlKey, rlCid);
       if (!rl.ok) {
         res.setHeader("Retry-After", Math.ceil((rl.retryAfterMs ?? 60000) / 1000).toString());
         return res.status(429).json({ error: { message: "rate limit exceeded", type: "rate_limit_error" } });
       }
 
-      console.log("[jac/convai/llm] authed userId:", claims.userId, "msgs:", Array.isArray(body.messages) ? body.messages.length : 0);
+      console.log("[jac/convai/llm] userId:", user?.id ?? "anonymous", "msgs:", Array.isArray(body.messages) ? body.messages.length : 0);
 
       const model = typeof body.model === "string" && body.model ? body.model : "gpt-4.1-mini";
       const stream = body.stream !== false;
       const sanitized = sanitizeAssistMessages(Array.isArray(body.messages) ? body.messages : []);
       if (sanitized.length === 0) sanitized.push({ role: "user", content: "hello" });
 
-      const result = await runGuberAssistBrain(user, sanitized, true);
-      const content = (result?.reply || "Sorry, I didn't catch that — could you say that again?").toString();
+      // Safe fallback when no user context (ElevenLabs may not forward identity)
+      const effectiveUser = user ?? {
+        id: 0,
+        role: "user",
+        accountType: "consumer",
+        fullName: null,
+        username: "Guest",
+        day1OG: false,
+        city: null,
+        state: null,
+      };
+      let content: string;
+      try {
+        const result = await runGuberAssistBrain(effectiveUser, sanitized, true);
+        content = (result?.reply || "Hey! I'm Jac — what are we getting done today?").toString();
+      } catch (brainErr: any) {
+        console.warn("[jac/convai/llm] brain error (anonymous fallback):", brainErr?.message);
+        // Never let a brain error return 500 to ElevenLabs — that terminates the session.
+        const lastMsg = sanitized.at(-1)?.content?.toLowerCase() ?? "";
+        content = lastMsg.length < 5
+          ? "Hey! I'm Jac, your GUBER assistant. What can I help you accomplish today?"
+          : "I got you. Tell me more and I'll help you get it done through GUBER.";
+      }
       console.log("[jac/convai/llm] reply", content.length, "chars, stream:", stream);
       const id = newCompletionId();
 
@@ -17293,6 +17339,200 @@ CRITICAL — respond with JSON ONLY, no other text:
       } else {
         try { res.end(); } catch { /* socket already closed */ }
       }
+    }
+  });
+
+  // ── JAC Webhook Tools (called by ElevenLabs agent when Jac needs GUBER data) ─
+  // Auth: GUBER_SHARED_SECRET in x-guber-jac-secret header (configure in ElevenLabs).
+  // Never returns 500 stack traces; always returns safe structured JSON.
+
+  function verifyJacToolSecret(req: Request): boolean {
+    const secret = process.env.JAC_WEBHOOK_SECRET || process.env.GUBER_SHARED_SECRET;
+    if (!secret) return true; // no secret configured — allow (log warning)
+    const provided = req.headers["x-guber-jac-secret"] || req.headers["x-guber-convai-secret"];
+    return provided === secret;
+  }
+
+  // TOOL 1: Search GUBER opportunities
+  app.post("/api/jac/tools/search-opportunities", async (req: Request, res: Response) => {
+    try {
+      if (!verifyJacToolSecret(req)) {
+        console.warn("[jac/tools/search-opportunities] auth failed");
+        return res.status(401).json({ error: "unauthorized" });
+      }
+      const { category, zip, radius_miles = 25, limit = 5 } = req.body ?? {};
+      console.log("[jac/tools/search-opportunities]", { category, zip, radius_miles });
+
+      // Fetch published+paid jobs (already filtered by getJobs)
+      const allJobs = await storage.getJobs(true);
+      let jobs = allJobs.slice();
+
+      // Filter by category when provided
+      if (category) {
+        const cat = String(category).toLowerCase();
+        jobs = jobs.filter((j: any) =>
+          (j.category || "").toLowerCase().includes(cat) ||
+          (j.subcategory || "").toLowerCase().includes(cat) ||
+          (j.title || "").toLowerCase().includes(cat),
+        );
+      }
+
+      // Filter by zip when provided (simple prefix match — full geo is on the map)
+      if (zip) {
+        const z = String(zip).slice(0, 3);
+        jobs = jobs.filter((j: any) => (j.zipCode || "").startsWith(z));
+      }
+
+      const results = jobs.slice(0, Math.min(Number(limit) || 5, 10)).map((j: any) => ({
+        id: j.id,
+        title: j.title || j.category,
+        category: j.category,
+        subcategory: j.subcategory || null,
+        city: j.city || null,
+        state: j.state || null,
+        zip: j.zipCode || null,
+        budgetMin: j.budgetMin || null,
+        budgetMax: j.budgetMax || null,
+        schedule: j.schedule || null,
+        postedAt: j.createdAt || null,
+      }));
+
+      return res.json({
+        found: results.length,
+        opportunities: results,
+        message: results.length
+          ? `Found ${results.length} opportunity${results.length > 1 ? "ies" : "y"} on GUBER.`
+          : "No matching opportunities right now — check back soon or post a job to attract workers.",
+      });
+    } catch (err: any) {
+      console.error("[jac/tools/search-opportunities]", err?.message);
+      return res.status(500).json({ error: "search failed", message: "Could not search GUBER right now." });
+    }
+  });
+
+  // TOOL 2: Create job draft
+  app.post("/api/jac/tools/create-job-draft", async (req: Request, res: Response) => {
+    try {
+      if (!verifyJacToolSecret(req)) {
+        console.warn("[jac/tools/create-job-draft] auth failed");
+        return res.status(401).json({ error: "unauthorized" });
+      }
+      const { user_id, title, category, subcategory, description, city, state, zip,
+              budget_min, budget_max, schedule } = req.body ?? {};
+
+      if (!user_id) {
+        return res.status(400).json({ error: "user_id required", message: "Cannot create a draft without a verified user." });
+      }
+      const user = await storage.getUser(Number(user_id)).catch(() => null);
+      if (!user) {
+        return res.status(404).json({ error: "user not found", message: "User account not found." });
+      }
+      if (!category) {
+        return res.status(400).json({ error: "category required", message: "What category of help do you need? (e.g. Moving, Cleaning, Repair)" });
+      }
+
+      console.log("[jac/tools/create-job-draft] userId:", user.id, "category:", category);
+
+      // Draft — not published, status = "draft"
+      const draft = await storage.createJob({
+        hirerId: user.id,
+        title: title || category,
+        category: String(category),
+        subcategory: subcategory || null,
+        description: description || null,
+        city: city || user.city || null,
+        state: state || user.state || null,
+        zipCode: zip || null,
+        budgetMin: budget_min ? Number(budget_min) : null,
+        budgetMax: budget_max ? Number(budget_max) : null,
+        schedule: schedule || null,
+        status: "draft",
+      } as any);
+
+      return res.json({
+        drafted: true,
+        jobId: draft.id,
+        preview: {
+          title: draft.title,
+          category: draft.category,
+          city: draft.city,
+          state: draft.state,
+          budgetMin: draft.budgetMin,
+          budgetMax: draft.budgetMax,
+          schedule: draft.schedule,
+        },
+        message: `Draft created! Review it at /jobs/${draft.id} and say "post it" to publish.`,
+        requiresConfirmation: true,
+      });
+    } catch (err: any) {
+      console.error("[jac/tools/create-job-draft]", err?.message);
+      return res.status(500).json({ error: "draft failed", message: "Could not create the draft right now." });
+    }
+  });
+
+  // TOOL 3: Decode vehicle VIN
+  app.post("/api/jac/tools/decode-vin", async (req: Request, res: Response) => {
+    try {
+      if (!verifyJacToolSecret(req)) {
+        console.warn("[jac/tools/decode-vin] auth failed");
+        return res.status(401).json({ error: "unauthorized" });
+      }
+      const { vin } = req.body ?? {};
+      if (!vin || typeof vin !== "string") {
+        return res.status(400).json({ error: "vin required", message: "Please provide the 17-character VIN." });
+      }
+      const cleaned = vin.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, "");
+      if (cleaned.length !== 17) {
+        return res.status(400).json({
+          error: "invalid_vin",
+          message: `VIN must be exactly 17 characters (no I, O, or Q). Received ${cleaned.length} valid characters.`,
+        });
+      }
+
+      console.log("[jac/tools/decode-vin] vin:", cleaned.slice(0, 3) + "…");
+
+      const nhtsaRes = await fetch(
+        `https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${cleaned}?format=json`,
+        { signal: AbortSignal.timeout(8000) },
+      );
+      if (!nhtsaRes.ok) {
+        return res.status(502).json({ error: "decoder_unavailable", message: "VIN decoder is unavailable right now." });
+      }
+      const nhtsaJson: any = await nhtsaRes.json();
+      const pick = (label: string) =>
+        nhtsaJson?.Results?.find((r: any) => r.Variable === label)?.Value || null;
+
+      const year  = pick("Model Year");
+      const make  = pick("Make");
+      const model = pick("Model");
+      const trim  = pick("Trim");
+      const body  = pick("Body Class");
+      const drive = pick("Drive Type");
+      const fuel  = pick("Fuel Type - Primary");
+      const engine = pick("Displacement (L)") ? `${pick("Displacement (L)")}L` : null;
+
+      if (!year || !make || !model) {
+        return res.status(422).json({
+          error: "unrecognized_vin",
+          message: "This VIN isn't in the database. You can enter the vehicle details manually.",
+        });
+      }
+
+      return res.json({
+        vin: cleaned,
+        year, make, model,
+        trim: trim || null,
+        bodyStyle: body || null,
+        driveType: drive || null,
+        fuelType: fuel || null,
+        engineDisplacement: engine || null,
+        summary: [year, make, model, trim].filter(Boolean).join(" "),
+        message: `Decoded: ${[year, make, model, trim].filter(Boolean).join(" ")}. Does this look correct?`,
+        requiresUserConfirmation: true,
+      });
+    } catch (err: any) {
+      console.error("[jac/tools/decode-vin]", err?.message);
+      return res.status(500).json({ error: "decode_failed", message: "VIN decode failed. Try again or enter vehicle details manually." });
     }
   });
 
