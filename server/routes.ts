@@ -26636,6 +26636,49 @@ OUTPUT STYLE:
     }
   });
 
+  // ── Pitch Deck downloads ─────────────────────────────────────────────────
+  app.get("/api/pitch-deck/pdf", async (_req: Request, res: Response) => {
+    const { existsSync, readFileSync } = await import("fs");
+    const { join: pj } = await import("path");
+    const p = pj(process.cwd(), "exports", "GUBER_Official_Pitch_Deck.pdf");
+    if (!existsSync(p)) {
+      res.status(503).json({ error: "PDF not yet generated. Run: node scripts/generate-pitch-deck.mjs" });
+      return;
+    }
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'attachment; filename="GUBER_Official_Pitch_Deck.pdf"');
+    res.setHeader("Cache-Control", "no-store");
+    res.send(readFileSync(p));
+  });
+
+  app.get("/api/pitch-deck/pptx", async (_req: Request, res: Response) => {
+    const { existsSync, readFileSync } = await import("fs");
+    const { join: pj } = await import("path");
+    const p = pj(process.cwd(), "exports", "GUBER_Official_Pitch_Deck.pptx");
+    if (!existsSync(p)) {
+      res.status(503).json({ error: "PPTX not yet generated. Run: node scripts/generate-pitch-deck.mjs" });
+      return;
+    }
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+    res.setHeader("Content-Disposition", 'attachment; filename="GUBER_Official_Pitch_Deck.pptx"');
+    res.setHeader("Cache-Control", "no-store");
+    res.send(readFileSync(p));
+  });
+
+  app.get("/api/pitch-deck/one-pager", async (_req: Request, res: Response) => {
+    const { existsSync, readFileSync } = await import("fs");
+    const { join: pj } = await import("path");
+    const p = pj(process.cwd(), "exports", "GUBER_Investor_One_Pager.pdf");
+    if (!existsSync(p)) {
+      res.status(503).json({ error: "One-pager not yet generated. Run: node scripts/generate-pitch-deck.mjs" });
+      return;
+    }
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'attachment; filename="GUBER_Investor_One_Pager.pdf"');
+    res.setHeader("Cache-Control", "no-store");
+    res.send(readFileSync(p));
+  });
+
   // ── QA Dashboard (task-462) ──────────────────────────────────────────────
   const { registerAdminQaRoutes } = await import("./admin-qa.js");
   registerAdminQaRoutes(app, requireAdmin);

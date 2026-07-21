@@ -86,6 +86,7 @@ const StudioPromoClip = lazy(() => import("@/pages/studio-promo-clip"));
 const StudioQuickPic = lazy(() => import("@/pages/studio-quick-pic"));
 const StudioAiDirector = lazy(() => import("@/pages/studio-ai-director"));
 const Investors = lazy(() => import("@/pages/investors"));
+const PitchDeck = lazy(() => import("@/pages/pitch-deck"));
 const MobileCheckout = lazy(() => import("@/pages/mobile-checkout"));
 const BuyerOrderPreview = lazy(() => import("@/pages/buyer-order-preview"));
 
@@ -465,6 +466,7 @@ function Router() {
       <Route path="/delete-account" component={DeleteAccount} />
       <Route path="/investors" component={Investors} />
       <Route path="/guber-investor-deck" component={Investors} />
+      <Route path="/pitch-deck" component={() => <Suspense fallback={<PageLoader />}><PitchDeck /></Suspense>} />
       <Route path="/credits" component={() => <ProtectedRoute component={CreditsPage} />} />
       <Route path="/earning-opportunities" component={() => <Suspense fallback={<PageLoader />}><EarningOpportunities /></Suspense>} />
       <Route path="/mobile-checkout" component={() => <Suspense fallback={<PageLoader />}><MobileCheckout /></Suspense>} />
