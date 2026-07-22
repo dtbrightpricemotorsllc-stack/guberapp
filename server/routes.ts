@@ -26636,8 +26636,25 @@ OUTPUT STYLE:
     }
   });
 
+  // ── Pitch Deck — token gate ───────────────────────────────────────────────
+  const DECK_TOKEN = process.env.PITCH_DECK_TOKEN || "";
+  function checkDeckToken(req: Request, res: Response): boolean {
+    const t = (req.query.token as string) || req.headers["x-deck-token"] as string || "";
+    if (!DECK_TOKEN || t !== DECK_TOKEN) {
+      res.status(401).json({ error: "Invalid or missing access token." });
+      return false;
+    }
+    return true;
+  }
+  app.get("/api/pitch-deck/verify", (req: Request, res: Response) => {
+    const t = (req.query.token as string) || "";
+    if (DECK_TOKEN && t === DECK_TOKEN) res.json({ ok: true });
+    else res.status(401).json({ ok: false });
+  });
+
   // ── Pitch Deck downloads ─────────────────────────────────────────────────
-  app.get("/api/pitch-deck/pdf", async (_req: Request, res: Response) => {
+  app.get("/api/pitch-deck/pdf", async (req: Request, res: Response) => {
+    if (!checkDeckToken(req, res)) return;
     const { existsSync, readFileSync } = await import("fs");
     const { join: pj } = await import("path");
     const p = pj(process.cwd(), "exports", "GUBER_Official_Pitch_Deck.pdf");
@@ -26651,7 +26668,8 @@ OUTPUT STYLE:
     res.send(readFileSync(p));
   });
 
-  app.get("/api/pitch-deck/pptx", async (_req: Request, res: Response) => {
+  app.get("/api/pitch-deck/pptx", async (req: Request, res: Response) => {
+    if (!checkDeckToken(req, res)) return;
     const { existsSync, readFileSync } = await import("fs");
     const { join: pj } = await import("path");
     const p = pj(process.cwd(), "exports", "GUBER_Official_Pitch_Deck.pptx");
@@ -26665,7 +26683,8 @@ OUTPUT STYLE:
     res.send(readFileSync(p));
   });
 
-  app.get("/api/pitch-deck/one-pager", async (_req: Request, res: Response) => {
+  app.get("/api/pitch-deck/one-pager", async (req: Request, res: Response) => {
+    if (!checkDeckToken(req, res)) return;
     const { existsSync, readFileSync } = await import("fs");
     const { join: pj } = await import("path");
     const p = pj(process.cwd(), "exports", "GUBER_Investor_One_Pager.pdf");

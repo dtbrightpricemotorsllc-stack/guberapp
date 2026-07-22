@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Download, ExternalLink } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink, Lock } from "lucide-react";
 import logoImg from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
 import screenHome from "@assets/Screenshot_20260521_093856_Google_Play_Store_1779437213018.jpg";
 import screenMap from "@assets/Screenshot_20260521_093844_Google_Play_Store_1779437213007.jpg";
@@ -442,21 +442,95 @@ const SLIDE_COMPONENTS = [
   Slide09GTM, Slide10Ask,
 ];
 
+function LockScreen() {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState(false);
+  const [checking, setChecking] = useState(false);
+
+  async function attempt(code: string) {
+    setChecking(true);
+    setError(false);
+    try {
+      const r = await fetch(`/api/pitch-deck/verify?token=${encodeURIComponent(code)}`);
+      if (r.ok) {
+        sessionStorage.setItem("deck_token", code);
+        window.location.replace(`/pitch-deck?token=${encodeURIComponent(code)}`);
+      } else {
+        setError(true);
+      }
+    } catch {
+      setError(true);
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  return (
+    <div style={{ background: BG, minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "Inter, system-ui, sans-serif", padding: 24 }}>
+      <img src={logoImg} alt="GUBER" style={{ height: 52, objectFit: "contain", filter: "drop-shadow(0 0 16px rgba(57,255,20,0.35))", mixBlendMode: "screen", marginBottom: 32 }} />
+      <div style={{ width: "100%", maxWidth: 380, background: "rgba(255,255,255,0.03)", border: `1px solid rgba(255,255,255,0.08)`, borderRadius: 18, padding: "36px 32px", textAlign: "center" }}>
+        <div style={{ width: 44, height: 44, borderRadius: "50%", background: `rgba(57,255,20,0.08)`, border: `1px solid rgba(57,255,20,0.2)`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px" }}>
+          <Lock size={20} color={NG} />
+        </div>
+        <div style={{ fontSize: "1.15rem", fontWeight: 700, color: "#fff", marginBottom: 6 }}>Private Investor Brief</div>
+        <div style={{ fontSize: "0.85rem", color: "#555", marginBottom: 28, lineHeight: 1.6 }}>Enter your access code to view the GUBER pitch deck.</div>
+        <input
+          ref={inputRef}
+          type="text"
+          placeholder="Access code"
+          onKeyDown={e => e.key === "Enter" && attempt(inputRef.current?.value.trim() || "")}
+          style={{ width: "100%", padding: "12px 16px", borderRadius: 10, border: `1px solid ${error ? "#ff4444" : "rgba(255,255,255,0.1)"}`, background: "rgba(255,255,255,0.05)", color: "#fff", fontSize: 15, outline: "none", marginBottom: 12, textAlign: "center", letterSpacing: "0.08em" }}
+          autoFocus
+        />
+        {error && <div style={{ color: "#ff6666", fontSize: "0.8rem", marginBottom: 12 }}>Invalid access code. Try again.</div>}
+        <button
+          onClick={() => attempt(inputRef.current?.value.trim() || "")}
+          disabled={checking}
+          style={{ width: "100%", padding: "12px", borderRadius: 10, background: NG, color: "#000", fontWeight: 800, fontSize: 14, border: "none", cursor: checking ? "wait" : "pointer", opacity: checking ? 0.7 : 1 }}
+        >
+          {checking ? "Checking…" : "View Deck"}
+        </button>
+      </div>
+      <div style={{ marginTop: 24, fontSize: 11, color: "#333" }}>Confidential — for invited parties only</div>
+    </div>
+  );
+}
+
 export default function PitchDeck() {
   const [active, setActive] = useState(0);
+  const [token, setToken] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const total = SLIDES.length;
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get("token") || sessionStorage.getItem("deck_token") || "";
+    if (!urlToken) { setAuthChecked(true); return; }
+    fetch(`/api/pitch-deck/verify?token=${encodeURIComponent(urlToken)}`)
+      .then(r => {
+        if (r.ok) { sessionStorage.setItem("deck_token", urlToken); setToken(urlToken); }
+        setAuthChecked(true);
+      })
+      .catch(() => setAuthChecked(true));
+  }, []);
 
   const prev = useCallback(() => setActive(a => Math.max(0, a - 1)), []);
   const next = useCallback(() => setActive(a => Math.min(total - 1, a + 1)), [total]);
 
   useEffect(() => {
+    if (!token) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === " ") { e.preventDefault(); next(); }
       if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); prev(); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [next, prev]);
+  }, [next, prev, token]);
+
+  if (!authChecked) return <div style={{ background: BG, minHeight: "100vh" }} />;
+  if (!token) return <LockScreen />;
+
+  const dlUrl = (path: string) => `/api/pitch-deck/${path}?token=${encodeURIComponent(token)}`;
 
   return (
     <div style={{ background: BG, minHeight: "100vh", color: "#e8e8f0", fontFamily: "Inter, system-ui, sans-serif", position: "relative" }}>
@@ -478,13 +552,13 @@ export default function PitchDeck() {
           <span style={{ fontSize: 11, color: "#444", letterSpacing: "0.12em", textTransform: "uppercase" }}>Investor Brief · 2026</span>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <a href="/api/pitch-deck/pdf" target="_blank" style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: `1px solid ${BORDER}`, background: "rgba(255,255,255,0.04)", color: "#ccc", fontSize: 12, textDecoration: "none", cursor: "pointer" }}>
+          <a href={dlUrl("pdf")} target="_blank" style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: `1px solid ${BORDER}`, background: "rgba(255,255,255,0.04)", color: "#ccc", fontSize: 12, textDecoration: "none", cursor: "pointer" }}>
             <Download size={13} /> PDF
           </a>
-          <a href="/api/pitch-deck/pptx" target="_blank" style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: `1px solid ${NG}44`, background: `${NG}10`, color: NG, fontSize: 12, textDecoration: "none", cursor: "pointer", fontWeight: 700 }}>
+          <a href={dlUrl("pptx")} target="_blank" style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: `1px solid ${NG}44`, background: `${NG}10`, color: NG, fontSize: 12, textDecoration: "none", cursor: "pointer", fontWeight: 700 }}>
             <Download size={13} /> PPTX
           </a>
-          <a href="/api/pitch-deck/one-pager" target="_blank" style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: `1px solid ${NP}44`, background: `${NP}10`, color: NP, fontSize: 12, textDecoration: "none", cursor: "pointer" }}>
+          <a href={dlUrl("one-pager")} target="_blank" style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: `1px solid ${NP}44`, background: `${NP}10`, color: NP, fontSize: 12, textDecoration: "none", cursor: "pointer" }}>
             <ExternalLink size={13} /> One-Pager
           </a>
         </div>

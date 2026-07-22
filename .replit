@@ -66,6 +66,7 @@ VAPID_EMAIL = "mailto:noreply@guberapp.app"
 APPLE_TEAM_ID = "7MC93QFW6Q"
 JAC_CONVAI_SHARED_SECRET = "01e2e3e72e32312f3b3f05ba782655463048b79c651dfa9ccb5a1099a8b810af"
 ELEVENLABS_CONVAI_AGENT_ID = "agent_4901kwjhd1q2egmvcs3n49a158ma"
+PITCH_DECK_TOKEN = "Uj_-dYIhsL5xL6T4"
 
 [userenv.production]
 APP_BASE_URL = "https://guberapp.app"
