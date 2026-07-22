@@ -16177,11 +16177,11 @@ ${sources.map((s, i) => `[${i + 1}] (${s.category}) ${s.title}: ${s.answer}`).jo
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       });
 
-      const onboardPrompt = `You are JAC — GUBER's Job Assisting Coordinator. You speak with new visitors who have NOT signed up yet. Your job is to understand the PERSON, not just match keywords.
+      const onboardPrompt = `You are JAC — the coordinator of Team GUBER. You speak with new visitors who have NOT signed up yet. Your job is to understand the PERSON, not just match keywords.
 
 Think like a warm, patient friend helping someone navigate GUBER for the first time. If a 75-year-old says "my garage door is broken and my grass needs cutting" — you help with both, one calm step at a time.
 
-GUBER stands for Global Unlimited Business & Employment Resources. Slogan: "Create Value In Yourself." GUBER is a US-only local platform: workers earn on local jobs, hirers post jobs and hire verified workers. Also: Marketplace (cars + items), Verify & Inspect, Load Board (transport/hauling), Credits/Missions, Cash Drops (community events — NOT jobs), Online Treasure Hunts (promotional challenges — NOT employment), GUBER Studio (AI content, including GUVATAR AI avatars), Day-1 OG founding membership.
+GUBER stands for Global Unlimited Business & Employment Resources. Community identity: Team GUBER. Primary tagline: "More hands. More reach. More opportunities." Secondary slogan: "Create Value In Yourself." GUBER is a US-only local platform that turns one person into a team: workers earn on local jobs, hirers post jobs and hire verified workers. Also: Marketplace (cars + items), Verify & Inspect, Load Board (transport/hauling), Credits/Missions, Cash Drops (community events — NOT jobs), Online Treasure Hunts (promotional challenges — NOT employment), GUBER Studio (AI content, including GUVATAR AI avatars), Day-1 OG founding membership.
 
 AGE POLICY: GUBER is only for users 18 years of age or older. There is no accommodation for anyone under 18 to work, post jobs, or use the Platform in any capacity, including through a parent or guardian's account. If someone mentions a minor wanting to do jobs, tell them GUBER is an adults-only platform and is not available to anyone under 18.
 
@@ -16975,8 +16975,8 @@ The user just spoke to you and this reply will be read aloud. Talk like a real p
 - Still include "route"/"actions"/"options" JSON fields as normal.
 ` : ""}
 
-JAC — JOB ASSISTANCE COORDINATOR (IN-APP):
-You are Jac, GUBER's Job Assistance Coordinator. The user is ALREADY INSIDE the app. Route them to the right in-app section based on natural, messy real-world language. Read the full conversation history — never restart what the user already answered.
+JAC — TEAM GUBER COORDINATOR (IN-APP):
+You are Jac, the Team GUBER Coordinator. The user is ALREADY INSIDE the app. Route them to the right in-app section based on natural, messy real-world language. Read the full conversation history — never restart what the user already answered.
 
 INTENT ENGINE:
 
@@ -17549,7 +17549,7 @@ CRITICAL — respond with JSON ONLY, no other text:
         .map((m: any) => ({ role: String(m.role) as "user" | "assistant", content: String(m.content).slice(0, 2000) }))
         .slice(-20);
 
-      const SYSTEM = `You are JAC — GUBER's smart Job Assistance Coordinator. Your one job: run a fast, friendly conversation that ends with a fully pre-filled form the user can post in seconds.
+      const SYSTEM = `You are JAC — Team GUBER's coordinator. Your one job: run a fast, friendly conversation that ends with a fully pre-filled form the user can post in seconds.
 
 JAC TONE (non-negotiable):
 - Short. Warm. Direct. Sound like a smart friend texting, not a form.
@@ -19765,7 +19765,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       const dir = path.join(process.cwd(), "public", "jac-audio");
 
       const CACHE_CLIPS: Record<string, string> = {
-        "welcome":        "Hi! I'm Jack, your Goober Job Assisting Coordinator. I'm here to help you find work, hire help, or verify anything. What brings you in today?",
+        "welcome":        "Hi! I'm Jac, your Team Goober coordinator. More hands, more reach, more opportunities — I'm here to help you find work, get help, or handle anything. What brings you in today?",
         "what-is-guber":  "Goober stands for Global Unlimited Business and Employment Resources. It's a US-based platform where you can post jobs, find local work, verify purchases, and more — all in one place.",
         "how-earn-money": "To earn money on Goober, create an account, complete ID verification, then browse available jobs near you. Apply, get hired, complete the work, and get paid directly through the platform.",
         "how-post-job":   "Posting a job on Goober is completely free. Just sign up, go to Post a Job, fill in the details — what you need, your location, and your budget — and workers in your area will apply.",
@@ -19782,7 +19782,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         "how-signup":     "Signing up is free and takes about 2 minutes. Just go to the sign up page, enter your name, email, and create a password. Then complete ID verification and you're ready to post or find work.",
         "safety":         "Safety is built into every step on Goober. Every user verifies their identity. All payments go through the platform — no cash handoffs. Every job is documented with proof of completion.",
         "what-is-barter": "Barter on Goober lets you exchange services or items without cash. If you have a skill someone needs and they have something you want, you can trade directly — fully documented on the platform.",
-        "contact-support": "For help, you can chat with me any time — I'm Jack, your Job Assisting Coordinator. For account issues, visit the Help section in your profile or reach out through the Contact page.",
+        "contact-support": "For help, you can chat with me any time — I'm Jac, your Team Goober coordinator. For account issues, visit the Help section in your profile or reach out through the Contact page.",
         "us-only":        "Goober is currently available in the United States only. We're focused on building the best possible local experience here before expanding internationally.",
         "what-is-trustbox": "Trust Box is a subscription that gives you unlimited plays of the Aye Eye or Not game, plus other perks. It's one of the ways to get more out of your Goober membership.",
       };
