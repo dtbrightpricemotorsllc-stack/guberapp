@@ -63,8 +63,8 @@ const SLIDES = [
 const FIVE_DOORS = [
   {
     id: "earn",      color: "#00E576", icon: DollarSign, label: "EARN",
-    headline: "Your neighborhood is hiring.",
-    tagline: "Turn free time into real cash.",
+    headline: "What are we getting done today?",
+    tagline: "Your Team GUBER network is ready.",
     features: ["Real jobs posted near you", "GPS-verified check-ins", "Get paid same day"],
     cta: "BROWSE JOBS", href: "/browse-jobs",
     number: "1",
@@ -290,8 +290,8 @@ function GateModal({ onClose }: { onClose: () => void }) {
         <div className="flex justify-center mb-5">
           <img src={logoImg} alt="GUBER" className="h-14 object-contain" style={{ mixBlendMode: "screen" }} />
         </div>
-        <h2 className="text-xl font-display font-black tracking-wider text-center mb-1">READY TO EARN?</h2>
-        <p className="text-center text-muted-foreground text-sm mb-6">Create a free account or sign in to accept jobs on the GUBER app.</p>
+        <h2 className="text-xl font-display font-black tracking-wider text-center mb-1">JOIN TEAM GUBER</h2>
+        <p className="text-center text-muted-foreground text-sm mb-6">Create a free account or sign in. Get more hands, more reach, and more opportunities.</p>
         <div className="space-y-3">
           <Link href="/signup" className="flex items-center justify-center gap-2 w-full h-12 rounded-xl font-display tracking-[0.15em] text-sm premium-btn" data-testid="link-gate-signup">
             GET STARTED FREE <ChevronRight className="w-4 h-4" />
@@ -300,7 +300,7 @@ function GateModal({ onClose }: { onClose: () => void }) {
             SIGN IN
           </Link>
         </div>
-        <p className="text-center text-muted-foreground text-[10px] font-display tracking-wider mt-5">FREE TO JOIN · GUBER GLOBAL LLC</p>
+        <p className="text-center text-muted-foreground text-[10px] font-display tracking-wider mt-5">FREE TO JOIN · TEAM GUBER · GUBER GLOBAL LLC</p>
       </div>
     </div>
   );
@@ -1084,11 +1084,11 @@ export default function Home() {
             style={{ background: "rgba(0,229,118,0.1)", border: "1px solid rgba(0,229,118,0.2)", color: "#00e576" }}>
             <span className="online-dot" aria-hidden />ACTIVATING CITY BY CITY
           </div>
-          <h2 className="text-2xl sm:text-3xl font-display font-black tracking-wider mb-3">Your city is going live.</h2>
+          <h2 className="text-2xl sm:text-3xl font-display font-black tracking-wider mb-3">Team GUBER is growing city by city.</h2>
           <p className="text-muted-foreground text-sm leading-relaxed max-w-lg mx-auto mb-8">
-            GUBER grows neighborhood by neighborhood. The more people who join your area,
+            More people means more hands, more reach, and more opportunities. The more team members who join your area,
             the more jobs, cash drops, and opportunities appear on your local grid.
-            Be a founding member — claim your spot before your city fills up.
+            Be a founding team member — claim your spot before your city fills up.
           </p>
           <div className="flex items-center justify-center gap-2 sm:gap-4 mb-8 flex-wrap">
             {["Sign Up Free", "Verify ID", "City Goes Live", "Start Earning"].map((step, i) => (
@@ -1166,7 +1166,7 @@ export default function Home() {
                 Earn <span className="text-amber-400">GUBER Credits</span>
               </h2>
               <p className="text-muted-foreground text-sm leading-relaxed mb-5 max-w-md">
-                Invite friends and earn GUBER Credits when they become active members on GUBER.
+                Invite someone who can help, earn, sell, move, inspect, or solve. Build your Team GUBER network and earn GUBER Credits when they become active members.
                 Credits may be used for platform perks, visibility boosts, premium features, and future rewards.
               </p>
               <div className="flex flex-col sm:flex-row items-center gap-3">
@@ -1241,9 +1241,9 @@ export default function Home() {
       <section className="relative z-10 px-5 pb-20 max-w-3xl mx-auto w-full text-center">
         <div className="rounded-2xl p-10 sm:p-14"
           style={{ background: "linear-gradient(135deg,rgba(0,229,229,0.05) 0%,rgba(152,255,152,0.04) 100%)", border: "1px solid rgba(0,229,229,0.12)" }}>
-          <h2 className="text-3xl font-display font-black tracking-wider mb-4">READY TO START EARNING?</h2>
+          <h2 className="text-3xl font-display font-black tracking-wider mb-4">JOIN TEAM GUBER</h2>
           <p className="text-muted-foreground text-sm leading-relaxed mb-8 max-w-md mx-auto">
-            Join thousands of people who are turning their neighborhood into a paycheck. No experience required — just show up.
+            More hands. More reach. More opportunities. Join Team GUBER — where one person becomes a team. No experience required. Just show up.
           </p>
           <div className="flex flex-col sm:flex-row items-center gap-3 justify-center">
             <Link href="/signup" className="w-full sm:w-auto h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm premium-btn flex items-center justify-center gap-2" data-testid="link-cta-signup">

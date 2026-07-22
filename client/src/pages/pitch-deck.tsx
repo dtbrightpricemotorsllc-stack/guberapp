@@ -94,13 +94,13 @@ function Slide01Cover() {
       <Tag>Private Investor Brief · 2026</Tag>
       <img src={logoImg} alt="GUBER" style={{ height: 64, objectFit: "contain", filter: "drop-shadow(0 0 20px rgba(57,255,20,0.4))", mixBlendMode: "screen" }} />
       <div>
-        <div style={{ fontSize: "clamp(3.5rem,10vw,7rem)", fontWeight: 900, color: "#fff", lineHeight: 1, letterSpacing: "-0.03em", textShadow: `0 0 60px ${NG}55` }}>GUBER</div>
-        <div style={{ fontSize: "clamp(1rem,2.5vw,1.5rem)", color: NG, fontWeight: 700, marginTop: 10, letterSpacing: "0.04em" }}>
-          "You Name It. GUBER Gets It Done."
+        <div style={{ fontSize: "clamp(2.5rem,8vw,5.5rem)", fontWeight: 900, color: "#fff", lineHeight: 1, letterSpacing: "-0.03em", textShadow: `0 0 60px ${NG}55` }}>TEAM GUBER</div>
+        <div style={{ fontSize: "clamp(0.9rem,2vw,1.3rem)", color: NG, fontWeight: 700, marginTop: 10, letterSpacing: "0.06em" }}>
+          More hands. More reach. More opportunities.
         </div>
       </div>
       <p style={{ fontSize: "clamp(0.85rem,1.5vw,1.1rem)", color: "#aaa", maxWidth: 560, lineHeight: 1.65 }}>
-        Action marketplace for real-world work, services, local tasks, inspections, transport, and opportunity.
+        The real-world platform that turns one person into a team. Connect with people, skills, tools, transportation, services, buyers, sellers, and local opportunities — all on one trusted network.
       </p>
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap", justifyContent: "center", marginTop: 8 }}>
         {["Guber Global LLC", "100% Founder Owned", "Live on Web + Google Play", "iOS Review Underway"].map(t => (
@@ -116,16 +116,16 @@ function Slide01Cover() {
 
 function Slide02Problem() {
   const pains = [
-    { icon: "🔍", title: "Help is fragmented", body: "People search job boards, classifieds, social media, and random referrals. Nothing connects the need to the person who can fill it — fast." },
-    { icon: "💸", title: "Workers can't find fast income", body: "People with skills and time have no trusted, centralized place to find real paid work near them right now." },
-    { icon: "🤝", title: "No trusted middle ground", body: "Local transactions happen in cash with strangers, zero verification, zero accountability, and zero recourse if something goes wrong." },
+    { icon: "⏱", title: "Limited by time, location, and reach", body: "People are limited by their own time, location, skills, transportation, money, reach, and physical availability. One person can only do so much." },
+    { icon: "👻", title: "Useful resources stay invisible", body: "People with skills, vehicles, tools, time, and local knowledge have no trusted place to make themselves visible and available to those who need them." },
+    { icon: "🤝", title: "No connected system", body: "Jobs, transport, inspections, marketplace, and services live on separate platforms with no shared trust layer. The right people can't find each other." },
   ];
   return (
     <div>
       <Eyebrow>Slide 02 — Problem</Eyebrow>
-      <Headline>The problem is everywhere.</Headline>
+      <Headline>People can only do so much alone.</Headline>
       <p style={{ color: "#999", marginBottom: 32, fontSize: "clamp(0.85rem,1.4vw,1.05rem)", lineHeight: 1.65 }}>
-        People need things done now, but the path from need to action is broken across every existing platform.
+        The need is everywhere. Useful people, skills, and resources exist nearby. The visibility and connection don't.
       </p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
         {pains.map(p => (
@@ -150,19 +150,19 @@ function Slide03Solution() {
   return (
     <div>
       <Eyebrow>Slide 03 — Solution</Eyebrow>
-      <Headline>GUBER turns needs into action.</Headline>
+      <Headline>Team GUBER connects overlooked needs with overlooked value.</Headline>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 28 }}>
         <div>
           <p style={{ color: "#aaa", fontSize: "clamp(0.85rem,1.3vw,1rem)", lineHeight: 1.7, marginBottom: 20 }}>
-            One platform. Post a task, hire help, find work, request inspections, sell items, move vehicles, complete local missions.
+            One platform. Post a task, hire help, find work, request inspections, sell items, move vehicles, complete local missions. You don't have to do everything alone.
           </p>
           <Card accent={NG} style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
               <div style={{ fontSize: 22 }}>🤖</div>
               <div>
-                <div style={{ color: NG, fontWeight: 700, fontSize: "0.95rem", marginBottom: 4 }}>JAC — Job Assistance Coordinator</div>
+                <div style={{ color: NG, fontWeight: 700, fontSize: "0.95rem", marginBottom: 4 }}>JAC — Team GUBER Coordinator</div>
                 <div style={{ color: "#888", fontSize: "0.82rem", lineHeight: 1.65 }}>
-                  GUBER's AI assistant helps users instantly figure out what to post, where to go, and what action to take. Guided from first tap to first dollar.
+                  GUBER's AI coordinator helps users instantly figure out what they need, what they can offer, and what action to take. Guided from first tap to first dollar.
                 </div>
               </div>
             </div>

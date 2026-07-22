@@ -100,7 +100,7 @@ const OPENING_OPTIONS = [
 
 const GREETING: JacMsg = {
   role: "assistant",
-  content: "Welcome to GUBER — the land of opportunities. I'm JAC, your Job Assisting Coordinator. What brings you to GUBER?",
+  content: "Welcome to Team GUBER. I'm JAC — tell me what you need, what you can do, or what you have available. I'll help you find your next move.",
   buttons: OPENING_OPTIONS,
 };
 
@@ -567,13 +567,13 @@ export function JacHomepage() {
                 className="text-[10px] font-display font-black tracking-[0.25em] mb-2"
                 style={{ color: "hsl(270 100% 65%)" }}
               >
-                GUBER — THE LAND OF OPPORTUNITIES
+                TEAM GUBER · YOUR REAL-WORLD TEAM
               </p>
               <h2 className="text-2xl sm:text-3xl font-display font-black text-white leading-tight mb-2">
                 Meet JAC
               </h2>
               <p className="text-sm text-white/60 font-display leading-relaxed mb-6">
-                Your Job Assisting Coordinator. She'll guide you to work, income, or anything GUBER has to offer — all by voice or tap.
+                Your Team GUBER coordinator. She helps you earn, get help, move things, explore opportunities, and handle life — all by voice or tap.
               </p>
               {/* Pulsing CTA */}
               <div className="flex items-center gap-3 justify-center md:justify-start">
@@ -631,7 +631,7 @@ export function JacHomepage() {
                 Hi, I'm JAC.
               </h2>
               <p className="font-display font-bold text-lg text-white/60 mt-1 mb-2">
-                Your Job Assisting Coordinator.
+                Your Team GUBER Coordinator.
               </p>
               <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto md:mx-0">
                 Tell me what you need and I'll guide you step by step — no account required to start.
@@ -726,7 +726,7 @@ export function JacHomepage() {
           </div>
           <div>
             <p className="text-sm font-display font-black text-white tracking-wide leading-none">JAC</p>
-            <p className="text-[10px] text-muted-foreground font-display tracking-wider mt-0.5">Job Assisting Coordinator</p>
+            <p className="text-[10px] text-muted-foreground font-display tracking-wider mt-0.5">Team GUBER Coordinator</p>
           </div>
           <div className="ml-auto flex items-center gap-2">
             {ttsSupported && (

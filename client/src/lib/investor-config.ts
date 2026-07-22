@@ -30,10 +30,10 @@ export const INVESTOR_CONFIG = {
   // SLIDE 1
   hero: {
     eyebrow: "PRIVATE INVESTOR BRIEF · 2026",
-    headline: "GUBER",
-    subtitle: ["Find Work.", "Hire Help.", "Verify Things."],
-    tagline: "Create Value In Yourself.",
-    sub: "One trust rail for local work — verified identity, on-platform payments, and proof of every job. Live on web and Google Play today.",
+    headline: "TEAM GUBER",
+    subtitle: ["Turn Yourself Into a Team.", "More hands. More reach.", "More opportunities."],
+    tagline: "More hands. More reach. More opportunities.",
+    sub: "GUBER is a real-world team platform that connects people who need something done with people, skills, tools, resources, and opportunities that can help make it happen. Live on web and Google Play today.",
     primaryCta: { label: "SEE THE OPPORTUNITY", target: "section-funding" },
     secondaryCta: { label: "CONTACT THE FOUNDER", target: "section-cta" },
   },
@@ -41,11 +41,11 @@ export const INVESTOR_CONFIG = {
   // SLIDE 2
   problem: {
     headline: "The Problem",
-    needs: ["Money", "Help", "Proof"],
+    needs: ["Reach", "Hands", "Visibility"],
     body: [
-      "A person needs work but can't find the opportunity.",
-      "A business needs help but can't find anyone reliable.",
-      "A buyer needs to verify a big purchase but can't be there.",
+      "People are limited by their own time, location, skills, transportation, money, reach, and availability.",
+      "At the same time, useful people, tools, vehicles, skills, time, and opportunities remain invisible or underused.",
+      "The path from need to action is broken across every existing platform.",
     ],
     closer: "The need is everywhere.\n\nThe visibility isn't.",
   },
@@ -72,12 +72,12 @@ export const INVESTOR_CONFIG = {
 
   // SLIDE 4
   valueCore: {
-    headline: "Create Value In Yourself",
-    eyebrow: "THE EMOTIONAL CORE",
+    headline: "Turn Yourself Into a Team",
+    eyebrow: "THE CORE CONCEPT",
     body: [
-      "GUBER gives people a chance.",
-      "Not a guarantee.",
-      "A chance.",
+      "Team GUBER gives people more than a chance.",
+      "It gives them more hands, more reach, and more opportunities.",
+      "One person. Expanded into a team.",
     ],
     steps: [
       "Your work becomes your record.",
@@ -152,8 +152,8 @@ export const INVESTOR_CONFIG = {
       "A record of what people actually do, not what they claim.",
     ],
     guberLand: {
-      headline: "Welcome to GUBER Land.",
-      body: "Everyone starts with a clean slate.\n\nNo judgment by assumption. No gatekeeping by background.\n\nYou show up. You work. Your record speaks for itself.\n\nFresh start. Your rules. But safely — because every action is documented, every identity is verified, and every payment is on-platform.",
+      headline: "One person becomes a team.",
+      body: "Everyone starts with a clean slate.\n\nNo judgment by assumption. No gatekeeping by background.\n\nYou show up. You work. Your record speaks for itself.\n\nTeam GUBER gives you more hands, more reach, and more opportunities — safely — because every action is documented, every identity is verified, and every payment is on-platform.",
     },
     assetProtection: {
       headline: "Asset Protection Is a Tool, Not a Liability.",

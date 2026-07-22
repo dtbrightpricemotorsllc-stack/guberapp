@@ -76,7 +76,7 @@ interface Message {
 }
 
 const DD_GREETING =
-  "Welcome to GUBER — the land of opportunities. I'm JAC, your Job Assisting Coordinator. What brings you to GUBER?";
+  "Welcome to Team GUBER. I'm JAC — tell me what you need, what you can do, or what you have available. I'll help you find your next move.";
 const SESSION_KEY = "jac_v1_messages";
 const SEEN_KEY = "jac_v1_seen";
 const FAB_HINT_KEY = "jac_fab_hint_shown";
@@ -902,7 +902,7 @@ export function GUBERAssistant() {
                   JAC
                 </SheetTitle>
                 <p className="text-[10px] text-muted-foreground font-display tracking-wider">
-                  Job Assisting Coordinator
+                  Team GUBER Coordinator
                 </p>
               </div>
             </div>
@@ -1441,7 +1441,7 @@ export function GUBERAssistant() {
             </Button>
           </div>
           <p className="text-center text-[10px] text-muted-foreground/40 mt-2 font-display tracking-wider">
-            Jac · Job Assistance Coordinator
+            Jac · Team GUBER Coordinator
           </p>
         </div>
       </SheetContent>
