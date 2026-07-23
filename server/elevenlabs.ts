@@ -89,7 +89,7 @@ export async function synthesizeSpeech(
   const modelId = opts.modelId || process.env.JAC_ELEVENLABS_MODEL_ID || DEFAULT_JAC_MODEL_ID;
   const stream = opts.stream !== false;
   const path = stream ? "stream" : "";
-  const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}${path ? `/${path}` : ""}?output_format=mp3_44100_128${stream ? "&optimize_streaming_latency=1" : ""}`;
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}${path ? `/${path}` : ""}?output_format=mp3_44100_128${stream ? "&optimize_streaming_latency=3" : ""}`;
 
   try {
     const upstream = await fetch(url, {
