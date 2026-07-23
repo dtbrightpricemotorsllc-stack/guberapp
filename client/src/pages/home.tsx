@@ -25,6 +25,7 @@ import heroHireImg      from "@assets/file_000000001b68722fa9b9a139b8832496_1781
 import heroVerifyImg    from "@assets/file_00000000563471f5a72bc4c3624229c7_1781794028404.png";
 import heroLoadImg      from "@assets/file_0000000048c471f5be4d6d0fbf5eb94c_1781794028448.png";
 import heroExploreImg   from "@assets/file_000000009960720ca77a90e111b70876_1781794028463.png";
+import jacPortrait      from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
 import proofImg1 from "@assets/Screenshot_20260331_102503_Facebook_1778199034115.jpg";
 import proofImg2 from "@assets/Screenshot_20260426_064718_Facebook_1778199034048.jpg";
@@ -282,25 +283,41 @@ function timeAgo(iso: string) {
 function GateModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" data-testid="modal-gate">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-2xl p-7 w-full max-w-sm shadow-2xl z-10">
-        <button onClick={onClose} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors" data-testid="button-gate-close">
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={onClose} />
+      <div className="relative rounded-2xl w-full max-w-sm shadow-2xl z-10 overflow-hidden"
+        style={{
+          background: "linear-gradient(160deg, hsl(222 47% 8%), hsl(270 60% 5%))",
+          border: "1px solid hsl(270 100% 65% / 0.22)",
+          boxShadow: "0 0 60px hsl(270 100% 65% / 0.12), 0 20px 60px rgba(0,0,0,0.7)",
+        }}>
+        <button onClick={onClose} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors z-10" data-testid="button-gate-close">
           <X className="w-5 h-5" />
         </button>
-        <div className="flex justify-center mb-5">
-          <img src={logoImg} alt="GUBER" className="h-14 object-contain" style={{ mixBlendMode: "screen" }} />
+        {/* JAC intro strip */}
+        <div className="flex items-center gap-3 px-5 pt-5 pb-4" style={{ borderBottom: "1px solid hsl(270 100% 65% / 0.1)" }}>
+          <div className="w-11 h-11 rounded-xl overflow-hidden flex-shrink-0" style={{ border: "2px solid hsl(270 100% 65% / 0.5)", boxShadow: "0 0 14px hsl(270 100% 65% / 0.3)" }}>
+            <img src={jacPortrait} alt="JAC" className="w-full h-full object-cover object-top" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-display font-black text-white leading-none">JAC says hi 👋</p>
+            </div>
+            <p className="text-[11px] mt-0.5" style={{ color: "hsl(270 100% 72%)" }}>Create an account to unlock full access</p>
+          </div>
         </div>
-        <h2 className="text-xl font-display font-black tracking-wider text-center mb-1">JOIN TEAM GUBER</h2>
-        <p className="text-center text-muted-foreground text-sm mb-6">Create a free account or sign in. Get more hands, more reach, and more opportunities.</p>
-        <div className="space-y-3">
-          <Link href="/signup" className="flex items-center justify-center gap-2 w-full h-12 rounded-xl font-display tracking-[0.15em] text-sm premium-btn" data-testid="link-gate-signup">
-            GET STARTED FREE <ChevronRight className="w-4 h-4" />
-          </Link>
-          <Link href="/login" className="flex items-center justify-center gap-2 w-full h-12 rounded-xl font-display tracking-[0.15em] text-sm btn-glass-premium" data-testid="link-gate-login">
-            SIGN IN
-          </Link>
+        <div className="px-5 pt-5 pb-6">
+          <h2 className="text-xl font-display font-black tracking-wider text-white mb-1">JOIN TEAM GUBER</h2>
+          <p className="text-muted-foreground text-sm mb-5">Find work. Hire help. Make things happen.<br className="hidden sm:block" />Free to join — no card required.</p>
+          <div className="space-y-3">
+            <Link href="/signup" className="flex items-center justify-center gap-2 w-full h-12 rounded-xl font-display tracking-[0.15em] text-sm premium-btn" data-testid="link-gate-signup">
+              GET STARTED FREE <ChevronRight className="w-4 h-4" />
+            </Link>
+            <Link href="/login" className="flex items-center justify-center gap-2 w-full h-12 rounded-xl font-display tracking-[0.15em] text-sm btn-glass-premium" data-testid="link-gate-login">
+              SIGN IN
+            </Link>
+          </div>
+          <p className="text-center text-muted-foreground text-[10px] font-display tracking-wider mt-5">FREE TO JOIN · TEAM GUBER · GUBER GLOBAL LLC</p>
         </div>
-        <p className="text-center text-muted-foreground text-[10px] font-display tracking-wider mt-5">FREE TO JOIN · TEAM GUBER · GUBER GLOBAL LLC</p>
       </div>
     </div>
   );
@@ -958,6 +975,9 @@ export default function Home() {
         </Link>
       </div>
 
+      {/* ── JAC Homepage Assistant ── */}
+      <JacHomepage />
+
       {/* ── Platform availability strip ── */}
       <div className="relative z-10 flex items-center justify-center gap-4 sm:gap-6 flex-wrap px-5 py-4 text-[11px] font-display tracking-wider border-b border-border/30">
         <a
@@ -984,9 +1004,6 @@ export default function Home() {
           &nbsp;· No card · No resume
         </span>
       </div>
-
-      {/* ── JAC Homepage Assistant ── */}
-      <JacHomepage />
 
       {/* ── Opportunity Map ── */}
       <section className="relative z-10 px-5 pt-14 pb-14 max-w-6xl mx-auto w-full" data-testid="section-opportunity-map">

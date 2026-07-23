@@ -203,10 +203,12 @@ export default function Signup() {
     <InAppBrowserGate>
     <div className="min-h-screen bg-background flex items-center justify-center px-6 py-8 relative overflow-hidden" data-testid="page-signup">
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-[20%] right-[25%] w-[400px] h-[400px] rounded-full opacity-[0.05]"
+        <div className="absolute top-[15%] right-[20%] w-[500px] h-[500px] rounded-full opacity-[0.11]"
           style={{ background: "radial-gradient(circle, hsl(275 85% 62%), transparent 65%)" }} />
-        <div className="absolute bottom-[25%] left-[20%] w-[350px] h-[350px] rounded-full opacity-[0.04]"
+        <div className="absolute bottom-[20%] left-[15%] w-[400px] h-[400px] rounded-full opacity-[0.08]"
           style={{ background: "radial-gradient(circle, hsl(152 100% 44%), transparent 65%)" }} />
+        <div className="absolute top-[55%] right-[5%] w-[250px] h-[250px] rounded-full opacity-[0.05]"
+          style={{ background: "radial-gradient(circle, hsl(270 100% 65%), transparent 65%)" }} />
       </div>
 
       <div className="w-full max-w-sm relative z-10">
@@ -218,8 +220,8 @@ export default function Signup() {
         <div className="text-center space-y-2 mb-8 animate-fade-in">
           <GuberLogo size="lg" />
           <p className="text-muted-foreground text-xs font-display tracking-[0.2em]">CREATE YOUR ACCOUNT</p>
-          <p className="text-muted-foreground text-[11px] font-display leading-relaxed max-w-[240px] mx-auto">
-            Start earning in your neighborhood today
+          <p className="text-white/60 text-[12px] font-display leading-relaxed max-w-[260px] mx-auto">
+            Find work. Hire help. Make things happen.
           </p>
         </div>
 

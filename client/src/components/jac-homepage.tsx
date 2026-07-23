@@ -595,94 +595,95 @@ export function JacHomepage() {
   if (mode === "intro") {
     return (
       <>
-      <section className="relative z-10 px-4 sm:px-5 py-8 sm:py-12 max-w-6xl mx-auto w-full" data-testid="section-jac-homepage">
+      <section className="relative z-10 px-4 sm:px-5 py-6 sm:py-10 max-w-6xl mx-auto w-full" data-testid="section-jac-homepage">
         <div
           className="rounded-3xl overflow-hidden"
           style={{
-            background: "linear-gradient(160deg, hsl(222 47% 8%), hsl(270 60% 6%))",
-            border: "1px solid hsl(270 100% 65% / 0.18)",
-            boxShadow: "0 8px 64px hsl(270 100% 65% / 0.07), 0 2px 20px rgba(0,0,0,0.45)",
+            background: "linear-gradient(160deg, hsl(222 47% 7%) 0%, hsl(270 60% 5%) 100%)",
+            border: "1px solid hsl(270 100% 65% / 0.22)",
+            boxShadow: "0 0 0 1px hsl(270 100% 65% / 0.05), 0 8px 64px hsl(270 100% 65% / 0.1), 0 2px 24px rgba(0,0,0,0.6)",
           }}
         >
-          <div className="flex flex-col md:flex-row items-center md:items-end">
+          <div className="flex flex-col md:flex-row items-stretch">
 
-            {/* JAC character */}
-            <div className="flex-shrink-0 md:w-[220px] flex justify-center md:justify-start pt-6 md:pt-0 px-6 md:px-0">
+            {/* JAC character panel */}
+            <div
+              className="relative flex-shrink-0 md:w-[280px] flex justify-center md:justify-end items-end overflow-hidden"
+              style={{ background: "linear-gradient(135deg, hsl(270 60% 6%), hsl(270 80% 4%))", minHeight: 260 }}
+            >
               <img
                 src={jacFull}
                 alt="JAC"
-                className="h-[180px] md:h-[240px] w-auto object-contain object-bottom"
-                style={{ filter: "drop-shadow(0 0 40px hsl(270 100% 65% / 0.28))" }}
+                className="h-[260px] md:h-[340px] w-auto object-contain object-bottom relative z-10"
+                style={{ filter: "drop-shadow(0 0 60px hsl(270 100% 65% / 0.45))" }}
                 data-testid="img-jac-hero"
+              />
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{ background: "linear-gradient(to right, transparent 50%, hsl(222 47% 7%))" }}
               />
             </div>
 
             {/* Text + actions */}
-            <div className="flex-1 px-5 sm:px-8 pb-8 pt-3 md:pt-10 text-center md:text-left">
+            <div className="flex-1 px-6 sm:px-8 py-8 flex flex-col justify-center text-center md:text-left">
 
-              <div
-                className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full text-[10px] font-display tracking-widest"
-                style={{ background: "hsl(270 100% 65% / 0.1)", border: "1px solid hsl(270 100% 65% / 0.25)", color: "hsl(270 100% 78%)" }}
-              >
-                ✦ JUST ASK JAC
+              {/* Online indicator */}
+              <div className="inline-flex items-center gap-2 mb-4 justify-center md:justify-start">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                <span className="text-[10px] font-display font-black tracking-[0.25em] text-emerald-400">ONLINE · READY TO HELP</span>
               </div>
 
-              <h2 className="font-display font-black text-3xl sm:text-4xl text-white tracking-tight leading-tight">
-                Hi, I'm JAC.
+              <h2 className="font-display font-black text-4xl sm:text-5xl text-white tracking-tight leading-none mb-2">
+                Meet JAC
               </h2>
-              <p className="font-display font-bold text-lg text-white/60 mt-1 mb-2">
-                Your Team GUBER Coordinator.
+              <p className="font-display font-bold text-base mb-5 tracking-wide" style={{ color: "hsl(270 100% 72%)" }}>
+                Job Assistance Coordinator
               </p>
-              <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto md:mx-0">
-                Tell me what you need and I'll guide you step by step — no account required to start.
+              <p className="text-sm text-white/55 leading-relaxed mb-6 max-w-md mx-auto md:mx-0">
+                Ask JAC about finding work, hiring help, posting tasks, or how GUBER works. No account needed to start — just ask.
               </p>
 
-              {/* CTA buttons */}
-              <div className="flex flex-wrap gap-2 justify-center md:justify-start mb-5">
+              {/* Primary CTAs */}
+              <div className="flex flex-wrap gap-3 justify-center md:justify-start mb-5">
                 <JacConvaiVoice />
                 <button
                   onClick={() => openChat()}
-                  className="flex items-center gap-2 h-10 px-5 rounded-xl text-sm font-display font-bold tracking-wide transition-all active:scale-95"
+                  className="flex items-center gap-2 h-11 px-6 rounded-xl text-sm font-display font-black tracking-wide transition-all active:scale-95"
                   style={{
-                    background: "hsl(222 47% 12%)",
-                    border: "1px solid hsl(270 100% 65% / 0.3)",
-                    color: "hsl(270 100% 78%)",
+                    background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))",
+                    color: "black",
+                    boxShadow: "0 0 20px hsl(270 100% 65% / 0.3)",
                   }}
                   data-testid="button-jac-type"
                 >
-                  <MessageSquare className="w-3.5 h-3.5" /> Type to JAC
+                  <MessageSquare className="w-4 h-4" /> Ask JAC
                 </button>
-                <Link
-                  href="/get-started"
-                  className="flex items-center gap-2 h-10 px-5 rounded-xl text-sm font-display font-bold tracking-wide transition-all active:scale-95 no-underline"
-                  style={{ background: "hsl(222 47% 12%)", border: "1px solid hsl(222 47% 22%)", color: "hsl(0 0% 65%)" }}
-                  data-testid="link-jac-get-started"
-                >
-                  Get Started <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
               </div>
 
-              {/* Quick chips — the 11 opening options */}
+              {/* Quick action chips */}
+              <p className="text-[10px] font-display tracking-widest mb-2 text-center md:text-left" style={{ color: "hsl(0 0% 35%)" }}>WHAT DO YOU NEED?</p>
               <div className="flex flex-wrap gap-1.5 justify-center md:justify-start">
-                {OPENING_OPTIONS.map((opt) => (
+                {OPENING_OPTIONS.slice(0, 8).map((opt) => (
                   <button
                     key={opt.label}
                     onClick={() => openChat(opt.message)}
-                    className="px-3 py-1.5 rounded-full text-xs font-display font-semibold transition-all active:scale-95 hover:border-purple-500/40"
-                    style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 20%)", color: "rgba(255,255,255,0.65)" }}
+                    className="px-3 py-1.5 rounded-full text-xs font-display font-semibold transition-all active:scale-95 hover:border-purple-500/50"
+                    style={{ background: "hsl(222 47% 10%)", border: "1px solid hsl(222 47% 22%)", color: "rgba(255,255,255,0.7)" }}
                     data-testid={`chip-jac-${opt.label.toLowerCase().replace(/[\s']+/g, "-")}`}
                   >
                     {opt.label}
                   </button>
                 ))}
               </div>
+              <p className="text-[10px] mt-4 text-center md:text-left" style={{ color: "hsl(0 0% 28%)" }}>
+                No account needed · Voice powered by ElevenLabs
+              </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Floating JAC bubble — visible while minimized so users know she's always available */}
-
+      {/* Floating JAC bubble — visible while minimized */}
       <button
         onClick={() => { unlockAudioContext(); setMode("chat"); }}
         className="fixed z-[150] w-14 h-14 rounded-full overflow-hidden transition-all active:scale-95"
@@ -720,13 +721,16 @@ export function JacHomepage() {
         }}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-4 flex-shrink-0" style={{ borderBottom: "1px solid hsl(222 47% 13%)" }}>
-          <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0" style={{ border: "1.5px solid hsl(270 100% 65% / 0.4)" }}>
+        <div className="flex items-center gap-3 px-4 py-3 flex-shrink-0" style={{ borderBottom: "1px solid hsl(222 47% 13%)", background: "linear-gradient(135deg, hsl(222 47% 8%), hsl(270 60% 7%))" }}>
+          <div className="w-11 h-11 rounded-xl overflow-hidden flex-shrink-0" style={{ border: "2px solid hsl(270 100% 65% / 0.5)", boxShadow: "0 0 14px hsl(270 100% 65% / 0.3)" }}>
             <img src={jacPortrait} alt="JAC" className="w-full h-full object-cover object-top" />
           </div>
           <div>
-            <p className="text-sm font-display font-black text-white tracking-wide leading-none">JAC</p>
-            <p className="text-[10px] text-muted-foreground font-display tracking-wider mt-0.5">Team GUBER Coordinator</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-display font-black text-white tracking-wide leading-none">JAC</p>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+            </div>
+            <p className="text-[10px] font-display tracking-wider mt-0.5" style={{ color: "hsl(270 100% 72%)" }}>Job Assistance Coordinator · Online</p>
           </div>
           <div className="ml-auto flex items-center gap-2">
             {ttsSupported && (
@@ -900,7 +904,7 @@ export function JacHomepage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); processInput(input); } }}
-              placeholder="Tell JAC what you need…"
+              placeholder="Ask JAC anything about GUBER…"
               className="flex-1 bg-transparent border-0 resize-none text-sm text-white placeholder:text-muted-foreground outline-none min-h-[36px] max-h-[100px] py-1.5 px-0 leading-relaxed"
               rows={1}
               disabled={typing}
@@ -963,7 +967,7 @@ export function JacHomepage() {
             </button>
           </div>
           <p className="text-center text-[10px] text-muted-foreground/40 mt-2 font-display tracking-wide">
-            JUST ASK JAC · Free to start · No account needed to chat
+            JAC · Free to chat · No account needed · Voice by ElevenLabs
           </p>
         </div>
       </div>
