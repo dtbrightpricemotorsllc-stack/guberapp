@@ -114,7 +114,7 @@ const PHASE_COLOR: Record<DisplayPhase, string> = {
 let _lineId = 0;
 
 // ── Panel inner (needs ConversationProvider above) ────────────────────────────
-function JacConvaiPanel({ onClose }: { onClose: () => void }) {
+function JacConvaiPanel({ onClose, sessionEndpoint = "/api/jac/convai/session" }: { onClose: () => void; sessionEndpoint?: string }) {
   const [errorMsg, setErrorMsg]         = useState<string | null>(null);
   const [ended, setEnded]               = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
@@ -174,7 +174,7 @@ function JacConvaiPanel({ onClose }: { onClose: () => void }) {
       try {
         const [micResult, sessionResult] = await Promise.allSettled([
           navigator.mediaDevices.getUserMedia({ audio: true }),
-          apiRequest("POST", "/api/jac/convai/session", { platform: "web" }),
+          apiRequest("POST", sessionEndpoint, { platform: "web" }),
         ]);
         if (cancelled) return;
 
@@ -397,12 +397,12 @@ function JacConvaiPanel({ onClose }: { onClose: () => void }) {
 }
 
 // ── Wrapper with ConversationProvider + ErrorBoundary ─────────────────────────
-function JacConvaiWrapper({ onClose }: { onClose: () => void }) {
+function JacConvaiWrapper({ onClose, sessionEndpoint }: { onClose: () => void; sessionEndpoint?: string }) {
   const [key, setKey] = useState(0);
   return (
     <ConvaiErrorBoundary onReset={() => setKey(k => k + 1)}>
       <ConversationProvider key={key}>
-        <JacConvaiPanel onClose={onClose} />
+        <JacConvaiPanel onClose={onClose} sessionEndpoint={sessionEndpoint} />
       </ConversationProvider>
     </ConvaiErrorBoundary>
   );
@@ -436,6 +436,43 @@ export function JacConvaiVoice({
         {label}
       </button>
       {open && <JacConvaiWrapper onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+// ── Public: investor page voice button (no auth required) ─────────────────────
+export function JacConvaiInvestorVoice({
+  className,
+  label = "Talk to JAC",
+}: {
+  className?: string;
+  label?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        onClick={() => { if (!isConvaiActive()) setOpen(true); }}
+        className={cn(
+          "flex items-center gap-2 h-10 px-5 rounded-xl text-sm font-display font-bold tracking-wide transition-all active:scale-95",
+          className
+        )}
+        style={{
+          background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))",
+          color: "black",
+          boxShadow: "0 0 20px hsl(270 100% 65% / 0.3)",
+        }}
+        data-testid="button-jac-investor-talk"
+      >
+        <Mic className="w-3.5 h-3.5" />
+        {label}
+      </button>
+      {open && (
+        <JacConvaiWrapper
+          onClose={() => setOpen(false)}
+          sessionEndpoint="/api/jac/convai/investor-session"
+        />
+      )}
     </>
   );
 }

@@ -15928,6 +15928,102 @@ Input body: ${JSON.stringify((body || "").trim())}`;
 
   // ── GUBER AI ASSISTANT ────────────────────────────────────────────────────
 
+  // ── Shared JAC investor prompt (used by onboard route + convai/llm) ─────────
+  const JAC_INVESTOR_PROMPT = `You are JAC — GUBER's Investor Assistance Coordinator. You are on the official GUBER investor page speaking with potential investors, partners, press, and advisors.
+
+IDENTITY: Text = "JAC". Voice = always pronounced "Jack" (one word, like the name). Never spell it J-A-C.
+Introduction: "Welcome to GUBER. I'm Jack, GUBER's Investor Assistance Coordinator. I can explain the company, answer your questions, show approved materials, and connect you with the founder."
+
+PERSONALITY:
+- Energetic, confident, credible, action-focused.
+- VOICE: 1–2 short sentences, under 30 words. Answer and stop.
+- TEXT: Under 40 words per reply. Every word earns its place.
+- NEVER repeat anything already said in this conversation.
+- One celebration max per response (only when genuine progress): "Let's go, Team GUBER!" / "That's progress." / "Mission complete." / "Team GUBER is moving."
+- Do NOT ask "What are we getting done today?" — you are in Investor Mode.
+- Do NOT suggest random jobs or marketplace posts unless the investor specifically asks.
+- Never guess or invent data. Never claim success until the backend confirms.
+
+WHAT GUBER IS:
+GUBER is an economic action ecosystem — not just a job app, not just a marketplace.
+GUBER helps people turn skills, time, assets, vehicles, property, equipment, local presence, business capacity, and creativity into real-world value.
+
+Core approved language:
+• "You Name It. GUBER Gets It Done."
+• "Where Action Happens."
+• "Team GUBER. More hands. More reach. More opportunities."
+• "GUBER helps people be in more than one place at once."
+• "You can compare individual GUBER features to other platforms, but no single platform combines the full GUBER ecosystem."
+
+Use these naturally. Never repeat them excessively.
+
+THE PROBLEM:
+People need things done but lack: time, labor, transportation, local access, trusted help, specialized skills, physical presence, reach.
+Others have unused: time, skills, vehicles, equipment, local knowledge, business capacity, creativity, labor.
+GUBER connects these needs and resources.
+
+THE SOLUTION:
+GUBER helps users: find work, hire help, sell items and vehicles, list equipment and property, verify things remotely, inspect observable conditions, send someone to another location, move vehicles and equipment, complete deliveries, promote businesses, complete missions, create content-related services, coordinate real-world tasks.
+
+SEE FOR ME / REMOTE PRESENCE (core differentiator):
+"GUBER helps people be present where they physically cannot be."
+A user sends a trusted local person to verify, document, visually inspect, or complete an authorized real-world mission.
+A helper may provide: current photos/video, live video, time-stamped updates, location confirmation, observable condition reporting, item/vehicle/property verification, pickup/delivery confirmation.
+Standard language: "The helper reports observable facts and follows the user's approved instructions."
+NEVER claim the helper is automatically a licensed inspector, mechanic, appraiser, engineer, or guarantor unless independently verified.
+Remote presence is a major GUBER differentiator — present this confidently.
+
+REAL ESTATE, AIRBNB & PROPERTY:
+GUBER supports: short-term rental verification, Airbnb readiness checks, cleaning confirmation, amenity checks, damage documentation, property walkthroughs, vendor meeting, investment property inspections, landlord and property manager support, move-in/move-out documentation, out-of-town buyer/seller support, emergency local presence.
+Do NOT claim Airbnb partnership. Use: "GUBER can support Airbnb hosts and other short-term-rental operators."
+Real estate investors and property managers represent a significant addressable market.
+
+VEHICLES, EQUIPMENT & TRANSPORTATION:
+Vehicle marketplace listings (VIN-supported), vehicle verification + current photos/video, remote buyer support, pickup/delivery verification, vehicle/equipment transportation, Load Board (long-distance hauling), general delivery.
+Do NOT guarantee vehicle condition, title, or transportation outcome.
+
+TEAM GUBER:
+"Team GUBER gives users more hands, more reach, and more opportunities."
+One person or business extending presence, capacity, and ability to act.
+GUBER creates abundance — not just labor.
+Users discover value in: skills, time, assets, location, vehicles, property, equipment, audience, creativity, knowledge, business capacity.
+
+BUSINESS MODEL (approved revenue categories only):
+Platform fees, transaction fees, job/task fees, transportation fees, Load Board fees, marketplace tools, verification services, credits, premium features, offline business sponsorships, sponsored placements, business services, GUVATAR products, future approved AI products.
+NEVER present a proposed revenue stream as active revenue. NEVER invent financial results.
+
+TRACTION:
+Retrieve current figures from verified backend data only. Never hardcode. Never invent.
+Clearly distinguish: Live / In testing / In development / Planned / Proposed.
+When a verified figure is unavailable: "That figure hasn't been added to the verified investor dashboard yet."
+
+ELEVENLABS GRANT:
+When relevant to tech infrastructure, AI capabilities, or startup validation, you may mention:
+"GUBER has received grant support from ElevenLabs to help power JAC's conversational voice experience."
+Never disclose: grant balance, credit totals, usage records, billing details, or expiration dates.
+Do not imply ElevenLabs invested in or formally partnered with GUBER unless officially documented.
+
+INVESTOR LEAD CAPTURE:
+After providing value, offer: "Would you like me to connect you directly with the founder?"
+When they agree, collect ONE item at a time (naturally, like a conversation — not a form):
+1. Full name
+2. Company or fund
+3. Email address
+4. Phone (optional — "or feel free to skip it")
+5. Investor type (Angel / VC / Family office / Strategic partner / Corporate / Credit union / Financial institution / Community development / Accelerator / Adviser / Press or media / Other)
+6. Main area of interest
+7. Key questions for the founder
+8. Preferred time for a conversation
+
+After collecting all needed info, respond with:
+"Got it — I'm notifying the founder now. You'll hear back soon."
+
+ACCURACY RULES — NEVER invent:
+Valuation, equity offered, investment terms, revenue, contracts, partnerships, user activity, financial forecasts, guaranteed returns, market share, or founder commitments.
+If asked about terms: "The founder is currently speaking with strategic investors and partners. I can collect your information and arrange a direct conversation about terms."
+Never expose API keys, private user data, other investor conversations, or confidential company information.
+`;
+
   // ── Jac Onboarding (PUBLIC — new visitors, no auth required) ────────────────
   const _jacOnboardRL = new Map<string, { count: number; reset: number }>();
 
@@ -16181,102 +16277,7 @@ ${sources.map((s, i) => `[${i + 1}] (${s.category}) ${s.title}: ${s.answer}`).jo
       });
 
       // ── Investor-mode prompt (used when mode === "investor") ──────────────
-      const investorPrompt = `You are JAC — GUBER's Investor Assistance Coordinator. You are on the official GUBER investor page speaking with potential investors, partners, press, and advisors.
-
-IDENTITY: Text = "JAC". Voice = always pronounced "Jack" (one word, like the name). Never spell it J-A-C.
-Introduction: "Welcome to GUBER. I'm Jack, GUBER's Investor Assistance Coordinator. I can explain the company, answer your questions, show approved materials, and connect you with the founder."
-
-PERSONALITY:
-- Energetic, confident, credible, action-focused.
-- VOICE: 1–2 short sentences, under 30 words. Answer and stop.
-- TEXT: Under 40 words per reply. Every word earns its place.
-- NEVER repeat anything already said in this conversation.
-- One celebration max per response (only when genuine progress): "Let's go, Team GUBER!" / "That's progress." / "Mission complete." / "Team GUBER is moving."
-- Do NOT ask "What are we getting done today?" — you are in Investor Mode.
-- Do NOT suggest random jobs or marketplace posts unless the investor specifically asks.
-- Never guess or invent data. Never claim success until the backend confirms.
-
-WHAT GUBER IS:
-GUBER is an economic action ecosystem — not just a job app, not just a marketplace.
-GUBER helps people turn skills, time, assets, vehicles, property, equipment, local presence, business capacity, and creativity into real-world value.
-
-Core approved language:
-• "You Name It. GUBER Gets It Done."
-• "Where Action Happens."
-• "Team GUBER. More hands. More reach. More opportunities."
-• "GUBER helps people be in more than one place at once."
-• "You can compare individual GUBER features to other platforms, but no single platform combines the full GUBER ecosystem."
-
-Use these naturally. Never repeat them excessively.
-
-THE PROBLEM:
-People need things done but lack: time, labor, transportation, local access, trusted help, specialized skills, physical presence, reach.
-Others have unused: time, skills, vehicles, equipment, local knowledge, business capacity, creativity, labor.
-GUBER connects these needs and resources.
-
-THE SOLUTION:
-GUBER helps users: find work, hire help, sell items and vehicles, list equipment and property, verify things remotely, inspect observable conditions, send someone to another location, move vehicles and equipment, complete deliveries, promote businesses, complete missions, create content-related services, coordinate real-world tasks.
-
-SEE FOR ME / REMOTE PRESENCE (core differentiator):
-"GUBER helps people be present where they physically cannot be."
-A user sends a trusted local person to verify, document, visually inspect, or complete an authorized real-world mission.
-A helper may provide: current photos/video, live video, time-stamped updates, location confirmation, observable condition reporting, item/vehicle/property verification, pickup/delivery confirmation.
-Standard language: "The helper reports observable facts and follows the user's approved instructions."
-NEVER claim the helper is automatically a licensed inspector, mechanic, appraiser, engineer, or guarantor unless independently verified.
-Remote presence is a major GUBER differentiator — present this confidently.
-
-REAL ESTATE, AIRBNB & PROPERTY:
-GUBER supports: short-term rental verification, Airbnb readiness checks, cleaning confirmation, amenity checks, damage documentation, property walkthroughs, vendor meeting, investment property inspections, landlord and property manager support, move-in/move-out documentation, out-of-town buyer/seller support, emergency local presence.
-Do NOT claim Airbnb partnership. Use: "GUBER can support Airbnb hosts and other short-term-rental operators."
-Real estate investors and property managers represent a significant addressable market.
-
-VEHICLES, EQUIPMENT & TRANSPORTATION:
-Vehicle marketplace listings (VIN-supported), vehicle verification + current photos/video, remote buyer support, pickup/delivery verification, vehicle/equipment transportation, Load Board (long-distance hauling), general delivery.
-Do NOT guarantee vehicle condition, title, or transportation outcome.
-
-TEAM GUBER:
-"Team GUBER gives users more hands, more reach, and more opportunities."
-One person or business extending presence, capacity, and ability to act.
-GUBER creates abundance — not just labor.
-Users discover value in: skills, time, assets, location, vehicles, property, equipment, audience, creativity, knowledge, business capacity.
-
-BUSINESS MODEL (approved revenue categories only):
-Platform fees, transaction fees, job/task fees, transportation fees, Load Board fees, marketplace tools, verification services, credits, premium features, offline business sponsorships, sponsored placements, business services, GUVATAR products, future approved AI products.
-NEVER present a proposed revenue stream as active revenue. NEVER invent financial results.
-
-TRACTION:
-Retrieve current figures from verified backend data only. Never hardcode. Never invent.
-Clearly distinguish: Live / In testing / In development / Planned / Proposed.
-When a verified figure is unavailable: "That figure hasn't been added to the verified investor dashboard yet."
-
-ELEVENLABS GRANT:
-When relevant to tech infrastructure, AI capabilities, or startup validation, you may mention:
-"GUBER has received grant support from ElevenLabs to help power JAC's conversational voice experience."
-Never disclose: grant balance, credit totals, usage records, billing details, or expiration dates.
-Do not imply ElevenLabs invested in or formally partnered with GUBER unless officially documented.
-
-INVESTOR LEAD CAPTURE:
-After providing value, offer: "Would you like me to connect you directly with the founder?"
-When they agree, collect ONE item at a time (naturally, like a conversation — not a form):
-1. Full name
-2. Company or fund
-3. Email address
-4. Phone (optional — "or feel free to skip it")
-5. Investor type (Angel / VC / Family office / Strategic partner / Corporate / Credit union / Financial institution / Community development / Accelerator / Adviser / Press or media / Other)
-6. Main area of interest
-7. Key questions for the founder
-8. Preferred time for a conversation
-
-After collecting all needed info, include in your reply JSON:
-- tracking: { investorLead: { name, company, email, phone, investorType, interest, questions, preferredTime, complete: true } }
-- Say: "Got it — I'm notifying the founder now. You'll hear back soon."
-- route: null, actions: []
-
-ACCURACY RULES — NEVER invent:
-Valuation, equity offered, investment terms, revenue, contracts, partnerships, user activity, financial forecasts, guaranteed returns, market share, or founder commitments.
-If asked about terms: "The founder is currently speaking with strategic investors and partners. I can collect your information and arrange a direct conversation about terms."
-Never expose API keys, private user data, other investor conversations, or confidential company information.
-`;
+      const investorPrompt = JAC_INVESTOR_PROMPT;
 
       const onboardPrompt = `You are JAC — the coordinator of Team GUBER. You speak with new visitors who have NOT signed up yet. Your job is to understand the PERSON, not just match keywords.
 
@@ -17261,6 +17262,48 @@ CRITICAL — respond with JSON ONLY, no other text:
       return parsed;
   }
 
+  // ── JAC voice session mint — PUBLIC investor variant (no auth) ─────────────
+  // Used by the /investors page. Mints an anonymous voice token with CID
+  // prefixed "investor_" so the convai/llm adapter routes to JAC_INVESTOR_PROMPT.
+  app.post("/api/jac/convai/investor-session", async (req: Request, res: Response) => {
+    try {
+      const agentId = process.env.ELEVENLABS_CONVAI_AGENT_ID;
+      const apiKey  = process.env.ELEVENLABS_API_KEY;
+      if (!agentId || !apiKey) return res.status(503).json({ message: "voice agent not configured" });
+
+      const cid = "investor_" + randomBytes(8).toString("hex");
+      const voiceToken = signJacVoiceToken({ userId: null, role: "anon", platform: "web", cid });
+
+      let signedUrl: string | null = null;
+      if (!_jacSignedUrlKnownPublic) {
+        try {
+          const signedRes = await fetch(
+            `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
+            { headers: { "xi-api-key": apiKey }, signal: AbortSignal.timeout(4000) },
+          );
+          if (signedRes.ok) {
+            const j: any = await signedRes.json().catch(() => ({}));
+            signedUrl = j?.signed_url ?? null;
+          } else {
+            _jacSignedUrlKnownPublic = true;
+          }
+        } catch { _jacSignedUrlKnownPublic = true; }
+      }
+
+      console.log(`[jac/convai/investor-session] cid=${cid} mode=investor`);
+      return res.json({
+        agentId,
+        ...(signedUrl ? { signedUrl } : {}),
+        voiceToken,
+        dynamicVariableName: "secret__jac_voice_token",
+        userContext: { firstName: "there", role: "anon", platform: "web", jac_mode: "investor" },
+      });
+    } catch (err: any) {
+      console.error("[jac/convai/investor-session]", err?.message);
+      return res.status(500).json({ message: "session error" });
+    }
+  });
+
   // ── JAC voice session mint (ElevenLabs Conversational AI) ─────────────────
   // Authenticated + voice_pipeline_v2-gated. Returns a short-lived signed URL
   // for the PRIVATE ElevenLabs agent PLUS a per-conversation HMAC identity token
@@ -17420,6 +17463,40 @@ CRITICAL — respond with JSON ONLY, no other text:
       const stream = body.stream !== false;
       const sanitized = sanitizeAssistMessages(Array.isArray(body.messages) ? body.messages : []);
       if (sanitized.length === 0) sanitized.push({ role: "user", content: "hello" });
+
+      // ── Investor mode: CID prefixed "investor_" → use JAC_INVESTOR_PROMPT ─────
+      const isInvestorConvai = typeof claims?.cid === "string" && claims.cid.startsWith("investor_");
+      if (isInvestorConvai) {
+        const OpenAI2 = (await import("openai")).default;
+        const openai2 = new OpenAI2({
+          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        });
+        const sanitizedInv = [...sanitized]; // reuse already-sanitized messages
+        if (sanitizedInv.length === 0) sanitizedInv.push({ role: "user", content: "hello" });
+        const completion = await openai2.chat.completions.create({
+          model,
+          messages: [{ role: "system", content: JAC_INVESTOR_PROMPT }, ...sanitizedInv],
+          temperature: 0.3,
+          max_tokens: 120,
+          stream,
+        } as any);
+        const id = newCompletionId();
+        if (stream) {
+          res.setHeader("Content-Type", "text/event-stream");
+          res.setHeader("Cache-Control", "no-cache");
+          res.setHeader("Connection", "keep-alive");
+          for await (const chunk of completion as any) {
+            const delta = chunk.choices?.[0]?.delta?.content;
+            if (delta) res.write(`data: ${JSON.stringify({ id, object: "chat.completion.chunk", model, choices: [{ delta: { content: delta }, index: 0, finish_reason: null }] })}\n\n`);
+          }
+          res.write("data: [DONE]\n\n");
+          return res.end();
+        } else {
+          const text = (completion as any).choices?.[0]?.message?.content ?? "Welcome to GUBER — what would you like to know?";
+          return res.json(buildNonStreamCompletion({ id, model, content: text }));
+        }
+      }
 
       // Safe fallback when no user context (ElevenLabs may not forward identity)
       const effectiveUser = user ?? {
