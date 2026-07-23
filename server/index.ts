@@ -1794,6 +1794,23 @@ app.use((req, res, next) => {
   seedPlatformSettings().catch(e => console.error("[seed] Platform settings seed error:", e));
 
   pool.query(`
+    CREATE TABLE IF NOT EXISTS investor_leads (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      company TEXT,
+      email TEXT NOT NULL,
+      phone TEXT,
+      investor_type TEXT,
+      interest TEXT,
+      questions TEXT,
+      preferred_time TEXT,
+      conversation_summary TEXT,
+      notified_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(e => console.error("[seed] investor_leads table error:", e));
+
+  pool.query(`
     INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoint, credits_cost, active) VALUES
       ('listing_video', 'Listing Video',
        'Property or product listing walkthrough video (35 cr).',

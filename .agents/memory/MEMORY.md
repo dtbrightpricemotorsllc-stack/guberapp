@@ -34,6 +34,7 @@
 - [JAC voice latency optimization](jac-voice-latency-optimization.md) — eleven_flash_v2_5 streaming model + MediaSource progressive playback + voiceMode-gated short/warm prompt + admin-visible fallback logging.
 - [Wallet status enum consistency](wallet-status-enum-consistency.md) — wallet_transactions.status must exactly match wallet.tsx's filter strings ("available"/"pending") or balances silently show $0.
 - [JAC System Guardian + both surfaces](jac-system-guardian.md) — every JAC change hits BOTH onboard+guber-assist; adding a KB topic = 4 touch points w/ a seed-guard trap; system_issues deduped & monotonic.
+- [JAC mode system](jac-mode-system.md) — /api/jac/onboard accepts mode:"homepage"|"investor"|"app"|"admin"; investor mode routes to investorPrompt; jac_mode passed to ElevenLabs ConvAI as {{jac_mode}} dynamic variable; ELEVENLABS_CONVAI_AGENT_ID must be re-added to Replit secrets.
 - [App Store 3.1.1 wording review](app-store-3-1-1-wording.md) — grep `isStoreBuild` conditionals hiding cost text, and CTA verbs like "claim/get" next to a fee, as the two recurring 3.1.1-flaggable patterns.
 - [Native camera capture coverage](native-camera-capture-coverage.md) — `capture="environment"` alone silently fails in Capacitor WKWebView; must call @capacitor/camera; a fix on one screen doesn't cover others using the same raw pattern.
 - [createAuditLog schema mismatch](createaudit-log-schema.md) — only pass userId/action/details/ipAddress; wrong field names (actorId/entityType/metadata) crash inserts with a misleading unrelated-looking error.

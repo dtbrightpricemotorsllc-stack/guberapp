@@ -433,7 +433,7 @@ export function JacHomepage() {
       const res = await fetch("/api/jac/onboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next.map(m => ({ role: m.role, content: m.content })) }),
+        body: JSON.stringify({ mode: "homepage", messages: next.map(m => ({ role: m.role, content: m.content })) }),
       });
       const data = await res.json();
 
