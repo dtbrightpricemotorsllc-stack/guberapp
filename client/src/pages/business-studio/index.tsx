@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -183,8 +183,73 @@ function LoginCodeView({ email, config, onSuccess, onBack }: { email: string; co
   );
 }
 
+// ── Law-themed prompt templates ─────────────────────────────────────────────
+const LAW_TEMPLATES = [
+  {
+    label: "Scales of Justice",
+    emoji: "⚖️",
+    gradient: "linear-gradient(135deg, #1a1200 0%, #0d0a00 100%)",
+    border: "#3d2e00",
+    prompt: "Dramatic cinematic close-up of golden scales of justice on a polished mahogany desk, dark moody background with god rays of light, law firm premium aesthetic, 8K photography",
+  },
+  {
+    label: "Grand Courtroom",
+    emoji: "🏛",
+    gradient: "linear-gradient(135deg, #0d1020 0%, #070812 100%)",
+    border: "#1a2040",
+    prompt: "Grand empty American courtroom with wooden pews, judge's bench, American flag, warm golden sunlight streaming through tall arched windows, cinematic wide angle, awe-inspiring",
+  },
+  {
+    label: "Law Library",
+    emoji: "📚",
+    gradient: "linear-gradient(135deg, #100a00 0%, #0a0600 100%)",
+    border: "#2a1800",
+    prompt: "Elegant floor-to-ceiling law library with rows of leather-bound law books, rolling wooden ladder, warm amber lighting, rich mahogany shelving, premium luxury atmosphere, cinematic",
+  },
+  {
+    label: "Attorney Portrait",
+    emoji: "👔",
+    gradient: "linear-gradient(135deg, #0a0d14 0%, #060810 100%)",
+    border: "#1a2030",
+    prompt: "Professional attorney in a perfectly tailored dark navy suit, confident composed expression, modern glass-walled law office background with city view, dramatic studio lighting, premium editorial portrait",
+  },
+  {
+    label: "Justice Gavel",
+    emoji: "🔨",
+    gradient: "linear-gradient(135deg, #140800 0%, #0a0500 100%)",
+    border: "#301500",
+    prompt: "Extreme close-up of a polished dark wood gavel resting on a sound block, pitch black background, single dramatic spotlight from above, cinematic depth of field, high contrast photography",
+  },
+  {
+    label: "Trust & Partnership",
+    emoji: "🤝",
+    gradient: "linear-gradient(135deg, #001410 0%, #000d0a 100%)",
+    border: "#003025",
+    prompt: "Professional handshake between two people in executive business attire in a modern law office, trust and partnership concept, warm bokeh background, premium corporate photography",
+  },
+  {
+    label: "City Law Office",
+    emoji: "🌆",
+    gradient: "linear-gradient(135deg, #090914 0%, #050510 100%)",
+    border: "#18183a",
+    prompt: "Luxury corner office in a high-rise law firm, floor-to-ceiling panoramic windows overlooking a glittering city skyline at golden hour, leather chairs, dark wood desk, cinematic dusk lighting",
+  },
+  {
+    label: "Legal Document",
+    emoji: "📜",
+    gradient: "linear-gradient(135deg, #0e0e0a 0%, #080808 100%)",
+    border: "#252520",
+    prompt: "Premium legal contract document on a polished glass desk with a luxury gold fountain pen, soft professional bokeh background, warm mood lighting, law firm atmosphere",
+  },
+];
+
 // ── Dashboard ───────────────────────────────────────────────────────────────
-function DashboardView({ config, session, onNavigate }: { config?: StudioConfig; session: StudioSession; onNavigate: (v: View) => void }) {
+function DashboardView({ config, session, onNavigate, onTemplateSelect }: {
+  config?: StudioConfig;
+  session: StudioSession;
+  onNavigate: (v: View) => void;
+  onTemplateSelect: (prompt: string) => void;
+}) {
   const { data: recent = [] } = useQuery<ContentItem[]>({
     queryKey: [API("/content"), "recent"],
     queryFn: async () => {
@@ -256,6 +321,42 @@ function DashboardView({ config, session, onNavigate }: { config?: StudioConfig;
               </div>
             </button>
           ))}
+        </div>
+
+        {/* Templates section */}
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <span style={{ fontSize: 17, fontWeight: 700, color: TEXT }}>Templates</span>
+            <span style={{ fontSize: 12, color: TEXT3 }}>Tap to generate</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {LAW_TEMPLATES.map((t, i) => (
+              <button
+                key={i}
+                data-testid={`template-${i}`}
+                onClick={() => onTemplateSelect(t.prompt)}
+                style={{
+                  background: t.gradient,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: 14,
+                  padding: "16px 14px",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "transform 0.12s, border-color 0.12s",
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "scale(1.02)"; (e.currentTarget as HTMLElement).style.borderColor = GOLD; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = "scale(1)"; (e.currentTarget as HTMLElement).style.borderColor = t.border; }}
+              >
+                <div style={{ fontSize: 26, marginBottom: 8 }}>{t.emoji}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 4 }}>{t.label}</div>
+                <div style={{ fontSize: 11, color: TEXT2, lineHeight: 1.4 }}>{t.prompt.slice(0, 52)}…</div>
+                <div style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 4, background: `${GOLD}18`, border: `1px solid ${GOLD}33`, borderRadius: 20, padding: "3px 10px" }}>
+                  <Sparkles size={10} color={GOLD} />
+                  <span style={{ fontSize: 10, color: GOLD, fontWeight: 700 }}>Generate</span>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Library section */}
@@ -404,12 +505,16 @@ function UploadView({ onBack }: { onBack: () => void }) {
 }
 
 // ── AI Image Generation ─────────────────────────────────────────────────────
-function GenerateView({ onBack }: { onBack: () => void }) {
-  const [prompt, setPrompt] = useState("");
+function GenerateView({ onBack, initialPrompt }: { onBack: () => void; initialPrompt?: string }) {
+  const [prompt, setPrompt] = useState(initialPrompt ?? "");
   const [title, setTitle] = useState("");
   const [platform, setPlatform] = useState("Instagram (1:1)");
   const [result, setResult] = useState<{ id: number; previewUrl: string } | null>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (initialPrompt) setPrompt(initialPrompt);
+  }, [initialPrompt]);
   const qc = useQueryClient();
 
   const generate = useMutation({
@@ -877,6 +982,7 @@ function TeamView({ session, onBack }: { session: StudioSession; onBack: () => v
 export default function NxtgenLawGroupStudio() {
   const [view, setView] = useState<View>("login-email");
   const [pendingEmail, setPendingEmail] = useState("");
+  const [templatePrompt, setTemplatePrompt] = useState<string | undefined>();
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -920,9 +1026,9 @@ export default function NxtgenLawGroupStudio() {
 
   return (
     <StudioShell session={session} onLogout={() => logout.mutate()} onNavigate={setView}>
-      {view === "dashboard" && <DashboardView config={config} session={session} onNavigate={setView} />}
+      {view === "dashboard" && <DashboardView config={config} session={session} onNavigate={setView} onTemplateSelect={p => { setTemplatePrompt(p); setView("generate"); }} />}
       {view === "upload" && <UploadView onBack={() => setView("dashboard")} />}
-      {view === "generate" && <GenerateView onBack={() => setView("dashboard")} />}
+      {view === "generate" && <GenerateView onBack={() => { setTemplatePrompt(undefined); setView("dashboard"); }} initialPrompt={templatePrompt} />}
       {view === "generate-video" && <GenerateVideoView onBack={() => setView("dashboard")} />}
       {view === "library" && <LibraryView session={session} onBack={() => setView("dashboard")} />}
       {view === "team" && <TeamView session={session} onBack={() => setView("dashboard")} />}
