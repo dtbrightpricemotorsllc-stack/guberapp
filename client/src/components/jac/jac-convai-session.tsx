@@ -31,6 +31,7 @@ export interface JacConvaiSessionHandle {
 interface Props {
   active: boolean;
   sessionEndpoint?: string;
+  suppressFirstMessage?: boolean;
   onPhaseChange(phase: ConvaiPhase): void;
   onUserTranscript(text: string): void;
   onJacResponse(text: string): void;
@@ -38,7 +39,7 @@ interface Props {
 }
 
 export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
-  function JacConvaiSession({ active, sessionEndpoint = "/api/jac/convai/session", onPhaseChange, onUserTranscript, onJacResponse, onError }, ref) {
+  function JacConvaiSession({ active, sessionEndpoint = "/api/jac/convai/session", suppressFirstMessage = false, onPhaseChange, onUserTranscript, onJacResponse, onError }, ref) {
     const cbRef = useRef({ onPhaseChange, onUserTranscript, onJacResponse, onError });
     useEffect(() => {
       cbRef.current = { onPhaseChange, onUserTranscript, onJacResponse, onError };
@@ -155,6 +156,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           const params: Record<string, any> = { dynamicVariables: dynVars };
           if (session.signedUrl) params.signedUrl = session.signedUrl;
           else                   params.agentId   = session.agentId;
+          if (suppressFirstMessage) params.overrides = { agent: { firstMessage: "" } };
 
           startSession(params as any);
         } catch (err: any) {

@@ -240,6 +240,8 @@ export function JacHomepage() {
     cancelSpeech();
     cancelAllJacAudio();
     if (listening) stopListening();
+    // Prevent text TTS from also playing a greeting — ElevenLabs will speak first
+    greetingSpokenRef.current = true;
     setLiveMode(true);
     setLiveState("listening");
     setConvaiKey(k => k + 1);
@@ -705,6 +707,7 @@ export function JacHomepage() {
       ref={convaiSessionRef}
       active={liveMode}
       sessionEndpoint="/api/jac/convai/investor-session"
+      suppressFirstMessage
       onPhaseChange={handleConvaiPhaseChange}
       onUserTranscript={handleConvaiUserTranscript}
       onJacResponse={handleConvaiJacResponse}
