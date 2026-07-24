@@ -4,7 +4,9 @@ import { Send, Mic, Volume2, ArrowRight, MessageSquare, Minus, Loader2 } from "l
 import { JacConvaiVoice } from "@/components/jac/jac-convai-voice";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
-import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
+import { ConversationProvider } from "@elevenlabs/react";
+import { JacConvaiSession, type JacConvaiSessionHandle, type ConvaiPhase } from "@/components/jac/jac-convai-session";
+type ConversationState = "idle" | "listening" | "recording" | "processing" | "speaking";
 import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
@@ -197,76 +199,58 @@ export function JacHomepage() {
   const { listening, transcribing, start: startListening, stop: stopListening, supported: micSupported } =
     useSpeechInput((text) => processInput(text));
 
-  // ── Live Conversation Mode — always-listening, interruptible voice loop ──
-  // Reuses the existing per-character ElevenLabs TTS + Whisper STT stack
-  // (no ElevenLabs Conversational Agents / per-minute billing).
+  // ── ElevenLabs ConvAI — runs silently behind the mic button ──────────────
   const [liveMode, setLiveMode] = useState(false);
   const [liveState, setLiveState] = useState<ConversationState>("idle");
   const [jacVolume, setJacVolumeState] = useState(() => getJacVolume());
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
-  const engineRef = useRef<ConversationEngine | null>(null);
+  const [convaiKey, setConvaiKey] = useState(0);
+  const convaiSessionRef = useRef<JacConvaiSessionHandle | null>(null);
+  const liveModeRef = useRef(false);
+  useEffect(() => { liveModeRef.current = liveMode; }, [liveMode]);
 
-  function getEngine(): ConversationEngine {
-    if (!engineRef.current) {
-      engineRef.current = new ConversationEngine({
-        onUtterance: (text) => { processInput(text); },
-        onStateChange: setLiveState,
-        onError: (reason) => {
-          setLiveMode(false);
-          setLiveState("idle");
-          const sentinel = reason === "mic_denied" ? "__mic_denied__" : "__mic_error__";
-          processInput(sentinel);
-        },
-      });
-    }
-    return engineRef.current;
-  }
+  const handleConvaiPhaseChange = useCallback((phase: ConvaiPhase) => {
+    if (phase === "error") { setLiveMode(false); setLiveState("idle"); return; }
+    if (phase === "speaking") setLiveState("speaking");
+    else if (phase === "listening") setLiveState("recording");
+    else setLiveState("listening");
+  }, []);
+
+  const handleConvaiUserTranscript = useCallback((text: string) => {
+    setMessages(prev => [...prev, { role: "user" as const, content: text }]);
+  }, []);
+
+  const handleConvaiJacResponse = useCallback((text: string) => {
+    setMessages(prev => [...prev, { role: "assistant" as const, content: text }]);
+  }, []);
+
+  const handleConvaiError = useCallback((_msg: string) => {
+    setLiveMode(false);
+    setLiveState("idle");
+  }, []);
 
   function stopLiveMode() {
-    engineRef.current?.stop();
     setLiveMode(false);
     setLiveState("idle");
   }
 
-  async function toggleLiveMode() {
-    if (liveMode) {
-      stopLiveMode();
-      return;
-    }
-    // unlockAudioContext() MUST run synchronously inside this gesture handler
-    // so the AudioContext is in "running" state before any async work starts.
-    // After this call, audio will route through the loudspeaker on iOS/Android.
+  function toggleLiveMode() {
+    if (liveMode) { stopLiveMode(); return; }
     unlockAudioContext();
     cancelSpeech();
     cancelAllJacAudio();
     if (listening) stopListening();
-
-    // Play greeting NOW — AudioContext is running (unlocked above), so the
-    // audio goes through the loudspeaker on every platform.  The ref guard
-    // prevents double-play if the document click listener also fires.
-    if (!greetingSpokenRef.current) {
-      greetingSpokenRef.current = true;
-      const greetingText = messages[0]?.content ?? GREETING.content;
-      setTimeout(() => speak(greetingText), 200);
-    }
-
     setLiveMode(true);
-    await getEngine().start();
+    setLiveState("listening");
+    setConvaiKey(k => k + 1);
   }
 
-  // Wrapper around jacSpeak that keeps the live-mode VAD in sync with
-  // playback so it knows when to arm interruption detection and when to
-  // go back to plain listening once JAC finishes talking.
+  // speak — text-mode TTS only; no-ops when ConvAI is active (ElevenLabs handles audio)
   const speak = useCallback((text: string) => {
-    if (mutedRef.current) return;
-    const engine = engineRef.current;
-    jacSpeak(text, {
-      muted: mutedRef.current,
-      onStart: () => engine?.notifySpeakingStarted(),
-    }).then(() => engine?.notifySpeakingEnded()).catch(() => engine?.notifySpeakingEnded());
+    if (mutedRef.current || liveModeRef.current) return;
+    jacSpeak(text, { muted: mutedRef.current });
   }, []);
 
-  // Tear down the live mic stream on unmount, tab hide, or app background.
   useEffect(() => {
     function onVisibility() {
       if (document.visibilityState === "hidden") stopLiveMode();
@@ -290,8 +274,6 @@ export function JacHomepage() {
     return () => { handle?.then?.((h: any) => h.remove()).catch(() => {}); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => () => { engineRef.current?.stop(); }, []);
 
   // Dismiss float hint after 4s
   useEffect(() => {
@@ -435,7 +417,7 @@ export function JacHomepage() {
       //   • max 80 tokens vs 600, parallel KB context with 300ms timeout
       //   • anti-repetition rules — no "What brings you to GUBER?" loops
       // Text mode keeps the full /api/jac/onboard (buttons, routes, tracking).
-      const endpoint = liveMode ? "/api/jac/voice" : "/api/jac/onboard";
+      const endpoint = "/api/jac/onboard";
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -717,6 +699,17 @@ export function JacHomepage() {
   }
 
   return (
+    <ConversationProvider>
+    <JacConvaiSession
+      key={convaiKey}
+      ref={convaiSessionRef}
+      active={liveMode}
+      sessionEndpoint="/api/jac/convai/investor-session"
+      onPhaseChange={handleConvaiPhaseChange}
+      onUserTranscript={handleConvaiUserTranscript}
+      onJacResponse={handleConvaiJacResponse}
+      onError={handleConvaiError}
+    />
     <section className="relative z-10 px-4 sm:px-5 py-8 sm:py-12 max-w-6xl mx-auto w-full" data-testid="section-jac-chat">
       <div
         className="rounded-3xl flex flex-col"
@@ -978,5 +971,6 @@ export function JacHomepage() {
         </div>
       </div>
     </section>
+    </ConversationProvider>
   );
 }

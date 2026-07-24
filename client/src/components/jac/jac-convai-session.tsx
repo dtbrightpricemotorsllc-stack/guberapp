@@ -30,6 +30,7 @@ export interface JacConvaiSessionHandle {
 
 interface Props {
   active: boolean;
+  sessionEndpoint?: string;
   onPhaseChange(phase: ConvaiPhase): void;
   onUserTranscript(text: string): void;
   onJacResponse(text: string): void;
@@ -37,7 +38,7 @@ interface Props {
 }
 
 export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
-  function JacConvaiSession({ active, onPhaseChange, onUserTranscript, onJacResponse, onError }, ref) {
+  function JacConvaiSession({ active, sessionEndpoint = "/api/jac/convai/session", onPhaseChange, onUserTranscript, onJacResponse, onError }, ref) {
     const cbRef = useRef({ onPhaseChange, onUserTranscript, onJacResponse, onError });
     useEffect(() => {
       cbRef.current = { onPhaseChange, onUserTranscript, onJacResponse, onError };
@@ -101,7 +102,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
 
           const [micResult, sessionResult] = await Promise.allSettled([
             navigator.mediaDevices.getUserMedia({ audio: true }),
-            apiRequest("POST", "/api/jac/convai/session", { platform: "web" }),
+            apiRequest("POST", sessionEndpoint, { platform: "web" }),
           ]);
           if (cancelRef.current) return;
 
