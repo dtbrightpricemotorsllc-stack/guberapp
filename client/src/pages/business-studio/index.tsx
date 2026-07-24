@@ -265,14 +265,18 @@ function CreateView({ onBack, initialMode = "image", initialPrompt = "" }: {
   initialMode?: CreateMode;
   initialPrompt?: string;
 }) {
-  const [mode, setMode] = useState<CreateMode>(initialMode); // statebleed-allow: result cleared in handleModeChange before setMode
+  const [mode, setMode] = useState<CreateMode>(initialMode); // statebleed-allow: result+videoJobId cleared in handleModeChange before setMode
   const [prompt, setPrompt] = useState(initialPrompt);
   const [title, setTitle] = useState("");
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [result, setResult] = useState<{ previewUrl: string; contentType: string; saved: boolean } | null>(null);
+  const [videoJobId, setVideoJobId] = useState<string | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
+  const [pollSeconds, setPollSeconds] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -281,8 +285,40 @@ function CreateView({ onBack, initialMode = "image", initialPrompt = "" }: {
     if (initialMode) setMode(initialMode);
   }, [initialPrompt, initialMode]);
 
+  // Polling loop for async video jobs
+  useEffect(() => {
+    if (!videoJobId) return;
+    setIsPolling(true);
+    setPollSeconds(0);
+    let elapsed = 0;
+    pollRef.current = setInterval(async () => {
+      elapsed += 5;
+      setPollSeconds(elapsed);
+      try {
+        const res = await fetch(API(`/job/${videoJobId}`), { credentials: "include" });
+        const data = await res.json();
+        if (data.status === "completed") {
+          clearInterval(pollRef.current!);
+          setVideoJobId(null);
+          setIsPolling(false);
+          setResult({ previewUrl: data.previewUrl, contentType: data.contentType, saved: false });
+        } else if (data.status === "failed") {
+          clearInterval(pollRef.current!);
+          setVideoJobId(null);
+          setIsPolling(false);
+          toast({ title: "Video generation failed", description: data.error || "Please try again.", variant: "destructive" });
+        }
+        // "pending" → keep polling
+      } catch { /* network blip — keep polling */ }
+    }, 5000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [videoJobId]);
+
   const handleModeChange = (m: CreateMode) => {
     setResult(null);
+    setVideoJobId(null);
+    setIsPolling(false);
+    if (pollRef.current) clearInterval(pollRef.current);
     setMode(m);
   };
 
@@ -314,9 +350,16 @@ function CreateView({ onBack, initialMode = "image", initialPrompt = "" }: {
       return data;
     },
     onSuccess: (data: any) => {
-      setResult({ previewUrl: data.previewUrl, contentType: data.contentType, saved: false });
+      if (data.polling && data.jobId) {
+        // Video: server submitted to queue, client polls for completion
+        setResult(null);
+        setVideoJobId(data.jobId);
+      } else {
+        // Image: result ready immediately
+        setResult({ previewUrl: data.previewUrl, contentType: data.contentType, saved: false });
+      }
     },
-    onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
+    onError: (err: any) => toast({ title: "Generation failed", description: err.message, variant: "destructive" }),
   });
 
   const saveToLibrary = useMutation({
@@ -426,27 +469,42 @@ function CreateView({ onBack, initialMode = "image", initialPrompt = "" }: {
           style={{ background: CARD, border: `1px solid ${BORDER}`, color: TEXT, borderRadius: 12, marginBottom: 16, fontSize: 14 }}
         />
 
-        <Button data-testid="create-generate-btn" onClick={() => generate.mutate()} disabled={!prompt.trim() || generate.isPending}
-          style={{ width: "100%", background: mode === "image" ? GOLD : "#7c3aed", color: mode === "image" ? "#000" : "#fff", fontWeight: 700, borderRadius: 12, height: 52, fontSize: 16, marginBottom: result ? 28 : 0 }}>
+        <Button data-testid="create-generate-btn" onClick={() => generate.mutate()}
+          disabled={!prompt.trim() || generate.isPending || isPolling}
+          style={{ width: "100%", background: mode === "image" ? GOLD : "#7c3aed", color: mode === "image" ? "#000" : "#fff", fontWeight: 700, borderRadius: 12, height: 52, fontSize: 16, marginBottom: (result || isPolling) ? 28 : 0 }}>
           {generate.isPending ? (
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <RefreshCw size={15} className="animate-spin" />
-              {mode === "video" ? "Generating video… (2–3 min)" : "Generating image…"}
+              {mode === "video" ? "Submitting…" : "Generating image…"}
+            </span>
+          ) : isPolling ? (
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <RefreshCw size={15} className="animate-spin" />
+              Rendering video… {pollSeconds > 0 ? `${pollSeconds}s` : ""}
             </span>
           ) : (
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {mode === "image" ? <Sparkles size={15} /> : <Video size={15} />}
-              {result ? `New ${mode === "image" ? "Image" : "Video"}` : `Generate ${mode === "image" ? "Image" : "Video"}`}
+              {result ? `Generate Another` : `Generate ${mode === "image" ? "Image" : "Video"}`}
               {photo ? " from Photo" : ""}
             </span>
           )}
         </Button>
 
+        {/* ── Video polling progress ── */}
+        {isPolling && !result && (
+          <div data-testid="video-polling" style={{ marginTop: 4, background: "#13101a", border: "1px solid #28204a", borderRadius: 18, padding: "32px 24px", textAlign: "center" }}>
+            <div style={{ width: 52, height: 52, borderRadius: "50%", border: `3px solid #7c3aed44`, borderTopColor: "#a78bfa", margin: "0 auto 16px", animation: "spin 1s linear infinite" }} />
+            <p style={{ color: "#a78bfa", fontWeight: 700, fontSize: 15, margin: "0 0 6px" }}>Creating your video…</p>
+            <p style={{ color: TEXT3, fontSize: 12, margin: 0 }}>Kling AI is rendering — usually 2–3 minutes. {pollSeconds > 0 && `(${pollSeconds}s)`}</p>
+          </div>
+        )}
+
         {/* ── Result ── */}
         {result && (
           <div data-testid="create-result" style={{ marginTop: 4 }}>
             {/* Media */}
-            <div style={{ borderRadius: 18, overflow: "hidden", background: SURFACE, marginBottom: 14, boxShadow: `0 0 40px ${mode === "image" ? GOLD : "#7c3aed"}18` }}>
+            <div style={{ borderRadius: 18, overflow: "hidden", background: SURFACE, marginBottom: 14, boxShadow: `0 0 40px ${result.contentType === "ai_video" ? "#7c3aed" : GOLD}18` }}>
               {result.contentType === "ai_video" ? (
                 <div style={{ position: "relative", paddingBottom: aspectRatio === "9:16" ? "177%" : aspectRatio === "1:1" ? "100%" : "56.25%" }}>
                   <video src={result.previewUrl} autoPlay loop muted playsInline controls style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />

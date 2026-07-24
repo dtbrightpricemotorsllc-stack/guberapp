@@ -477,6 +477,12 @@ export function setupBusinessStudioRoutes(app: Express) {
     }
   });
 
+  // In-memory job store for async video generation (avoids proxy timeout on long jobs)
+  const videoJobStore = new Map<string, {
+    statusUrl: string; responseUrl: string; contentType: string;
+    studioId: string; prompt: string; createdAt: number;
+  }>();
+
   // ── Unified Create (generate without auto-saving) ──────────────────────────
   app.post("/api/bs/:studioId/create", requireStudio, async (req, res) => {
     const { studioId } = req.params;
@@ -493,75 +499,118 @@ export function setupBusinessStudioRoutes(app: Express) {
     }
 
     try {
-      const { submitToFal } = await import("./fal.js");
+      const { submitToFal, submitFalJob } = await import("./fal.js");
 
-      // If a source image was provided, upload it to Cloudinary to get a stable URL
+      // Upload source image to Cloudinary to get a public-accessible signed URL for fal.ai
       let sourceImageUrl: string | undefined;
       if (imageData) {
         const cloudinary = (await import("./cloudinary.js")).default;
         const up = await cloudinary.uploader.upload(imageData, {
           folder: `business-studios/${studioId}/sources`,
-          type: "private",
+          type: "upload",   // public upload so fal.ai can fetch it
           resource_type: "image",
           tags: [`studio:${studioId}`, "type:source"],
         });
-        sourceImageUrl = cloudinary.url(up.public_id, {
-          sign_url: true, type: "private", secure: true,
-          expires_at: Math.floor(Date.now() / 1000) + 7200,
-        });
+        sourceImageUrl = up.secure_url;  // plain CDN URL, no signature needed for fal.ai
       }
 
-      const legalPrefix = "Professional law firm marketing content.";
-      let previewUrl: string;
-      let contentType: string;
+      // Prompt strategy:
+      //   • Photo mode: use the user's prompt exactly — they describe the transformation they want.
+      //   • Text mode: append a quality cue so the model understands the desired output style.
+      const rawPrompt = prompt.trim();
+      const textPrompt = `${rawPrompt}. Cinematic lighting, high detail, sharp focus, premium quality.`;
 
       if (mode === "image") {
-        contentType = "ai_image";
-        const enhancedPrompt = `${legalPrefix} ${prompt.trim()}. Premium photographic quality, cinematic lighting.`;
+        const contentType = "ai_image";
         let imageUrl: string | undefined;
 
         if (sourceImageUrl) {
+          // Image-to-image: high strength so the model actually executes the transformation
           const r = await submitToFal<{ images?: Array<{ url: string }> }>(
             "fal-ai/flux/dev/image-to-image",
-            { image_url: sourceImageUrl, prompt: enhancedPrompt, num_inference_steps: 28, strength: 0.82, num_images: 1, enable_safety_checker: true },
+            {
+              image_url: sourceImageUrl,
+              prompt: rawPrompt,             // user's words verbatim
+              num_inference_steps: 35,
+              strength: 0.97,                // near-full transformation
+              guidance_scale: 3.5,           // FLUX-appropriate guidance
+              num_images: 1,
+              enable_safety_checker: true,
+            },
           );
           imageUrl = r.output?.images?.[0]?.url;
         } else {
+          // Text-to-image
           const r = await submitToFal<{ images?: Array<{ url: string }> }>(
             "fal-ai/flux/schnell",
-            { prompt: enhancedPrompt, image_size: "square_hd", num_inference_steps: 4, num_images: 1, enable_safety_checker: true },
+            { prompt: textPrompt, image_size: "square_hd", num_inference_steps: 4, num_images: 1, enable_safety_checker: true },
           );
           imageUrl = r.output?.images?.[0]?.url;
         }
         if (!imageUrl) throw new Error("No image URL returned from fal.ai");
-        previewUrl = imageUrl;
+
+        await auditLog(studioId, auth.email, "create_preview", { mode, hasPhoto: !!sourceImageUrl, prompt: rawPrompt }, ip);
+        return res.json({ ok: true, previewUrl: imageUrl, contentType });
+
       } else {
-        contentType = "ai_video";
-        const enhancedPrompt = `${legalPrefix} ${prompt.trim()}. Cinematic, polished, premium production quality.`;
-        let videoUrl: string | undefined;
+        // Video — submit to fal.ai queue and return the jobId immediately so the
+        // client can poll. This avoids HTTP proxy timeouts (kling takes 2–4 min).
+        const contentType = "ai_video";
+        const videoPrompt = sourceImageUrl ? rawPrompt : textPrompt;
+        const endpoint = sourceImageUrl
+          ? "fal-ai/kling-video/v1.6/standard/image-to-video"
+          : "fal-ai/kling-video/v1.6/standard/text-to-video";
+        const payload: Record<string, any> = { prompt: videoPrompt, duration: "5", aspect_ratio: aspectRatio };
+        if (sourceImageUrl) payload.image_url = sourceImageUrl;
 
-        if (sourceImageUrl) {
-          const r = await submitToFal<{ video?: { url: string } }>(
-            "fal-ai/kling-video/v1.6/standard/image-to-video",
-            { image_url: sourceImageUrl, prompt: enhancedPrompt, duration: "5", aspect_ratio: aspectRatio },
-          );
-          videoUrl = r.output?.video?.url;
-        } else {
-          const r = await submitToFal<{ video?: { url: string } }>(
-            "fal-ai/kling-video/v1.6/standard/text-to-video",
-            { prompt: enhancedPrompt, duration: "5", aspect_ratio: aspectRatio },
-          );
-          videoUrl = r.output?.video?.url;
+        const job = await submitFalJob(endpoint, payload);
+        const jobId = `${studioId}-${job.requestId}`;
+        videoJobStore.set(jobId, {
+          statusUrl: job.statusUrl, responseUrl: job.responseUrl,
+          contentType, studioId, prompt: rawPrompt, createdAt: Date.now(),
+        });
+        // Clean up old entries (> 30 min)
+        for (const [k, v] of videoJobStore.entries()) {
+          if (Date.now() - v.createdAt > 30 * 60 * 1000) videoJobStore.delete(k);
         }
-        if (!videoUrl) throw new Error("No video URL returned from fal.ai");
-        previewUrl = videoUrl;
-      }
 
-      await auditLog(studioId, auth.email, "create_preview", { mode, hasPhoto: !!sourceImageUrl, prompt: prompt.trim() }, ip);
-      return res.json({ ok: true, previewUrl, contentType });
+        await auditLog(studioId, auth.email, "create_video_start", { jobId, hasPhoto: !!sourceImageUrl, prompt: rawPrompt }, ip);
+        return res.json({ ok: true, jobId, contentType, polling: true });
+      }
     } catch (err: any) {
       console.error("[bs/create]", err.message);
       return res.status(500).json({ error: "generation_failed", message: err.message || "Generation failed. Please try again." });
+    }
+  });
+
+  // ── Video job polling endpoint ──────────────────────────────────────────────
+  app.get("/api/bs/:studioId/job/:jobId", requireStudio, async (req, res) => {
+    const { studioId, jobId } = req.params;
+    const entry = videoJobStore.get(jobId);
+    if (!entry || entry.studioId !== studioId) {
+      return res.status(404).json({ error: "job not found" });
+    }
+    try {
+      const { checkFalJob } = await import("./fal.js");
+      const result = await checkFalJob<{ video?: { url: string } }>(entry.statusUrl, entry.responseUrl);
+      if (result.status === "failed") {
+        videoJobStore.delete(jobId);
+        return res.json({ status: "failed", error: "Video generation failed. Please try again." });
+      }
+      if (result.status === "pending") {
+        return res.json({ status: "pending" });
+      }
+      // Completed
+      const videoUrl = result.output?.video?.url;
+      if (!videoUrl) {
+        videoJobStore.delete(jobId);
+        return res.json({ status: "failed", error: "No video URL in response." });
+      }
+      videoJobStore.delete(jobId);
+      return res.json({ status: "completed", previewUrl: videoUrl, contentType: entry.contentType });
+    } catch (err: any) {
+      console.error("[bs/job-poll]", err.message);
+      return res.json({ status: "pending" }); // treat transient errors as still pending
     }
   });
 
