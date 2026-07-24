@@ -176,6 +176,105 @@ function buildReturningGreeting(data: JacUpdates): string {
 
 const JAC_FLOAT_HINT_KEY = "jac_float_hint_shown";
 
+// ── GUBER context detection for phone content cards ───────────────────
+type GuberCtx = "jobs" | "cash" | "vi" | "business" | "studio" | "default";
+function detectGuberContext(text: string): GuberCtx {
+  const t = text.toLowerCase();
+  if (t.includes("studio") || t.includes("video") || t.includes("music") || t.includes("content create")) return "studio";
+  if (t.includes("cash drop") || t.includes("cash reward") || t.includes("drop") && t.includes("earn")) return "cash";
+  if (t.includes("verify") || t.includes("inspect") || t.includes("v&i")) return "vi";
+  if (t.includes("business") || t.includes("scout") || t.includes("biz ") || t.includes("post job")) return "business";
+  if (t.includes("job") || t.includes("work") || t.includes("earn") || t.includes("gig") || t.includes("labor") || t.includes("service")) return "jobs";
+  return "default";
+}
+
+function GuberContextCard({ msg }: { msg: string }) {
+  const ctx = detectGuberContext(msg);
+  const cardBase: React.CSSProperties = { borderRadius: 14, overflow: "hidden" };
+
+  if (ctx === "jobs") return (
+    <div style={{ ...cardBase, background: "hsl(152 60% 4%)", border: "1px solid hsl(152 100% 44% / 0.22)" }}>
+      <div style={{ padding: "6px 12px", background: "hsl(152 60% 6%)", borderBottom: "1px solid hsl(152 100% 44% / 0.12)" }}>
+        <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.2em", color: "hsl(152 100% 55%)" }}>JOBS NEAR YOU</span>
+      </div>
+      {[{ t: "General Labor", r: "$18/hr", s: "TODAY" }, { t: "Delivery Driver", r: "$22/hr", s: "NOW" }, { t: "Landscaping", r: "$20/hr", s: "HIRING" }].map(j => (
+        <div key={j.t} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 12px", borderBottom: "1px solid hsl(222 47% 11%)" }}>
+          <div><p style={{ fontSize: 11, fontWeight: 600, color: "white", margin: 0 }}>{j.t}</p><p style={{ fontSize: 10, color: "hsl(152 100% 55%)", margin: 0 }}>{j.r}</p></div>
+          <span style={{ fontSize: 8, fontWeight: 900, padding: "2px 6px", borderRadius: 4, background: "hsl(152 100% 44% / 0.15)", color: "hsl(152 100% 60%)" }}>{j.s}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  if (ctx === "cash") return (
+    <div style={{ ...cardBase, background: "hsl(43 100% 4%)", border: "1px solid hsl(43 100% 60% / 0.28)" }}>
+      <div style={{ padding: "6px 12px", background: "hsl(43 100% 6%)", borderBottom: "1px solid hsl(43 100% 60% / 0.12)" }}>
+        <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.2em", color: "hsl(43 100% 65%)" }}>CASH DROPS</span>
+      </div>
+      <div style={{ padding: "12px", textAlign: "center" }}>
+        <p style={{ fontSize: 24, fontWeight: 900, color: "hsl(43 100% 65%)", margin: "0 0 4px" }}>$25–$500</p>
+        <p style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", margin: "0 0 8px" }}>Hidden drops in your city</p>
+        <span style={{ fontSize: 18 }}>🗺️ 📍 💰</span>
+      </div>
+    </div>
+  );
+
+  if (ctx === "vi") return (
+    <div style={{ ...cardBase, background: "hsl(222 47% 8%)", border: "1px solid hsl(270 100% 65% / 0.22)" }}>
+      <div style={{ padding: "6px 12px", background: "hsl(222 47% 10%)", borderBottom: "1px solid hsl(270 100% 65% / 0.1)" }}>
+        <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.2em", color: "hsl(270 100% 78%)" }}>VERIFY & INSPECT</span>
+      </div>
+      <div style={{ padding: "10px 12px" }}>
+        {["📸 Photo documentation", "🔍 Condition reports", "✅ Trust-verified"].map(s => (
+          <p key={s} style={{ fontSize: 11, color: "rgba(255,255,255,0.65)", margin: "0 0 4px" }}>{s}</p>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (ctx === "business") return (
+    <div style={{ ...cardBase, background: "hsl(222 47% 8%)", border: "1px solid hsl(270 100% 65% / 0.22)" }}>
+      <div style={{ padding: "6px 12px", background: "hsl(222 47% 10%)", borderBottom: "1px solid hsl(270 100% 65% / 0.1)" }}>
+        <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.2em", color: "hsl(270 100% 78%)" }}>GUBER BUSINESS</span>
+      </div>
+      <div style={{ padding: "10px 12px" }}>
+        {["🏢 Post unlimited jobs", "🎯 Scout top talent", "📊 Business dashboard"].map(s => (
+          <p key={s} style={{ fontSize: 11, color: "rgba(255,255,255,0.65)", margin: "0 0 4px" }}>{s}</p>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (ctx === "studio") return (
+    <div style={{ ...cardBase, background: "hsl(270 60% 6%)", border: "1px solid hsl(270 100% 65% / 0.28)" }}>
+      <div style={{ padding: "6px 12px", background: "hsl(270 60% 8%)", borderBottom: "1px solid hsl(270 100% 65% / 0.1)" }}>
+        <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.2em", color: "hsl(270 100% 78%)" }}>GUBER STUDIO</span>
+      </div>
+      <div style={{ padding: "10px 12px" }}>
+        {["🎬 AI Video Generation", "🎵 AI Music Creation", "✨ 2 free trial credits"].map(s => (
+          <p key={s} style={{ fontSize: 11, color: "rgba(255,255,255,0.65)", margin: "0 0 4px" }}>{s}</p>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ ...cardBase, background: "hsl(222 47% 8%)", border: "1px solid hsl(270 100% 65% / 0.15)", padding: "14px 12px", textAlign: "center" }}>
+      <p style={{ fontSize: 20, margin: "0 0 6px" }}>🌐</p>
+      <p style={{ fontSize: 11, fontWeight: 900, color: "hsl(270 100% 72%)", margin: "0 0 4px" }}>GUBER</p>
+      <p style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, margin: "0 0 10px" }}>Global Unlimited Business & Employment Resources</p>
+      <div style={{ display: "flex", justifyContent: "center", gap: 16 }}>
+        {[{ l: "Jobs", v: "2.4K" }, { l: "Members", v: "41+" }, { l: "States", v: "7" }].map(s => (
+          <div key={s.l} style={{ textAlign: "center" }}>
+            <p style={{ fontSize: 13, fontWeight: 900, color: "white", margin: 0 }}>{s.v}</p>
+            <p style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", margin: 0 }}>{s.l}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function JacHomepage() {
   // "splash" = gesture gate (required by browsers before any audio)
   // "chat"   = full chat panel + auto-speak fires immediately on enter
@@ -206,6 +305,8 @@ export function JacHomepage() {
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [convaiKey, setConvaiKey] = useState(0);
   const convaiSessionRef = useRef<JacConvaiSessionHandle | null>(null);
+  const [powerOnPhase, setPowerOnPhase] = useState<"black" | "scanline" | "fadein" | "done">("black");
+  const powerOnPlayedRef = useRef(false);
   const liveModeRef = useRef(false);
   useEffect(() => { liveModeRef.current = liveMode; }, [liveMode]);
 
@@ -322,6 +423,17 @@ export function JacHomepage() {
     document.addEventListener("keydown",    speakGreeting, opts);
     return cleanup;
   }, [mode, messages]);
+
+  // CRT power-on: plays once per mount so ElevenLabs has ~3s to initialize
+  useEffect(() => {
+    if (mode !== "chat") return;
+    if (powerOnPlayedRef.current) return;
+    powerOnPlayedRef.current = true;
+    const t1 = setTimeout(() => setPowerOnPhase("scanline"), 500);
+    const t2 = setTimeout(() => setPowerOnPhase("fadein"), 1500);
+    const t3 = setTimeout(() => setPowerOnPhase("done"), 3200);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [mode]);
 
   function enterChat() {
     unlockAudioContext();
@@ -725,245 +837,299 @@ export function JacHomepage() {
       style={{ background: "linear-gradient(170deg, hsl(222 47% 4%) 0%, hsl(270 65% 4%) 100%)", minHeight: 640 }}
       data-testid="section-jac-chat"
     >
-      {/* Ambient glow */}
-      <div className="absolute pointer-events-none" style={{ left: "18%", top: "10%", width: 420, height: 520, background: "radial-gradient(ellipse, hsl(270 100% 65% / 0.10) 0%, transparent 70%)", filter: "blur(48px)" }} />
-
-      <div className="relative max-w-5xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-end justify-center gap-6 md:gap-0 py-8 md:py-12">
-
-        {/* ── JAC CHARACTER ── */}
-        <div className="relative flex-shrink-0 flex flex-col items-center md:items-end md:w-[340px] w-full">
-
-          {/* Speech bubble */}
-          {latestJacMsg && (
-            <div
-              className="relative mb-3 md:mb-0 md:absolute md:top-10 md:right-[-12px] md:translate-x-full max-w-[240px] md:max-w-[200px] z-20"
-              style={{
-                background: "hsl(222 47% 11%)",
-                border: `1px solid hsl(270 100% 65% / ${liveState === "speaking" ? "0.65" : "0.28"})`,
-                borderRadius: "18px 18px 18px 4px",
-                padding: "10px 14px",
-                boxShadow: liveState === "speaking" ? "0 0 22px hsl(270 100% 65% / 0.3)" : "0 4px 20px rgba(0,0,0,0.4)",
-                transition: "box-shadow 0.3s, border-color 0.3s",
-              }}
-            >
-              <div className="flex items-center gap-1.5 mb-1">
-                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: liveState === "speaking" ? "hsl(152 100% 55%)" : "hsl(270 100% 78%)" }} />
-                <span className="text-[9px] font-display font-black tracking-widest" style={{ color: "hsl(270 100% 72%)" }}>JAC{liveMode && liveState === "speaking" ? " · speaking" : ""}</span>
-              </div>
-              <p className="text-[11px] text-white/85 leading-relaxed">
-                {typing
-                  ? <span className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full animate-bounce inline-block" style={{ background: "hsl(270 100% 78%)", animationDelay: "0ms" }} />
-                      <span className="w-1.5 h-1.5 rounded-full animate-bounce inline-block" style={{ background: "hsl(270 100% 78%)", animationDelay: "150ms" }} />
-                      <span className="w-1.5 h-1.5 rounded-full animate-bounce inline-block" style={{ background: "hsl(270 100% 78%)", animationDelay: "300ms" }} />
-                    </span>
-                  : latestJacMsg.content.length > 120 ? latestJacMsg.content.slice(0, 117) + "…" : latestJacMsg.content
-                }
-              </p>
-              {/* Bubble tail — desktop only */}
-              <div className="hidden md:block absolute left-full top-5" style={{ width: 0, height: 0, borderTop: "7px solid transparent", borderBottom: "7px solid transparent", borderLeft: "10px solid hsl(222 47% 11%)" }} />
-            </div>
+      {/* ── CRT POWER-ON OVERLAY ── */}
+      {powerOnPhase !== "done" && (
+        <div className="absolute inset-0 z-50 pointer-events-none overflow-hidden">
+          {/* Black base — fades out during fadein phase */}
+          <div style={{
+            position: "absolute", inset: 0,
+            background: "#000",
+            opacity: powerOnPhase === "fadein" ? 0 : 1,
+            transition: "opacity 0.5s ease-out",
+          }} />
+          {/* Scanline texture */}
+          {powerOnPhase === "scanline" && (
+            <div style={{
+              position: "absolute", inset: 0,
+              backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(180,100,255,0.04) 3px, rgba(180,100,255,0.04) 4px)",
+              animation: "jac-crt-scanlines 0.12s linear infinite",
+            }} />
           )}
+          {/* Horizontal expansion line */}
+          {powerOnPhase === "scanline" && (
+            <div style={{
+              position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+              background: "linear-gradient(to bottom, transparent 49.6%, rgba(200,140,255,0.9) 50%, white 50.15%, rgba(100,255,200,0.8) 50.3%, transparent 50.9%)",
+              animation: "jac-crt-line 1s ease-in-out forwards",
+              transformOrigin: "center center",
+            }} />
+          )}
+        </div>
+      )}
 
-          {/* JAC standing */}
-          <div className="relative" style={{ height: 420, width: 260 }}>
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-40 h-6 rounded-full blur-2xl opacity-35" style={{ background: "hsl(270 100% 65%)" }} />
+      {/* ── MAIN CONTENT — always rendered so ElevenLabs initialises ── */}
+      <div
+        className="relative max-w-4xl mx-auto px-3 sm:px-6 flex flex-col md:flex-row items-end gap-4 md:gap-6 py-6 md:py-10"
+        style={{
+          filter: powerOnPhase === "black"   ? "blur(20px) brightness(0)"
+                : powerOnPhase === "scanline" ? "blur(7px) brightness(0.06)"
+                : undefined,
+          animation: powerOnPhase === "fadein" ? "jac-crt-fadein 1.7s ease-out forwards" : undefined,
+        }}
+      >
+
+        {/* ── PHONE (left) ── */}
+        <div className="flex-shrink-0 relative mx-auto md:mx-0" style={{ width: 280, maxWidth: "88vw" }}>
+          {/* Side buttons */}
+          <div className="absolute right-[-5px] top-[120px] w-1 h-14 rounded-r-full" style={{ background: "hsl(222 35% 16%)" }} />
+          <div className="absolute left-[-5px] top-[98px] w-1 h-8 rounded-l-full"  style={{ background: "hsl(222 35% 16%)" }} />
+          <div className="absolute left-[-5px] top-[134px] w-1 h-12 rounded-l-full" style={{ background: "hsl(222 35% 16%)" }} />
+          <div className="absolute left-[-5px] top-[158px] w-1 h-12 rounded-l-full" style={{ background: "hsl(222 35% 16%)" }} />
+
+          {/* Phone body */}
+          <div className="relative overflow-hidden flex flex-col" style={{
+            borderRadius: 42,
+            height: 530,
+            background: "hsl(222 47% 6%)",
+            border: "9px solid hsl(222 32% 12%)",
+            boxShadow: "0 0 0 1px hsl(270 100% 65% / 0.22), 0 32px 90px rgba(0,0,0,0.75), inset 0 1px 0 hsl(270 100% 65% / 0.08)",
+          }}>
+
+            {/* Dynamic Island */}
+            <div className="flex justify-center pt-3 pb-1.5 flex-shrink-0">
+              <div className="flex items-center gap-2 px-3 h-7 rounded-full" style={{ background: "hsl(222 47% 4%)", border: "1px solid hsl(270 100% 65% / 0.12)" }}>
+                {liveMode ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ background: liveState === "speaking" ? "hsl(152 100% 55%)" : liveState === "recording" ? "hsl(0 85% 60%)" : "hsl(270 100% 65%)" }} />
+                    <span className="text-[9px] font-display tracking-wider text-white/55">JAC · {liveState === "speaking" ? "speaking" : liveState === "recording" ? "listening" : "connecting…"}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                    <span className="text-[9px] font-display tracking-wider text-white/45">JAC · GUBER</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* ── PHONE CONTENT — contextual GUBER info ── */}
+            <div className="flex-1 overflow-y-auto min-h-0 px-3 py-2 space-y-2.5">
+
+              {/* Priority 1: pending action */}
+              {latestJacMsg?.pendingAction && (
+                <div className="rounded-2xl px-3 py-2.5 space-y-2"
+                  style={{ background: "hsl(222 47% 10%)", border: "1px solid hsl(270 100% 65% / 0.32)" }}
+                  data-testid={`jac-pending-action-${latestJacMsg.pendingAction.id}`}
+                >
+                  <p className="text-[9px] font-display font-black tracking-widest" style={{ color: "hsl(270 100% 78%)" }}>REVIEW BEFORE SUBMITTING</p>
+                  <p className="text-[11px] text-white/85 leading-relaxed">{latestJacMsg.pendingAction.summary}</p>
+                  {latestJacMsg.pendingAction.status === "pending" && (
+                    <div className="flex gap-1.5">
+                      <button onClick={() => confirmPendingAction(latestJacMsg.pendingAction!)} className="flex-1 rounded-xl py-1.5 text-[11px] font-display font-black transition-all active:scale-95" style={{ background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))", color: "black" }} data-testid={`jac-confirm-action-${latestJacMsg.pendingAction.id}`}>Confirm</button>
+                      <button onClick={() => cancelPendingAction(latestJacMsg.pendingAction!)} className="rounded-xl px-3 py-1.5 text-[11px] font-display transition-all active:scale-95" style={{ background: "hsl(222 47% 14%)", border: "1px solid hsl(222 47% 22%)", color: "rgba(255,255,255,0.7)" }} data-testid={`jac-cancel-action-${latestJacMsg.pendingAction.id}`}>Cancel</button>
+                    </div>
+                  )}
+                  {latestJacMsg.pendingAction.status === "confirming" && <p className="text-[11px] text-white/50 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Submitting…</p>}
+                  {latestJacMsg.pendingAction.status === "confirmed"  && <p className="text-[11px] font-semibold" style={{ color: "hsl(152 100% 55%)" }}>✓ Submitted</p>}
+                  {latestJacMsg.pendingAction.status === "cancelled"  && <p className="text-[11px] text-white/40">Cancelled</p>}
+                  {latestJacMsg.pendingAction.status === "failed"     && <p className="text-[11px]" style={{ color: "hsl(0 80% 65%)" }}>{latestJacMsg.pendingAction.resultMessage || "That didn't go through."}</p>}
+                </div>
+              )}
+
+              {/* Priority 2: CTA card */}
+              {latestJacMsg?.signupRoute && ctaLabel(latestJacMsg.signupRoute) && (
+                <Link
+                  href={latestJacMsg.signupRoute}
+                  className="flex items-center gap-2.5 rounded-2xl px-3 py-2.5 no-underline transition-all active:scale-95"
+                  style={{ background: "linear-gradient(135deg, hsl(270 100% 65% / 0.12), hsl(152 100% 44% / 0.08))", border: "1px solid hsl(270 100% 65% / 0.28)" }}
+                  data-testid="jac-cta-phone"
+                  onClick={() => logInteraction(messages, { converted: true })}
+                >
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))" }}>
+                    <ArrowRight className="w-4 h-4 text-black" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-display font-black text-white">{ctaLabel(latestJacMsg.signupRoute)}</p>
+                    <p className="text-[10px] text-white/40 mt-0.5">Tap to get started →</p>
+                  </div>
+                </Link>
+              )}
+
+              {/* Priority 3: GUBER context card */}
+              <GuberContextCard msg={latestJacMsg?.content ?? ""} />
+            </div>
+
+            {/* Option chips */}
+            {activeButtons.length > 0 && (
+              <div className="px-3 py-2 flex flex-wrap gap-1.5 flex-shrink-0" style={{ borderTop: "1px solid hsl(222 47% 11%)", background: "hsl(222 47% 5%)" }}>
+                {activeButtons.map((btn) => (
+                  <button
+                    key={btn.label}
+                    onClick={() => processInput(btn.message)}
+                    className="rounded-full px-2.5 py-1 text-[10px] font-display font-semibold transition-all active:scale-95 disabled:opacity-40"
+                    style={{ background: "hsl(222 47% 12%)", border: "1px solid hsl(222 47% 24%)", color: "rgba(255,255,255,0.72)" }}
+                    data-testid={`jac-btn-${btn.label.toLowerCase().replace(/[\s']+/g, "-")}`}
+                    disabled={typing}
+                  >{btn.label}</button>
+                ))}
+              </div>
+            )}
+
+            {/* Volume slider */}
+            {showVolumeSlider && (
+              <div className="px-3.5 py-2 flex items-center gap-2 flex-shrink-0" style={{ borderTop: "1px solid hsl(222 47% 11%)" }}>
+                <Volume2 className="w-3 h-3 flex-shrink-0" style={{ color: "hsl(270 100% 78%)" }} />
+                <input type="range" min={JAC_VOLUME_BOUNDS.min} max={JAC_VOLUME_BOUNDS.max} step={0.1} value={jacVolume}
+                  onChange={(e) => { const v = parseFloat(e.target.value); setJacVolume(v); setJacVolumeState(v); }}
+                  className="flex-1 accent-purple-400 h-1" data-testid="slider-jac-volume" />
+                <span className="text-[9px] w-5 text-right flex-shrink-0" style={{ color: "hsl(270 100% 78%)" }}>{Math.round((jacVolume / JAC_VOLUME_BOUNDS.max) * 100)}%</span>
+              </div>
+            )}
+
+            {/* Input bar */}
+            <div className="px-3 pb-4 pt-2 flex-shrink-0" style={{ borderTop: "1px solid hsl(222 47% 11%)", background: "hsl(222 47% 5%)" }}>
+              <div className="flex items-center gap-1.5 rounded-2xl px-2.5 py-1.5" style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 19%)" }}>
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); processInput(input); } }}
+                  placeholder="Ask JAC…"
+                  className="flex-1 bg-transparent border-0 resize-none text-[11px] text-white placeholder:text-white/22 outline-none min-h-[28px] max-h-[70px] py-1 px-0 leading-relaxed"
+                  rows={1}
+                  disabled={typing}
+                  data-testid="input-jac-homepage"
+                />
+                <button onClick={() => setShowVolumeSlider(v => !v)} className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-lg transition-colors" style={{ color: showVolumeSlider ? "hsl(270 100% 78%)" : "hsl(0 0% 32%)" }} data-testid="button-jac-volume" aria-label="Volume">
+                  <Volume2 className="w-3.5 h-3.5" />
+                </button>
+                {micSupported && (
+                  <button
+                    onClick={toggleLiveMode}
+                    className={`relative w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center transition-all duration-200 ${liveMode ? "scale-105" : "hover:scale-105 active:scale-95"}`}
+                    style={{
+                      background: liveMode
+                        ? liveState === "speaking"  ? "linear-gradient(135deg, hsl(152 90% 40%), hsl(152 70% 30%))"
+                          : liveState === "recording" ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
+                          : "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))"
+                        : "linear-gradient(135deg, hsl(270 70% 22%), hsl(152 60% 14%))",
+                      color: "white",
+                      boxShadow: liveMode ? "0 0 0 2px hsl(270 100% 65% / 0.4), 0 0 16px hsl(270 100% 65% / 0.5)" : "0 0 8px hsl(270 100% 65% / 0.3)",
+                    }}
+                    data-testid="button-jac-mic"
+                    disabled={typing}
+                    aria-label={liveMode ? "End voice chat" : "Start voice chat with JAC"}
+                  >
+                    {liveMode && <span className="absolute inset-0 rounded-xl animate-ping opacity-20" style={{ background: "hsl(270 100% 65%)" }} />}
+                    {liveMode
+                      ? liveState === "recording" ? <Mic className="w-4 h-4" />
+                        : liveState === "speaking"  ? <Volume2 className="w-4 h-4" />
+                        : <Loader2 className="w-4 h-4 animate-spin" />
+                      : <Mic className="w-4 h-4" />}
+                  </button>
+                )}
+                <button
+                  onClick={() => processInput(input)}
+                  disabled={!input.trim() || typing}
+                  className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center transition-all disabled:opacity-30"
+                  style={{
+                    background: input.trim() && !typing ? "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))" : "hsl(222 47% 14%)",
+                    color: input.trim() && !typing ? "black" : "hsl(0 0% 32%)",
+                  }}
+                  data-testid="button-jac-send"
+                >
+                  <Send className="w-3 h-3" />
+                </button>
+              </div>
+              <p className="text-center text-[8px] text-white/12 mt-2 font-display tracking-wider">JAC · Voice by ElevenLabs</p>
+            </div>
+          </div>
+        </div>
+
+        {/* ── SPEECH BUBBLES + JAC (right) ── */}
+        <div className="flex-1 flex items-end gap-2 min-w-0 md:min-h-[530px]">
+
+          {/* Speech bubble column — floats to JAC's left, tails point right toward her */}
+          <div className="flex-1 flex flex-col justify-end gap-3 pb-6 pr-2 min-w-0" style={{ minHeight: 320 }}>
+            {jacBubbles.length === 0 && !typing && (
+              <p className="text-[11px] text-white/22 text-center font-display px-4 leading-relaxed">JAC is warming up…<br/>Tap the mic to talk</p>
+            )}
+
+            {jacBubbles.map((msg, i) => {
+              const count = jacBubbles.length;
+              const isNewest = i === count - 1;
+              const opacity = count === 1 ? 1 : count === 2 ? (i === 0 ? 0.42 : 1) : [0.25, 0.58, 1][i];
+              const isSpeaking = isNewest && liveMode && liveState === "speaking";
+              const bubbleBg = isNewest ? "hsl(0 0% 97%)" : "hsl(0 0% 89%)";
+              const borderCol = isSpeaking ? "hsl(270 100% 65%)" : "hsl(222 30% 30%)";
+
+              return (
+                <div key={i} style={{ opacity, transition: "opacity 0.4s" }}>
+                  <div
+                    className="relative rounded-[22px] px-4 py-3 text-[12px] leading-relaxed"
+                    style={{
+                      background: bubbleBg,
+                      color: "hsl(222 47% 10%)",
+                      border: `2.5px solid ${borderCol}`,
+                      boxShadow: isSpeaking
+                        ? "0 0 18px hsl(270 100% 65% / 0.55), 0 4px 18px rgba(0,0,0,0.45)"
+                        : "0 4px 18px rgba(0,0,0,0.4)",
+                      transition: "border-color 0.3s, box-shadow 0.3s",
+                      wordBreak: "break-word",
+                    }}
+                    data-testid={isNewest ? "jac-latest-bubble" : undefined}
+                  >
+                    {msg.content}
+
+                    {/* Tail fill (inner colour) */}
+                    <div style={{
+                      position: "absolute", right: -15, bottom: 18,
+                      width: 0, height: 0,
+                      borderTop: "9px solid transparent",
+                      borderBottom: "9px solid transparent",
+                      borderLeft: `14px solid ${bubbleBg}`,
+                    }} />
+                    {/* Tail border */}
+                    <div style={{
+                      position: "absolute", right: -19, bottom: 16,
+                      width: 0, height: 0,
+                      borderTop: "11px solid transparent",
+                      borderBottom: "11px solid transparent",
+                      borderLeft: `17px solid ${borderCol}`,
+                      zIndex: -1,
+                    }} />
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Typing dots bubble */}
+            {typing && (
+              <div data-testid="jac-typing">
+                <div className="relative inline-flex rounded-[22px] px-4 py-3 items-center gap-1.5"
+                  style={{ background: "hsl(0 0% 93%)", border: "2.5px solid hsl(222 30% 30%)", boxShadow: "0 4px 16px rgba(0,0,0,0.38)" }}
+                >
+                  <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: "hsl(222 40% 35%)", animationDelay: "0ms" }} />
+                  <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: "hsl(222 40% 35%)", animationDelay: "160ms" }} />
+                  <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: "hsl(222 40% 35%)", animationDelay: "320ms" }} />
+                  <div style={{ position: "absolute", right: -15, bottom: 18, width: 0, height: 0, borderTop: "9px solid transparent", borderBottom: "9px solid transparent", borderLeft: "14px solid hsl(0 0% 93%)" }} />
+                  <div style={{ position: "absolute", right: -19, bottom: 16, width: 0, height: 0, borderTop: "11px solid transparent", borderBottom: "11px solid transparent", borderLeft: "17px solid hsl(222 30% 30%)", zIndex: -1 }} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* JAC character — far right */}
+          <div className="flex-shrink-0 relative self-end" style={{ width: 210 }}>
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-36 h-5 rounded-full blur-2xl opacity-40" style={{ background: "hsl(270 100% 65%)" }} />
             <img
               src={jacFull}
               alt="JAC"
-              className="absolute bottom-0 left-1/2 -translate-x-1/2 h-full w-auto object-contain object-bottom"
-              style={{ filter: "drop-shadow(0 0 36px hsl(270 100% 65% / 0.4))" }}
+              className="relative w-full h-auto object-contain object-bottom"
+              style={{ maxHeight: 390, filter: "drop-shadow(0 0 30px hsl(270 100% 65% / 0.42))" }}
               data-testid="img-jac-standing"
             />
-          </div>
-          <p className="text-[9px] font-display font-black tracking-[0.3em] mt-1" style={{ color: "hsl(270 100% 65% / 0.45)" }}>TEAM GUBER · JAC</p>
-        </div>
-
-        {/* ── PHONE MOCKUP ── */}
-        <div className="flex-1 flex justify-center md:justify-start md:pl-8">
-          <div className="relative" style={{ width: 296, maxWidth: "92vw" }}>
-
-            {/* Phone buttons */}
-            <div className="absolute right-[-5px] top-[124px] w-1 h-14 rounded-r-full" style={{ background: "hsl(222 35% 16%)" }} />
-            <div className="absolute left-[-5px] top-[100px] w-1 h-8 rounded-l-full" style={{ background: "hsl(222 35% 16%)" }} />
-            <div className="absolute left-[-5px] top-[140px] w-1 h-12 rounded-l-full" style={{ background: "hsl(222 35% 16%)" }} />
-            <div className="absolute left-[-5px] top-[164px] w-1 h-12 rounded-l-full" style={{ background: "hsl(222 35% 16%)" }} />
-
-            {/* Phone body */}
-            <div
-              className="relative overflow-hidden flex flex-col"
-              style={{
-                borderRadius: 44,
-                background: "hsl(222 47% 7%)",
-                border: "9px solid hsl(222 32% 13%)",
-                boxShadow: "0 0 0 1px hsl(270 100% 65% / 0.22), 0 28px 90px rgba(0,0,0,0.7), inset 0 1px 0 hsl(270 100% 65% / 0.07)",
-                height: 580,
-              }}
-            >
-              {/* Dynamic Island */}
-              <div className="flex justify-center pt-3 pb-2 flex-shrink-0">
-                <div className="flex items-center gap-2 px-3 h-7 rounded-full" style={{ background: "hsl(222 47% 5%)", border: "1px solid hsl(270 100% 65% / 0.12)" }}>
-                  {liveMode ? (
-                    <>
-                      <span className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ background: liveState === "speaking" ? "hsl(152 100% 55%)" : liveState === "recording" ? "hsl(0 85% 60%)" : "hsl(270 100% 65%)" }} />
-                      <span className="text-[9px] font-display tracking-wider text-white/55">JAC · {liveState === "speaking" ? "speaking" : liveState === "recording" ? "listening" : "connecting…"}</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-                      <span className="text-[9px] font-display tracking-wider text-white/45">JAC · GUBER</span>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Messages */}
-              <div ref={messagesRef} className="flex-1 overflow-y-auto px-3.5 py-2 space-y-2.5 min-h-0">
-                {messages.map((msg, i) => (
-                  <div key={i} className={`flex flex-col gap-1.5 ${msg.role === "user" ? "items-end" : "items-start"}`} data-testid={`jac-msg-${i}`}>
-                    <div
-                      className={`max-w-[88%] px-3 py-2 text-xs leading-relaxed ${msg.role === "user" ? "rounded-[14px] rounded-tr-[4px]" : "rounded-[14px] rounded-tl-[4px]"}`}
-                      style={msg.role === "user"
-                        ? { background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))", color: "black", fontWeight: 500 }
-                        : { background: "hsl(222 47% 13%)", color: "rgba(255,255,255,0.88)", border: "1px solid hsl(222 47% 21%)" }
-                      }
-                    >{msg.content}</div>
-
-                    {/* CTA */}
-                    {msg.role === "assistant" && msg.signupRoute && ctaLabel(msg.signupRoute) && (
-                      <Link
-                        href={msg.signupRoute}
-                        className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-display font-black no-underline transition-all active:scale-95"
-                        style={{ background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))", color: "black" }}
-                        data-testid={`jac-cta-${i}`}
-                        onClick={() => logInteraction(messages, { converted: true })}
-                      >
-                        {ctaLabel(msg.signupRoute)} <ArrowRight className="w-3 h-3" />
-                      </Link>
-                    )}
-
-                    {/* Pending action */}
-                    {msg.role === "assistant" && msg.pendingAction && (
-                      <div className="w-full max-w-[88%] rounded-2xl px-3 py-2.5 space-y-2"
-                        style={{ background: "hsl(222 47% 10%)", border: "1px solid hsl(270 100% 65% / 0.3)" }}
-                        data-testid={`jac-pending-action-${msg.pendingAction.id}`}
-                      >
-                        <p className="text-[9px] font-display font-black tracking-widest" style={{ color: "hsl(270 100% 78%)" }}>REVIEW BEFORE SUBMITTING</p>
-                        <p className="text-[11px] text-white/85 leading-relaxed">{msg.pendingAction.summary}</p>
-                        {msg.pendingAction.status === "pending" && (
-                          <div className="flex gap-1.5">
-                            <button onClick={() => confirmPendingAction(msg.pendingAction!)} className="flex-1 rounded-xl py-1.5 text-[11px] font-display font-black transition-all active:scale-95" style={{ background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))", color: "black" }} data-testid={`jac-confirm-action-${msg.pendingAction.id}`}>Confirm</button>
-                            <button onClick={() => cancelPendingAction(msg.pendingAction!)} className="rounded-xl px-3 py-1.5 text-[11px] font-display transition-all active:scale-95" style={{ background: "hsl(222 47% 14%)", border: "1px solid hsl(222 47% 22%)", color: "rgba(255,255,255,0.7)" }} data-testid={`jac-cancel-action-${msg.pendingAction.id}`}>Cancel</button>
-                          </div>
-                        )}
-                        {msg.pendingAction.status === "confirming" && <p className="text-[11px] text-white/50 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Submitting…</p>}
-                        {msg.pendingAction.status === "confirmed" && <p className="text-[11px] font-semibold" style={{ color: "hsl(152 100% 55%)" }}>✓ Submitted</p>}
-                        {msg.pendingAction.status === "cancelled" && <p className="text-[11px] text-white/40">Cancelled</p>}
-                        {msg.pendingAction.status === "failed" && <p className="text-[11px]" style={{ color: "hsl(0 80% 65%)" }}>{msg.pendingAction.resultMessage || "That didn't go through."}</p>}
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {typing && (
-                  <div className="flex justify-start" data-testid="jac-typing">
-                    <div className="px-3.5 py-2.5 rounded-[14px] rounded-tl-[4px] flex items-center gap-1" style={{ background: "hsl(222 47% 13%)", border: "1px solid hsl(222 47% 21%)" }}>
-                      <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: "hsl(270 100% 78%)", animationDelay: "0ms" }} />
-                      <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: "hsl(270 100% 78%)", animationDelay: "150ms" }} />
-                      <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: "hsl(270 100% 78%)", animationDelay: "300ms" }} />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Option chips */}
-              {activeButtons.length > 0 && (
-                <div className="px-3 py-2 flex flex-wrap gap-1.5 flex-shrink-0" style={{ borderTop: "1px solid hsl(222 47% 11%)", background: "hsl(222 47% 6%)" }}>
-                  {activeButtons.map((btn) => (
-                    <button
-                      key={btn.label}
-                      onClick={() => processInput(btn.message)}
-                      className="rounded-full px-2.5 py-1 text-[10px] font-display font-semibold transition-all active:scale-95 disabled:opacity-40"
-                      style={{ background: "hsl(222 47% 12%)", border: "1px solid hsl(222 47% 22%)", color: "rgba(255,255,255,0.72)" }}
-                      data-testid={`jac-btn-${btn.label.toLowerCase().replace(/[\s']+/g, "-")}`}
-                      disabled={typing}
-                    >{btn.label}</button>
-                  ))}
-                </div>
-              )}
-
-              {/* Volume slider */}
-              {showVolumeSlider && (
-                <div className="px-3.5 py-2 flex items-center gap-2 flex-shrink-0" style={{ borderTop: "1px solid hsl(222 47% 11%)" }}>
-                  <Volume2 className="w-3 h-3 flex-shrink-0" style={{ color: "hsl(270 100% 78%)" }} />
-                  <input type="range" min={JAC_VOLUME_BOUNDS.min} max={JAC_VOLUME_BOUNDS.max} step={0.1} value={jacVolume}
-                    onChange={(e) => { const v = parseFloat(e.target.value); setJacVolume(v); setJacVolumeState(v); }}
-                    className="flex-1 accent-purple-400 h-1" data-testid="slider-jac-volume" />
-                  <span className="text-[9px] w-5 text-right flex-shrink-0" style={{ color: "hsl(270 100% 78%)" }}>{Math.round((jacVolume / JAC_VOLUME_BOUNDS.max) * 100)}%</span>
-                </div>
-              )}
-
-              {/* Input bar */}
-              <div className="px-3 pb-4 pt-2 flex-shrink-0" style={{ borderTop: "1px solid hsl(222 47% 11%)", background: "hsl(222 47% 6%)" }}>
-                <div className="flex items-center gap-1.5 rounded-2xl px-2.5 py-1.5" style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 19%)" }}>
-                  <textarea
-                    ref={inputRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); processInput(input); } }}
-                    placeholder="Ask JAC…"
-                    className="flex-1 bg-transparent border-0 resize-none text-[11px] text-white placeholder:text-white/22 outline-none min-h-[28px] max-h-[70px] py-1 px-0 leading-relaxed"
-                    rows={1}
-                    disabled={typing}
-                    data-testid="input-jac-homepage"
-                  />
-
-                  <button onClick={() => setShowVolumeSlider(v => !v)} className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-lg transition-colors" style={{ color: showVolumeSlider ? "hsl(270 100% 78%)" : "hsl(0 0% 32%)" }} data-testid="button-jac-volume" aria-label="Volume">
-                    <Volume2 className="w-3.5 h-3.5" />
-                  </button>
-
-                  {micSupported && (
-                    <button
-                      onClick={toggleLiveMode}
-                      className={`relative w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center transition-all duration-200 ${liveMode ? "scale-105" : "hover:scale-105 active:scale-95"}`}
-                      style={{
-                        background: liveMode
-                          ? liveState === "speaking" ? "linear-gradient(135deg, hsl(152 90% 40%), hsl(152 70% 30%))"
-                            : liveState === "recording" ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
-                            : "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))"
-                          : "linear-gradient(135deg, hsl(270 70% 22%), hsl(152 60% 14%))",
-                        color: "white",
-                        boxShadow: liveMode ? "0 0 0 2px hsl(270 100% 65% / 0.4), 0 0 16px hsl(270 100% 65% / 0.5)" : "0 0 8px hsl(270 100% 65% / 0.3)",
-                      }}
-                      data-testid="button-jac-mic"
-                      disabled={typing}
-                      aria-label={liveMode ? "End voice chat" : "Start voice chat with JAC"}
-                    >
-                      {liveMode && <span className="absolute inset-0 rounded-xl animate-ping opacity-20" style={{ background: "hsl(270 100% 65%)" }} />}
-                      {liveMode
-                        ? liveState === "recording" ? <Mic className="w-4 h-4" />
-                          : liveState === "speaking" ? <Volume2 className="w-4 h-4" />
-                          : <Loader2 className="w-4 h-4 animate-spin" />
-                        : <Mic className="w-4 h-4" />}
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => processInput(input)}
-                    disabled={!input.trim() || typing}
-                    className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center transition-all disabled:opacity-30"
-                    style={{
-                      background: input.trim() && !typing ? "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))" : "hsl(222 47% 14%)",
-                      color: input.trim() && !typing ? "black" : "hsl(0 0% 32%)",
-                    }}
-                    data-testid="button-jac-send"
-                  >
-                    <Send className="w-3 h-3" />
-                  </button>
-                </div>
-                <p className="text-center text-[8px] text-white/12 mt-2 font-display tracking-wider">JAC · Voice by ElevenLabs</p>
-              </div>
-            </div>
+            <p className="text-center text-[8px] font-display font-black tracking-[0.28em] mt-1" style={{ color: "hsl(270 100% 65% / 0.38)" }}>TEAM GUBER · JAC</p>
           </div>
         </div>
 
