@@ -704,6 +704,8 @@ export function JacHomepage() {
   const latestJacMsg = [...messages].slice().reverse().find(m => m.role === "assistant");
   const lastWithButtons = [...messages].slice().reverse().find(m => m.role === "assistant" && m.buttons && m.buttons.length > 0);
   const activeButtons = lastWithButtons?.buttons ?? [];
+  // Last up to 3 JAC messages for speech bubbles
+  const jacBubbles = messages.filter(m => m.role === "assistant").slice(-3);
 
   return (
     <ConversationProvider>
