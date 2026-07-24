@@ -477,6 +477,141 @@ export function setupBusinessStudioRoutes(app: Express) {
     }
   });
 
+  // ── Unified Create (generate without auto-saving) ──────────────────────────
+  app.post("/api/bs/:studioId/create", requireStudio, async (req, res) => {
+    const { studioId } = req.params;
+    const { mode, imageData, prompt, title, aspectRatio = "16:9" } = req.body;
+    const auth = (req as any).studioAuth as StudioAuth;
+    const ip = getIp(req);
+
+    if (!prompt?.trim()) return res.status(400).json({ error: "prompt required" });
+    if (!["image", "video"].includes(mode)) return res.status(400).json({ error: "invalid mode" });
+
+    const BLOCKED = [/fake.*case/i, /guaranteed.*outcome/i, /fake.*testimonial/i, /confidential.*client/i];
+    if (BLOCKED.some(r => r.test(prompt))) {
+      return res.status(400).json({ error: "content_policy", message: "Prompt violates content guidelines." });
+    }
+
+    try {
+      const { submitToFal } = await import("./fal.js");
+
+      // If a source image was provided, upload it to Cloudinary to get a stable URL
+      let sourceImageUrl: string | undefined;
+      if (imageData) {
+        const cloudinary = (await import("./cloudinary.js")).default;
+        const up = await cloudinary.uploader.upload(imageData, {
+          folder: `business-studios/${studioId}/sources`,
+          type: "private",
+          resource_type: "image",
+          tags: [`studio:${studioId}`, "type:source"],
+        });
+        sourceImageUrl = cloudinary.url(up.public_id, {
+          sign_url: true, type: "private", secure: true,
+          expires_at: Math.floor(Date.now() / 1000) + 7200,
+        });
+      }
+
+      const legalPrefix = "Professional law firm marketing content.";
+      let previewUrl: string;
+      let contentType: string;
+
+      if (mode === "image") {
+        contentType = "ai_image";
+        const enhancedPrompt = `${legalPrefix} ${prompt.trim()}. Premium photographic quality, cinematic lighting.`;
+        let imageUrl: string | undefined;
+
+        if (sourceImageUrl) {
+          const r = await submitToFal<{ images?: Array<{ url: string }> }>(
+            "fal-ai/flux/dev/image-to-image",
+            { image_url: sourceImageUrl, prompt: enhancedPrompt, num_inference_steps: 28, strength: 0.82, num_images: 1, enable_safety_checker: true },
+          );
+          imageUrl = r.output?.images?.[0]?.url;
+        } else {
+          const r = await submitToFal<{ images?: Array<{ url: string }> }>(
+            "fal-ai/flux/schnell",
+            { prompt: enhancedPrompt, image_size: "square_hd", num_inference_steps: 4, num_images: 1, enable_safety_checker: true },
+          );
+          imageUrl = r.output?.images?.[0]?.url;
+        }
+        if (!imageUrl) throw new Error("No image URL returned from fal.ai");
+        previewUrl = imageUrl;
+      } else {
+        contentType = "ai_video";
+        const enhancedPrompt = `${legalPrefix} ${prompt.trim()}. Cinematic, polished, premium production quality.`;
+        let videoUrl: string | undefined;
+
+        if (sourceImageUrl) {
+          const r = await submitToFal<{ video?: { url: string } }>(
+            "fal-ai/kling-video/v1.6/standard/image-to-video",
+            { image_url: sourceImageUrl, prompt: enhancedPrompt, duration: "5", aspect_ratio: aspectRatio },
+          );
+          videoUrl = r.output?.video?.url;
+        } else {
+          const r = await submitToFal<{ video?: { url: string } }>(
+            "fal-ai/kling-video/v1.6/standard/text-to-video",
+            { prompt: enhancedPrompt, duration: "5", aspect_ratio: aspectRatio },
+          );
+          videoUrl = r.output?.video?.url;
+        }
+        if (!videoUrl) throw new Error("No video URL returned from fal.ai");
+        previewUrl = videoUrl;
+      }
+
+      await auditLog(studioId, auth.email, "create_preview", { mode, hasPhoto: !!sourceImageUrl, prompt: prompt.trim() }, ip);
+      return res.json({ ok: true, previewUrl, contentType });
+    } catch (err: any) {
+      console.error("[bs/create]", err.message);
+      return res.status(500).json({ error: "generation_failed", message: err.message || "Generation failed. Please try again." });
+    }
+  });
+
+  // ── Save to Library (explicit user action after preview) ────────────────────
+  app.post("/api/bs/:studioId/save-to-library", requireStudio, async (req, res) => {
+    const { studioId } = req.params;
+    const { previewUrl, contentType, title, prompt } = req.body;
+    const auth = (req as any).studioAuth as StudioAuth;
+    const ip = getIp(req);
+
+    if (!previewUrl || !contentType) return res.status(400).json({ error: "previewUrl and contentType required" });
+
+    try {
+      const cloudinary = (await import("./cloudinary.js")).default;
+      const isVideo = contentType === "ai_video";
+
+      const uploadResult = await cloudinary.uploader.upload(previewUrl, {
+        folder: `business-studios/${studioId}`,
+        type: "private",
+        resource_type: isVideo ? "video" : "image",
+        tags: [`studio:${studioId}`, `type:${contentType}`],
+      });
+
+      const thumbOpts: any = {
+        sign_url: true, type: "private", width: 600, crop: "limit",
+        quality: "auto", secure: true,
+        expires_at: Math.floor(Date.now() / 1000) + 86400 * 30,
+      };
+      if (isVideo) { thumbOpts.resource_type = "video"; thumbOpts.format = "jpg"; thumbOpts.start_offset = "0"; }
+
+      const thumbnailUrl = cloudinary.url(uploadResult.public_id, thumbOpts);
+
+      const result = await pool.query(
+        `INSERT INTO studio_content
+           (studio_id, owner_email, created_by, content_type, status, approval_status,
+            generated_file, thumbnail_url, prompt, title)
+         VALUES ($1,$2,$3,$4,'draft','approved',$5,$6,$7,$8)
+         RETURNING id`,
+        [studioId, auth.email, auth.email, contentType, uploadResult.public_id,
+         thumbnailUrl, prompt || null, title || null],
+      );
+
+      await auditLog(studioId, auth.email, "save_to_library", { contentId: result.rows[0].id, contentType }, ip);
+      return res.json({ ok: true, id: result.rows[0].id, thumbnailUrl });
+    } catch (err: any) {
+      console.error("[bs/save-to-library]", err.message);
+      return res.status(500).json({ error: "save_failed", message: "Failed to save to library." });
+    }
+  });
+
   // ── Studio Team Management (studio admin only) ──────────────────────────────
   app.get("/api/bs/:studioId/team", requireStudio, async (req, res) => {
     const { studioId } = req.params;
