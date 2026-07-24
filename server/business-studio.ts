@@ -731,6 +731,12 @@ export async function seedNxtgenStudio() {
                'studio@nxtgenlawgroup.com', 200)
        ON CONFLICT (studio_id) DO UPDATE SET logo_url = '/nxtgen-law-logo.png'`,
     );
+    // Seed default admin email
+    await pool.query(
+      `INSERT INTO studio_approved_emails (studio_id, email, role, full_name, added_by)
+       VALUES ('nxtgenlawgroup', 'guberapp.global@gmail.com', 'admin', 'GUBER Admin', 'system')
+       ON CONFLICT (studio_id, email) DO NOTHING`,
+    );
     console.log("[business-studio] NXTGEN Law Group studio ready");
   } catch (err: any) {
     console.error("[business-studio] seed error:", err.message);
