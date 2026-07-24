@@ -16915,73 +16915,97 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
     }
   });
 
-  // ── JAC anonymous/investor voice brain ──────────────────────────────────────
-  // Called by convai/llm for sessions WITHOUT a logged-in userId (homepage
-  // visitors, investor page guests). Mirrors the same KB → multi-source →
-  // LLM pipeline as /api/jac/onboard so there is ONE central JAC system.
-  // mode="investor" uses JAC_INVESTOR_PROMPT; "homepage" uses the onboard
-  // identity (no structured-JSON response — voice only needs plain text).
-  async function runJacAnonymousVoice(
+  // ── JAC anonymous/investor voice brain — REAL STREAMING ─────────────────────
+  // Pipes OpenAI tokens directly to `res` as SSE so ElevenLabs starts TTS on
+  // the FIRST token (~200ms) rather than waiting for the full response buffer.
+  //
+  // Architecture:
+  //   1. Fetch multi-source KB context with a hard 350ms timeout (non-blocking)
+  //   2. Open real OpenAI stream (stream:true)
+  //   3. Forward each token chunk immediately as SSE to res
+  //
+  // No KB shortcut (tryLocalAnswer) — canned string answers bypass history
+  // tracking and sound robotic/repetitive in voice.
+  // mode="investor" → JAC_INVESTOR_PROMPT; "homepage" → base onboard identity.
+  async function streamJacAnonymousVoice(
     messages: Array<{ role: "user" | "assistant"; content: string }>,
     mode: "homepage" | "investor",
-  ): Promise<string> {
-    const lastUserMsg = [...messages].reverse().find(m => m.role === "user")?.content ?? "";
+    res: import("express").Response,
+    model: string,
+    id: string,
+  ): Promise<void> {
+    // Limit history — voice conversations don't need deep context, and long
+    // histories add tokens/latency on every turn.
+    const recentMessages = messages.slice(-8);
+    const lastUserMsg = [...recentMessages].reverse().find(m => m.role === "user")?.content ?? "";
 
-    // ── Voice-tech deterministic shortcut (same as onboard route) ─────────────
-    const VOICE_TECH_PATTERNS = [
-      /\b(11\s*labs|eleven\s*labs|elevenlabs)\b/,
-      /what\s+(powers|is)\s+your\s+voice/,
-    ];
-    if (VOICE_TECH_PATTERNS.some(p => p.test(lastUserMsg.toLowerCase()))) {
-      return "Yes — my voice is powered by ElevenLabs' AI voice engine, so I sound as natural as possible. If you can't hear me, check your device volume.";
-    }
+    // ── Multi-source context with hard timeout — runs while we build the prompt ─
+    const contextPromise = lastUserMsg
+      ? getMultiSourceContext(lastUserMsg, 3)
+          .then((sources: any[]) => sources.length > 0
+            ? `\nGUBER KNOWLEDGE (use naturally, don't repeat):\n${sources.map((s: any, i: number) => `[${i + 1}] ${s.title}: ${s.answer}`).join("\n")}\n`
+            : "")
+          .catch(() => "")
+      : Promise.resolve("");
 
-    // ── KB shortcut — same as onboard route ───────────────────────────────────
-    if (lastUserMsg) {
-      try {
-        const localAns = await tryLocalAnswer(lastUserMsg);
-        if (localAns && localAns.confidence >= 0.85) return localAns.answer;
-      } catch { /* non-fatal */ }
-    }
+    const timeoutPromise = new Promise<string>(r => setTimeout(() => r(""), 350));
+    const multiSourceSection = await Promise.race([contextPromise, timeoutPromise]);
 
-    // ── Multi-source context — same as onboard route ─────────────────────────
-    let multiSourceSection = "";
-    if (lastUserMsg) {
-      try {
-        const sources = await getMultiSourceContext(lastUserMsg, 4);
-        if (sources.length > 0) {
-          multiSourceSection = `\nRELEVANT GUBER KNOWLEDGE (combine as needed):\n${sources.map((s: any, i: number) => `[${i + 1}] (${s.category}) ${s.title}: ${s.answer}`).join("\n")}\n`;
-        }
-      } catch { /* non-fatal */ }
-    }
+    // ── System prompt ─────────────────────────────────────────────────────────
+    const VOICE_RULES = `
 
-    // ── Select system prompt based on surface ─────────────────────────────────
-    // investor → JAC_INVESTOR_PROMPT (same as onboard route mode="investor")
-    // homepage → base JAC identity (same knowledge, no structured JSON for voice)
+VOICE RULES (CRITICAL — enforce every reply):
+- Plain speech only. No JSON, no markdown, no bullet points, no lists.
+- Maximum 2 sentences, absolute limit 30 words.
+- NEVER repeat anything already said in this conversation — check history.
+- NEVER start your reply with "Great!", "Sure!", "Of course!", "Absolutely!" or any filler affirmation.
+- Lead with the actual answer immediately.
+- End with at most one natural follow-up question or next step.`;
+
     const baseSystemPrompt = mode === "investor"
-      ? JAC_INVESTOR_PROMPT
-      : `You are JAC — the coordinator of Team GUBER. GUBER stands for Global Unlimited Business & Employment Resources. You speak with visitors who have NOT signed up yet. Be warm, energetic, and practical. GUBER is a US-only local platform where workers earn on local jobs, hirers post jobs and hire verified workers. Also: Marketplace, Verify & Inspect, Load Board, Credits/Missions, GUBER Studio. Slogan: "Create Value In Yourself." VOICE: 1–2 short sentences, under 30 words. Answer the question and stop. Never dead-end — always suggest a next step.`;
+      ? JAC_INVESTOR_PROMPT + VOICE_RULES
+      : `You are JAC — the voice of Team GUBER. GUBER (Global Unlimited Business & Employment Resources) is a US-only local platform where workers earn money doing local jobs and hirers post tasks. Features: job posting, Marketplace, Verify & Inspect, Load Board, GUBER Studio, Credits/Missions. Slogan: "Create Value In Yourself." You speak with visitors who have NOT signed up yet. Be warm, confident, and direct. Never dead-end a conversation — always move forward.${VOICE_RULES}`;
 
-    const voiceAddendum = `\n\nVOICE RESPONSE RULES: Reply in plain conversational speech only — NO JSON, NO markdown, NO bullet points. 1–2 sentences maximum, under 30 words. Lead with the answer immediately.`;
+    const systemContent = multiSourceSection
+      ? baseSystemPrompt + multiSourceSection
+      : baseSystemPrompt;
 
+    // ── Real OpenAI stream ────────────────────────────────────────────────────
     const OpenAI = (await import("openai")).default;
     const openai = new OpenAI({
       apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
       baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
     });
 
-    const completion = await openai.chat.completions.create({
+    const stream = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
-      temperature: 0.3,
-      max_tokens: 120,
+      temperature: 0.4,
+      max_tokens: 80,
+      stream: true,
       messages: [
-        { role: "system", content: baseSystemPrompt + multiSourceSection + voiceAddendum },
-        ...messages,
+        { role: "system", content: systemContent },
+        ...recentMessages,
       ],
     });
 
-    return completion.choices?.[0]?.message?.content?.trim()
-      ?? (mode === "investor" ? "Welcome to GUBER — what would you like to know?" : "Hey! I'm JAC — what are we getting done today?");
+    const created = Math.floor(Date.now() / 1000);
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    // Send role delta first (ElevenLabs expects it)
+    res.write(sseLine(buildStreamChunk({ id, model, created, delta: { role: "assistant" } })));
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices?.[0]?.delta?.content;
+      if (delta) {
+        res.write(sseLine(buildStreamChunk({ id, model, created, delta: { content: delta } })));
+      }
+    }
+
+    res.write(sseLine(buildStreamChunk({ id, model, created, delta: {}, finishReason: "stop" })));
+    res.write("data: [DONE]\n\n");
+    res.end();
   }
 
   // JAC's single brain. Called by /api/ai/guber-assist (session-authed, web/native
@@ -17542,30 +17566,42 @@ CRITICAL — respond with JSON ONLY, no other text:
       const jacSurface = (typeof claims?.cid === "string" && claims.cid.startsWith("investor_"))
         ? "investor" : "homepage";
 
-      let content: string;
-      if (user) {
-        // Authenticated: full in-app assistant brain (has user context, memory, live data)
-        try {
-          const result = await runGuberAssistBrain(user, sanitized, true);
-          content = (result?.reply || "Hey! I'm JAC — what are we getting done today?").toString();
-        } catch (brainErr: any) {
-          console.warn("[jac/convai/llm] brain error:", brainErr?.message);
-          content = "I got you. Tell me more and I'll help you get it done through GUBER.";
-        }
-      } else {
-        // Anonymous (homepage visitor or investor page guest): central JAC via KB + LLM
-        try {
-          content = await runJacAnonymousVoice(sanitized, jacSurface);
-        } catch (anonErr: any) {
-          console.warn("[jac/convai/llm] anonymous voice error:", anonErr?.message);
-          const lastMsg = sanitized.at(-1)?.content?.toLowerCase() ?? "";
-          content = lastMsg.length < 5
-            ? (jacSurface === "investor" ? "Welcome to GUBER — what would you like to know?" : "Hey! I'm JAC — what are we getting done today?")
-            : "I got you. Tell me more and I'll help you get it done through GUBER.";
-        }
-      }
-      console.log("[jac/convai/llm] reply", content.length, "chars, stream:", stream);
       const id = newCompletionId();
+
+      if (!user) {
+        // ── Anonymous (homepage / investor): real OpenAI stream → ElevenLabs ──
+        // streamJacAnonymousVoice writes directly to res and returns — no buffer.
+        console.log("[jac/convai/llm] anonymous surface:", jacSurface, "streaming");
+        try {
+          await streamJacAnonymousVoice(sanitized, jacSurface, res, model, id);
+        } catch (anonErr: any) {
+          console.warn("[jac/convai/llm] anonymous stream error:", anonErr?.message);
+          if (!res.headersSent) {
+            const fallback = jacSurface === "investor"
+              ? "Welcome to GUBER — what would you like to know?"
+              : "Hey! I'm JAC — what are we getting done today?";
+            if (stream) {
+              writeOpenAiStream(res, { id, model, content: fallback });
+            } else {
+              res.json(buildNonStreamCompletion({ id, model, content: fallback }));
+            }
+          } else {
+            try { res.end(); } catch { /* socket already closed */ }
+          }
+        }
+        return;
+      }
+
+      // ── Authenticated: full in-app assistant brain ────────────────────────
+      let content: string;
+      try {
+        const result = await runGuberAssistBrain(user, sanitized, true);
+        content = (result?.reply || "Hey! I'm JAC — what are we getting done today?").toString();
+      } catch (brainErr: any) {
+        console.warn("[jac/convai/llm] brain error:", brainErr?.message);
+        content = "I got you. Tell me more and I'll help you get it done through GUBER.";
+      }
+      console.log("[jac/convai/llm] auth reply", content.length, "chars, stream:", stream);
 
       if (stream) {
         writeOpenAiStream(res, { id, model, content });
