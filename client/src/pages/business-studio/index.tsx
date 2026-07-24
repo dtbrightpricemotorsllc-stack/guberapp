@@ -72,7 +72,7 @@ function StudioShell({ children, session, onLogout, onNavigate }: {
             onClick={() => onNavigate?.("dashboard")}
             style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", cursor: "pointer", color: "#f1f5f9" }}
           >
-            <span style={{ fontSize: 18, fontWeight: 700, color: GOLD, letterSpacing: "0.03em" }}>NXTGEN Law Group</span>
+            <img src="/nxtgen-law-logo.png" alt="NXTGEN Law" style={{ height: 36, objectFit: "contain" }} />
             <span style={{ fontSize: 11, color: "#64748b", letterSpacing: "1px", textTransform: "uppercase" }}>Content Studio</span>
           </button>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

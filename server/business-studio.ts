@@ -724,12 +724,12 @@ export async function seedNxtgenStudio() {
   try {
     // Create studio record
     await pool.query(
-      `INSERT INTO business_studios (studio_id, name, tagline, primary_color, accent_color, welcome_message, contact_email, monthly_image_limit)
+      `INSERT INTO business_studios (studio_id, name, tagline, logo_url, primary_color, accent_color, welcome_message, contact_email, monthly_image_limit)
        VALUES ('nxtgenlawgroup', 'NXTGEN Law Group', 'Content Studio · Powered by GUBER Global',
-               '#0f172a', '#c9a84c',
+               '/nxtgen-law-logo.png', '#0f172a', '#c9a84c',
                'Welcome to your private content studio. What are we creating today?',
                'studio@nxtgenlawgroup.com', 200)
-       ON CONFLICT (studio_id) DO NOTHING`,
+       ON CONFLICT (studio_id) DO UPDATE SET logo_url = '/nxtgen-law-logo.png'`,
     );
     console.log("[business-studio] NXTGEN Law Group studio ready");
   } catch (err: any) {
