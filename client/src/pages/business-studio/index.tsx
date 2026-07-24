@@ -142,9 +142,10 @@ const LAW_TEMPLATES = [
 ];
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
-function DashboardView({ session, onNavigate, onTemplateSelect }: {
+function DashboardView({ session, onNavigate, onCreateNavigate, onTemplateSelect }: {
   session: StudioSession;
   onNavigate: (v: View) => void;
+  onCreateNavigate: (mode: CreateMode) => void;
   onTemplateSelect: (prompt: string) => void;
 }) {
   const { data: recent = [] } = useQuery<ContentItem[]>({
@@ -178,7 +179,7 @@ function DashboardView({ session, onNavigate, onTemplateSelect }: {
             { icon: <Sparkles size={30} color={GOLD} />, label: "Create Image", sub: "Text or photo → AI image", accent: "#1a140a", border: "#3a2c0a", mode: "image" as CreateMode },
             { icon: <Video size={30} color="#a78bfa" />, label: "Create Video", sub: "Text or photo → AI video", accent: "#13101a", border: "#28204a", mode: "video" as CreateMode },
           ] as const).map((t, i) => (
-            <button key={i} data-testid={`studio-tool-${t.mode}`} onClick={() => onNavigate("create")}
+            <button key={i} data-testid={`studio-tool-${t.mode}`} onClick={() => onCreateNavigate(t.mode)}
               style={{ background: t.accent, border: `1px solid ${t.border}`, borderRadius: 18, padding: "20px 16px", cursor: "pointer", textAlign: "left", transition: "transform 0.1s, border-color 0.12s" }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "scale(1.02)"; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = "scale(1)"; }}
@@ -226,7 +227,7 @@ function DashboardView({ session, onNavigate, onTemplateSelect }: {
           <div style={{ background: CARD, borderRadius: 16, padding: "36px 20px", textAlign: "center", border: `1px solid ${BORDER}` }}>
             <Library size={28} color={TEXT3} style={{ margin: "0 auto 10px" }} />
             <p style={{ color: TEXT2, fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Nothing yet</p>
-            <p style={{ color: TEXT3, fontSize: 13 }}>Generate or upload an image to get started.</p>
+            <p style={{ color: TEXT3, fontSize: 13 }}>Generate an image or video to get started.</p>
           </div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
@@ -715,6 +716,7 @@ export default function NxtgenLawGroupStudio() {
         <DashboardView
           session={session}
           onNavigate={navigate}
+          onCreateNavigate={(mode) => { setCreateMode(mode); setCreatePrompt(""); setView("create"); }}
           onTemplateSelect={p => { setCreateMode("image"); setCreatePrompt(p); setView("create"); }}
         />
       )}
