@@ -430,7 +430,13 @@ export function JacHomepage() {
     cancelSpeech();
     cancelAllJacAudio();
     try {
-      const res = await fetch("/api/jac/onboard", {
+      // In live voice mode use the fast /api/jac/voice endpoint:
+      //   • plain text response (no JSON parsing overhead)
+      //   • max 80 tokens vs 600, parallel KB context with 300ms timeout
+      //   • anti-repetition rules — no "What brings you to GUBER?" loops
+      // Text mode keeps the full /api/jac/onboard (buttons, routes, tracking).
+      const endpoint = liveMode ? "/api/jac/voice" : "/api/jac/onboard";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode: "homepage", messages: next.map(m => ({ role: m.role, content: m.content })) }),

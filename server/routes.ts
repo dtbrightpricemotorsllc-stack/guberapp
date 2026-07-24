@@ -16863,6 +16863,134 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
     }
   });
 
+  // ── JAC Voice endpoint — fast path for live voice conversations ─────────────
+  // Used by jac-homepage liveMode (STT → voice → TTS). Deliberately different
+  // from /api/jac/onboard:
+  //   • Plain text response (no JSON parsing overhead, no response_format)
+  //   • max_tokens 80 instead of 600
+  //   • Multi-source context with hard 300ms timeout so a slow DB never
+  //     delays the reply
+  //   • Anti-repetition rules built into the voice system prompt
+  //   • Returns { reply } only — no route/actions/tracking needed for voice
+  const _jacVoiceRL = new Map<string, { count: number; reset: number }>();
+  app.post("/api/jac/voice", async (req: Request, res: Response) => {
+    try {
+      const ip = ((req.headers["x-forwarded-for"] as string) || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
+      const now = Date.now();
+      const rl = _jacVoiceRL.get(ip);
+      if (rl && now < rl.reset) {
+        if (rl.count >= 60) return res.status(429).json({ reply: "Give me just a moment." });
+        rl.count++;
+      } else {
+        _jacVoiceRL.set(ip, { count: 1, reset: now + 60_000 });
+      }
+
+      const { messages, mode } = req.body as { messages?: any[]; mode?: string };
+      if (!Array.isArray(messages) || messages.length === 0) return res.status(400).json({ reply: "No messages provided." });
+
+      const ALLOWED = new Set(["user", "assistant"]);
+      const sanitized: Array<{ role: "user" | "assistant"; content: string }> = [];
+      for (const m of messages.slice(-8)) {
+        if (!m || typeof m !== "object" || !ALLOWED.has(m.role)) continue;
+        const c = typeof m.content === "string" ? m.content.slice(0, 400).trim() : "";
+        if (c) sanitized.push({ role: m.role as "user" | "assistant", content: c });
+      }
+      if (!sanitized.length) return res.status(400).json({ reply: "Hey! What are we getting done today?" });
+
+      const lastUserMsg = [...sanitized].reverse().find(m => m.role === "user")?.content ?? "";
+      const isInvestorMode = mode === "investor";
+
+      // ── Deterministic shortcut: voice tech questions ───────────────────────
+      if (/\b(elevenlabs|eleven\s*labs|11\s*labs)\b|what.{0,15}powers.{0,10}voice/i.test(lastUserMsg)) {
+        return res.json({ reply: "Yes — my voice is powered by ElevenLabs, so I sound as natural as possible." });
+      }
+
+      // ── Parallel: multi-source KB context with hard 300ms timeout ─────────
+      const contextRace = Promise.race([
+        getMultiSourceContext(lastUserMsg, 3)
+          .then((sources: any[]) => sources.length > 0
+            ? `\nGUBER KNOWLEDGE:\n${sources.map((s: any) => `• ${s.title}: ${s.answer}`).join("\n")}\n`
+            : "")
+          .catch(() => ""),
+        new Promise<string>(r => setTimeout(() => r(""), 300)),
+      ]);
+
+      // ── User context for logged-in users ──────────────────────────────────
+      const sessUserId = (req.session as any)?.userId ?? null;
+      let userCtx = "";
+      if (sessUserId) {
+        try {
+          const liveRes = await pool.query(
+            `SELECT (SELECT full_name FROM users WHERE id=$1) AS full_name,
+             (SELECT COUNT(*)::int FROM jobs WHERE assigned_helper_id=$1 AND status NOT IN ('completed','cancelled') AND deleted_at IS NULL) AS worker_active,
+             (SELECT COUNT(*)::int FROM jobs WHERE posted_by_id=$1 AND status IN ('open','in_progress') AND deleted_at IS NULL) AS hirer_active`,
+            [sessUserId]
+          );
+          const live = liveRes.rows[0] ?? {};
+          const name = (live.full_name || "").split(" ")[0] || null;
+          userCtx = `\nLOGGED-IN USER: ${name ?? "returning member"}. Worker active jobs: ${live.worker_active ?? 0}. Hirer active jobs: ${live.hirer_active ?? 0}. Do NOT route to /signup.\n`;
+        } catch { /* non-fatal */ }
+      }
+
+      const multiSourceSection = await contextRace;
+
+      // ── Voice system prompt ────────────────────────────────────────────────
+      // Tracks conversation history to prevent repetition.
+      const assistantTurns = sanitized.filter(m => m.role === "assistant").map(m => m.content);
+      const alreadyAskedOpening = assistantTurns.some(t =>
+        /what brings you to guber/i.test(t) || /what are we getting done/i.test(t)
+      );
+
+      const VOICE_SYSTEM = isInvestorMode ? JAC_INVESTOR_PROMPT + `
+
+VOICE RULES (CRITICAL):
+- Plain speech only. No JSON, markdown, lists, or symbols.
+- 1–2 sentences max, absolute limit 30 words.
+- NEVER start with "Great!", "Sure!", "Of course!", "Absolutely!" or similar filler.
+- NEVER repeat anything already said in this conversation.
+- Lead with the answer immediately.` : `You are JAC — the voice of Team GUBER. GUBER (Global Unlimited Business & Employment Resources) connects workers who want to earn with hirers who need things done, locally across the US.
+
+WHAT GUBER DOES: Local jobs & tasks, Vehicle/item marketplace, Verify & Inspect (remote presence), Load Board (freight), GUBER Studio (AI content), Credits & Missions. Slogan: "Create Value In Yourself."
+
+VOICE RULES (CRITICAL — non-negotiable):
+- Plain conversational speech ONLY. No JSON, no markdown, no bullet points.
+- 1–2 sentences max, absolute limit 30 words. Answer and stop.
+- NEVER start with "Great!", "Sure!", "Of course!", "Absolutely!", "Definitely!" or any filler affirmation.
+- NEVER repeat anything already said in this conversation — check the full history above.
+- ${alreadyAskedOpening ? 'You have already asked what brings them here — do NOT ask again. Instead describe a specific GUBER feature or ask a different follow-up.' : 'If you don\'t know why they\'re here yet, you may ask once: "What brings you to GUBER today?"'}
+- For greetings ("hey", "hi", "hello", "ok", "how are you"): respond naturally and briefly — don't reset to the opening question.
+- Lead with the actual answer or observation immediately. End with at most one follow-up question.
+- Never dead-end — always move the conversation forward.${userCtx}`;
+
+      const systemContent = VOICE_SYSTEM + multiSourceSection;
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        temperature: 0.4,
+        max_tokens: 80,
+        messages: [
+          { role: "system", content: systemContent },
+          ...sanitized,
+        ],
+      });
+
+      const reply = completion.choices?.[0]?.message?.content?.trim()
+        ?? "I'm JAC — what can I help you with today?";
+
+      console.log(`[jac/voice] ${isInvestorMode ? "investor" : "homepage"} ${reply.length}ch in ${Date.now() - now}ms`);
+      return res.json({ reply });
+    } catch (err: any) {
+      console.error("[jac/voice] error:", err?.message);
+      return res.status(500).json({ reply: "I'm here — what can I help you with?" });
+    }
+  });
+
   // ── Investor lead capture ──────────────────────────────────────────────────
   app.post("/api/investor/lead", async (req: Request, res: Response) => {
     try {
