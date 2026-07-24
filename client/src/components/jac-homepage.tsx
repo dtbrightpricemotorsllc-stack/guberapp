@@ -4,6 +4,7 @@ import { Send, Mic, Volume2, ArrowRight, MessageSquare, Minus, Loader2 } from "l
 import { JacConvaiVoice } from "@/components/jac/jac-convai-voice";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
+import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
 import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
@@ -196,6 +197,11 @@ export function JacHomepage() {
   const { listening, transcribing, start: startListening, stop: stopListening, supported: micSupported } =
     useSpeechInput((text) => processInput(text));
 
+  // ── Live Conversation Mode — always-listening, interruptible voice loop ──
+  // Reuses the existing per-character ElevenLabs TTS + Whisper STT stack
+  // (no ElevenLabs Conversational Agents / per-minute billing).
+  const [liveMode, setLiveMode] = useState(false);
+  const [liveState, setLiveState] = useState<ConversationState>("idle");
   const [jacVolume, setJacVolumeState] = useState(() => getJacVolume());
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const engineRef = useRef<ConversationEngine | null>(null);
