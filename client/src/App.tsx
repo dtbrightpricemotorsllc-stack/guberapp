@@ -155,6 +155,10 @@ const CreditsPage = lazy(() => import("@/pages/credits"));
 const EarningOpportunities = lazy(() => import("@/pages/earning-opportunities"));
 const CarrierProfilePage = lazy(() => import("@/pages/carrier-profile"));
 
+// Business Content Studios — private multi-tenant studios
+const NxtgenLawGroupStudio = lazy(() => import("@/pages/business-studio"));
+const AdminBusinessStudios = lazy(() => import("@/pages/admin-business-studios"));
+
 // Campaign Lab — admin-gated marketing workspace
 const CampaignLabHub = lazy(() => import("@/pages/campaign-lab"));
 const CampaignLabBrandCenter = lazy(() => import("@/pages/campaign-lab").then(m => ({ default: m.CampaignLabBrandCenter })));
@@ -384,6 +388,8 @@ function Router() {
       <Route path="/admin/jac-training" component={() => <AdminRoute component={AdminJacTraining} />} />
       <Route path="/admin/asset-protection" component={() => <AdminRoute component={AdminAssetProtection} />} />
       <Route path="/admin/campaign-lab" component={() => <AdminRoute component={AdminCampaignLab} />} />
+      <Route path="/admin/business-studios" component={() => <AdminRoute component={AdminBusinessStudios} />} />
+      <Route path="/nxtgenlawgroup-studio" component={() => <Suspense fallback={<PageLoader />}><NxtgenLawGroupStudio /></Suspense>} />
       <Route path="/campaign-lab/campaigns/:id" component={() => <Suspense fallback={<PageLoader />}><CampaignLabCampaignDetail /></Suspense>} />
       <Route path="/campaign-lab/campaigns" component={() => <Suspense fallback={<PageLoader />}><CampaignLabCampaignsList /></Suspense>} />
       <Route path="/campaign-lab/brand" component={() => <Suspense fallback={<PageLoader />}><CampaignLabBrandCenter /></Suspense>} />

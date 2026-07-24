@@ -1,5 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { setupCampaignLabRoutes } from "./campaign-lab";
+import { setupBusinessStudioRoutes } from "./business-studio";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { getStudioToolsCache, setStudioToolsCache } from "./studio-tools-cache";
@@ -30662,6 +30663,7 @@ OUTPUT STYLE:
 
   // Campaign Lab
   setupCampaignLabRoutes(app);
+  setupBusinessStudioRoutes(app);
 
   return httpServer;
 }

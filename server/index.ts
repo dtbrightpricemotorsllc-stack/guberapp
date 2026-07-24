@@ -1810,6 +1810,94 @@ app.use((req, res, next) => {
     )
   `).catch(e => console.error("[seed] investor_leads table error:", e));
 
+  // ── Business Content Studios (multi-tenant) ──────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS business_studios (
+      id SERIAL PRIMARY KEY,
+      studio_id TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      tagline TEXT,
+      logo_url TEXT,
+      primary_color TEXT DEFAULT '#0f172a',
+      accent_color TEXT DEFAULT '#c9a84c',
+      welcome_message TEXT,
+      contact_email TEXT,
+      monthly_image_limit INTEGER DEFAULT 100,
+      monthly_video_limit INTEGER DEFAULT 10,
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(e => console.error("[seed] business_studios table error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS studio_approved_emails (
+      id SERIAL PRIMARY KEY,
+      studio_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'client',
+      full_name TEXT,
+      is_active BOOLEAN DEFAULT true,
+      added_by TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(studio_id, email)
+    )
+  `).catch(e => console.error("[seed] studio_approved_emails table error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS studio_otp_codes (
+      id SERIAL PRIMARY KEY,
+      studio_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      code TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      used BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(e => console.error("[seed] studio_otp_codes table error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS studio_content (
+      id SERIAL PRIMARY KEY,
+      studio_id TEXT NOT NULL,
+      owner_email TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      status TEXT DEFAULT 'draft',
+      approval_status TEXT DEFAULT 'pending',
+      source_file TEXT,
+      generated_file TEXT,
+      thumbnail_url TEXT,
+      prompt TEXT,
+      caption TEXT,
+      platform_format TEXT,
+      title TEXT,
+      notes TEXT,
+      approved_by TEXT,
+      approved_at TIMESTAMPTZ,
+      archived_at TIMESTAMPTZ,
+      metadata JSONB DEFAULT '{}',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(e => console.error("[seed] studio_content table error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS studio_audit_log (
+      id SERIAL PRIMARY KEY,
+      studio_id TEXT NOT NULL,
+      user_email TEXT,
+      action TEXT NOT NULL,
+      details JSONB DEFAULT '{}',
+      ip_address TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(e => console.error("[seed] studio_audit_log table error:", e));
+
+  // Seed NXTGEN Law Group studio
+  const { seedNxtgenStudio } = await import("./business-studio");
+  await seedNxtgenStudio();
+
   pool.query(`
     INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoint, credits_cost, active) VALUES
       ('listing_video', 'Listing Video',
