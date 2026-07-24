@@ -397,7 +397,7 @@ function JacConvaiPanel({ onClose, sessionEndpoint = "/api/jac/convai/session" }
 }
 
 // ── Wrapper with ConversationProvider + ErrorBoundary ─────────────────────────
-function JacConvaiWrapper({ onClose, sessionEndpoint }: { onClose: () => void; sessionEndpoint?: string }) {
+export function JacConvaiWrapper({ onClose, sessionEndpoint }: { onClose: () => void; sessionEndpoint?: string }) {
   const [key, setKey] = useState(0);
   return (
     <ConvaiErrorBoundary onReset={() => setKey(k => k + 1)}>
