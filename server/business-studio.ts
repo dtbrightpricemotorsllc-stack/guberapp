@@ -420,6 +420,108 @@ export function setupBusinessStudioRoutes(app: Express) {
     }
   });
 
+  // ── AI Video Generation ────────────────────────────────────────────────────
+  app.post("/api/bs/:studioId/generate-video", requireStudio, async (req, res) => {
+    const { studioId } = req.params;
+    const { prompt, title, aspectRatio = "16:9" } = req.body;
+    const auth = (req as any).studioAuth as StudioAuth;
+    const ip = getIp(req);
+
+    if (!prompt?.trim()) return res.status(400).json({ error: "prompt required" });
+
+    const BLOCKED = [/fake.*case/i, /guaranteed.*outcome/i, /fake.*testimonial/i, /we won.*case/i, /confidential/i];
+    if (BLOCKED.some(r => r.test(prompt))) {
+      return res.status(400).json({ error: "content_policy", message: "Prompt violates legal marketing ethics guidelines." });
+    }
+
+    try {
+      const { submitToFal } = await import("./fal.js");
+      const enhancedPrompt = `Professional law firm marketing video. ${prompt.trim()}. Cinematic, polished, premium production quality. Suitable for legal industry marketing.`;
+
+      const falResult = await submitToFal<{ video: { url: string } }>(
+        "fal-ai/kling-video/v1.6/standard/text-to-video",
+        { prompt: enhancedPrompt, duration: "5", aspect_ratio: aspectRatio },
+      );
+
+      const videoUrl = falResult.output?.video?.url;
+      if (!videoUrl) throw new Error("No video URL returned");
+
+      const cloudinary = (await import("./cloudinary.js")).default;
+      const uploadResult = await cloudinary.uploader.upload(videoUrl, {
+        folder: `business-studios/${studioId}`,
+        type: "private",
+        resource_type: "video",
+        tags: [`studio:${studioId}`, "type:ai_video"],
+      });
+
+      const thumbnailUrl = cloudinary.url(uploadResult.public_id, {
+        sign_url: true, type: "private", width: 600, crop: "limit", secure: true,
+        expires_at: Math.floor(Date.now() / 1000) + 86400 * 30,
+        resource_type: "video", format: "jpg", start_offset: "0",
+      });
+
+      const result = await pool.query(
+        `INSERT INTO studio_content
+           (studio_id, owner_email, created_by, content_type, status, approval_status,
+            generated_file, thumbnail_url, prompt, title, platform_format)
+         VALUES ($1,$2,$3,'ai_video','draft','pending',$4,$5,$6,$7,$8) RETURNING id`,
+        [studioId, auth.email, auth.email, uploadResult.public_id, thumbnailUrl,
+         prompt.trim(), title || null, aspectRatio],
+      );
+
+      await auditLog(studioId, auth.email, "video_generation", { contentId: result.rows[0].id, prompt: prompt.trim() }, ip);
+      return res.json({ ok: true, id: result.rows[0].id, thumbnailUrl });
+    } catch (err: any) {
+      console.error("[bs/generate-video]", err.message);
+      return res.status(500).json({ error: "generation_failed", message: "Video generation failed. Please try again." });
+    }
+  });
+
+  // ── Studio Team Management (studio admin only) ──────────────────────────────
+  app.get("/api/bs/:studioId/team", requireStudio, async (req, res) => {
+    const { studioId } = req.params;
+    const auth = (req as any).studioAuth as StudioAuth;
+    if (auth.role !== "admin") return res.status(403).json({ error: "admin_only" });
+    try {
+      const r = await pool.query(
+        `SELECT email, role, full_name, is_active, created_at FROM studio_approved_emails WHERE studio_id = $1 ORDER BY created_at DESC`,
+        [studioId],
+      );
+      return res.json(r.rows);
+    } catch { return res.status(500).json({ error: "server error" }); }
+  });
+
+  app.post("/api/bs/:studioId/team", requireStudio, async (req, res) => {
+    const { studioId } = req.params;
+    const auth = (req as any).studioAuth as StudioAuth;
+    if (auth.role !== "admin") return res.status(403).json({ error: "admin_only" });
+    const { email, role = "client", fullName } = req.body;
+    if (!email) return res.status(400).json({ error: "email required" });
+    try {
+      await pool.query(
+        `INSERT INTO studio_approved_emails (studio_id, email, role, full_name, added_by)
+         VALUES ($1,$2,$3,$4,$5) ON CONFLICT (studio_id, email) DO UPDATE SET role=$3, full_name=$4, is_active=true, added_by=$5`,
+        [studioId, email.trim().toLowerCase(), role, fullName || null, auth.email],
+      );
+      await auditLog(studioId, auth.email, "team_add", { email, role }, getIp(req));
+      return res.json({ ok: true });
+    } catch { return res.status(500).json({ error: "server error" }); }
+  });
+
+  app.delete("/api/bs/:studioId/team/:memberEmail", requireStudio, async (req, res) => {
+    const { studioId, memberEmail } = req.params;
+    const auth = (req as any).studioAuth as StudioAuth;
+    if (auth.role !== "admin") return res.status(403).json({ error: "admin_only" });
+    try {
+      await pool.query(
+        `UPDATE studio_approved_emails SET is_active = false WHERE studio_id = $1 AND email = $2`,
+        [studioId, memberEmail],
+      );
+      await auditLog(studioId, auth.email, "team_remove", { email: memberEmail }, getIp(req));
+      return res.json({ ok: true });
+    } catch { return res.status(500).json({ error: "server error" }); }
+  });
+
   // ── Content: get signed download URL ───────────────────────────────────────
   app.get("/api/bs/:studioId/content/:id/url", requireStudio, async (req, res) => {
     const { studioId, id } = req.params;
