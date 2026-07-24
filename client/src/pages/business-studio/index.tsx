@@ -488,70 +488,79 @@ function GenerateView({ onBack }: { onBack: () => void }) {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: result ? "1fr 1fr" : "1fr", gap: 24 }}>
-        <div>
-          <label style={{ display: "block", color: "#94a3b8", fontSize: 12, marginBottom: 5 }}>Title (optional)</label>
-          <Input data-testid="generate-title-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g., Team Photo" style={{ background: DARK, border: `1px solid ${BORDER}`, color: "#f1f5f9", marginBottom: 14 }} />
-
-          <label style={{ display: "block", color: "#94a3b8", fontSize: 12, marginBottom: 5 }}>Describe the image</label>
-          <Textarea
-            data-testid="generate-prompt-input"
-            value={prompt}
-            onChange={e => setPrompt(e.target.value)}
-            placeholder="Be specific about setting, mood, colors, and style…"
-            rows={4}
-            style={{ background: DARK, border: `1px solid ${BORDER}`, color: "#f1f5f9", marginBottom: 14 }}
+      {/* Result — full width, above the form */}
+      {result && (
+        <div style={{ marginBottom: 28 }}>
+          <img
+            src={result.previewUrl}
+            alt="Generated"
+            style={{ width: "100%", borderRadius: 14, border: `1px solid ${GOLD}55`, boxShadow: `0 0 32px ${GOLD}22`, display: "block" }}
           />
-
-          <label style={{ display: "block", color: "#94a3b8", fontSize: 12, marginBottom: 5 }}>Platform</label>
-          <select data-testid="generate-platform-select" value={platform} onChange={e => setPlatform(e.target.value)} style={{ width: "100%", background: DARK, border: `1px solid ${BORDER}`, color: "#f1f5f9", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginBottom: 18 }}>
-            <option>Instagram (1:1)</option>
-            <option>Instagram Story (9:16)</option>
-            <option>LinkedIn (1.91:1)</option>
-            <option>Facebook Cover (16:9)</option>
-            <option>Twitter/X (16:9)</option>
-            <option>YouTube Thumbnail (16:9)</option>
-          </select>
-
-          <p style={{ color: "#475569", fontSize: 12, marginBottom: 8, fontWeight: 600 }}>Tap a prompt for inspiration:</p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 18 }}>
-            {EXAMPLES.map((ex, i) => (
-              <button key={i} onClick={() => setPrompt(ex.text)} data-testid={`example-prompt-${i}`}
-                style={{ background: DARK, border: `1px solid #1e293b`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", color: "#64748b", fontSize: 11, textAlign: "left", lineHeight: 1.4 }}>
-                <span style={{ color: GOLD, fontWeight: 700, fontSize: 10, display: "block", marginBottom: 2 }}>{ex.label}</span>
-                {ex.text.slice(0, 60)}…
-              </button>
-            ))}
-          </div>
-
-          <Button
-            data-testid="generate-submit-btn"
-            onClick={() => generate.mutate()}
-            disabled={!prompt.trim() || generate.isPending}
-            style={{ background: GOLD, color: NAVY, fontWeight: 700, width: "100%", height: 46 }}
-          >
-            {generate.isPending ? (
-              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <RefreshCw size={14} className="animate-spin" /> Generating… (up to 30s)
-              </span>
-            ) : (
-              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Sparkles size={14} /> Generate Image
-              </span>
-            )}
-          </Button>
-        </div>
-
-        {result && (
-          <div>
-            <p style={{ color: "#94a3b8", fontSize: 12, marginBottom: 10 }}>Generated</p>
-            <img src={result.previewUrl} alt="Generated" style={{ width: "100%", borderRadius: 12, border: `1px solid ${GOLD}44`, boxShadow: `0 0 24px ${GOLD}18` }} />
-            <p style={{ color: "#475569", fontSize: 12, marginTop: 10, lineHeight: 1.6 }}>✓ Saved to your library. Download it anytime from the Content Library.</p>
-            <Button data-testid="generate-another-btn" variant="outline" onClick={() => { setResult(null); setPrompt(""); }} style={{ marginTop: 10, borderColor: BORDER, color: "#64748b", fontSize: 12 }}>
+          <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ color: "#4ade80", fontSize: 13, fontWeight: 600 }}>✓ Saved to your library</span>
+            <Button
+              data-testid="generate-another-btn"
+              variant="outline"
+              onClick={() => { setResult(null); setPrompt(""); }}
+              style={{ borderColor: BORDER, color: "#64748b", fontSize: 12, marginLeft: "auto" }}
+            >
               Generate Another
             </Button>
           </div>
-        )}
+        </div>
+      )}
+
+      <div>
+        <label style={{ display: "block", color: "#94a3b8", fontSize: 12, marginBottom: 5 }}>Title (optional)</label>
+        <Input data-testid="generate-title-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g., Team Photo" style={{ background: DARK, border: `1px solid ${BORDER}`, color: "#f1f5f9", marginBottom: 14 }} />
+
+        <label style={{ display: "block", color: "#94a3b8", fontSize: 12, marginBottom: 5 }}>Describe the image</label>
+        <Textarea
+          data-testid="generate-prompt-input"
+          value={prompt}
+          onChange={e => setPrompt(e.target.value)}
+          placeholder="Be specific about setting, mood, colors, and style…"
+          rows={4}
+          style={{ background: DARK, border: `1px solid ${BORDER}`, color: "#f1f5f9", marginBottom: 14 }}
+        />
+
+        <label style={{ display: "block", color: "#94a3b8", fontSize: 12, marginBottom: 5 }}>Platform</label>
+        <select data-testid="generate-platform-select" value={platform} onChange={e => setPlatform(e.target.value)} style={{ width: "100%", background: DARK, border: `1px solid ${BORDER}`, color: "#f1f5f9", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginBottom: 18 }}>
+          <option>Instagram (1:1)</option>
+          <option>Instagram Story (9:16)</option>
+          <option>LinkedIn (1.91:1)</option>
+          <option>Facebook Cover (16:9)</option>
+          <option>Twitter/X (16:9)</option>
+          <option>YouTube Thumbnail (16:9)</option>
+        </select>
+
+        <p style={{ color: "#475569", fontSize: 12, marginBottom: 8, fontWeight: 600 }}>Tap a prompt for inspiration:</p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 18 }}>
+          {EXAMPLES.map((ex, i) => (
+            <button key={i} onClick={() => setPrompt(ex.text)} data-testid={`example-prompt-${i}`}
+              style={{ background: DARK, border: `1px solid #1e293b`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", color: "#64748b", fontSize: 11, textAlign: "left", lineHeight: 1.4 }}>
+              <span style={{ color: GOLD, fontWeight: 700, fontSize: 10, display: "block", marginBottom: 2 }}>{ex.label}</span>
+              {ex.text.slice(0, 60)}…
+            </button>
+          ))}
+        </div>
+
+        <Button
+          data-testid="generate-submit-btn"
+          onClick={() => generate.mutate()}
+          disabled={!prompt.trim() || generate.isPending}
+          style={{ background: GOLD, color: NAVY, fontWeight: 700, width: "100%", height: 46 }}
+        >
+          {generate.isPending ? (
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <RefreshCw size={14} className="animate-spin" /> Generating… (up to 30s)
+            </span>
+          ) : (
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Sparkles size={14} /> {result ? "Generate New Image" : "Generate Image"}
+            </span>
+          )}
+        </Button>
       </div>
 
       <div style={{ marginTop: 20, background: DARK, border: `1px solid #1e293b`, borderRadius: 8, padding: "12px 16px", display: "flex", gap: 10 }}>
@@ -621,73 +630,72 @@ function GenerateVideoView({ onBack }: { onBack: () => void }) {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: result ? "1fr 1fr" : "1fr", gap: 24 }}>
-        <div>
-          <label style={{ display: "block", color: "#94a3b8", fontSize: 12, marginBottom: 5 }}>Title (optional)</label>
-          <Input data-testid="video-title-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g., Office Intro" style={{ background: DARK, border: `1px solid ${BORDER}`, color: "#f1f5f9", marginBottom: 14 }} />
-
-          <label style={{ display: "block", color: "#94a3b8", fontSize: 12, marginBottom: 5 }}>Describe the video scene</label>
-          <Textarea
-            data-testid="video-prompt-input"
-            value={prompt}
-            onChange={e => setPrompt(e.target.value)}
-            placeholder="Describe the scene, camera movement, mood, and setting…"
-            rows={4}
-            style={{ background: DARK, border: `1px solid ${BORDER}`, color: "#f1f5f9", marginBottom: 18 }}
-          />
-
-          <p style={{ color: "#475569", fontSize: 12, marginBottom: 8, fontWeight: 600 }}>Scene ideas:</p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 18 }}>
-            {EXAMPLES.map((ex, i) => (
-              <button key={i} onClick={() => setPrompt(ex.text)} data-testid={`video-example-${i}`}
-                style={{ background: DARK, border: `1px solid #1e293b`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", color: "#64748b", fontSize: 11, textAlign: "left", lineHeight: 1.4 }}>
-                <span style={{ color: GOLD, fontWeight: 700, fontSize: 10, display: "block", marginBottom: 2 }}>{ex.label}</span>
-                {ex.text.slice(0, 60)}…
-              </button>
-            ))}
-          </div>
-
-          <Button
-            data-testid="video-submit-btn"
-            onClick={() => generate.mutate()}
-            disabled={!prompt.trim() || generate.isPending}
-            style={{ background: GOLD, color: NAVY, fontWeight: 700, width: "100%", height: 46 }}
-          >
-            {generate.isPending ? (
-              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <RefreshCw size={14} className="animate-spin" /> Generating video… (2–3 min)
-              </span>
-            ) : (
-              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Clapperboard size={14} /> Generate Video
-              </span>
-            )}
-          </Button>
-        </div>
-
-        {result && (
-          <div>
-            <p style={{ color: "#94a3b8", fontSize: 12, marginBottom: 10 }}>Generated</p>
-            <div style={{ background: DARK, border: `1px solid ${GOLD}44`, borderRadius: 12, overflow: "hidden", boxShadow: `0 0 24px ${GOLD}18` }}>
-              <div style={{ position: "relative", paddingBottom: aspectRatio === "9:16" ? "177%" : aspectRatio === "1:1" ? "100%" : "56.25%", background: "#000" }}>
-                {result.previewUrl && (
-                  <video
-                    src={result.previewUrl}
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
-                  />
-                )}
-              </div>
+      {/* Result — full width, above the form */}
+      {result && (
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ background: DARK, border: `1px solid ${GOLD}55`, borderRadius: 14, overflow: "hidden", boxShadow: `0 0 32px ${GOLD}22` }}>
+            <div style={{ position: "relative", paddingBottom: aspectRatio === "9:16" ? "177%" : aspectRatio === "1:1" ? "100%" : "56.25%" }}>
+              <video
+                src={result.previewUrl}
+                autoPlay loop muted playsInline
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+              />
             </div>
-            <p style={{ color: "#475569", fontSize: 12, marginTop: 10, lineHeight: 1.6 }}>✓ Saved to your library. Download it anytime from the Content Library.</p>
-            <Button variant="outline" onClick={() => { setResult(null); setPrompt(""); }} style={{ marginTop: 10, borderColor: BORDER, color: "#64748b", fontSize: 12 }}>
+          </div>
+          <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ color: "#4ade80", fontSize: 13, fontWeight: 600 }}>✓ Saved to your library</span>
+            <Button
+              variant="outline"
+              onClick={() => { setResult(null); setPrompt(""); }}
+              style={{ borderColor: BORDER, color: "#64748b", fontSize: 12, marginLeft: "auto" }}
+            >
               Generate Another
             </Button>
           </div>
-        )}
+        </div>
+      )}
+
+      <div>
+        <label style={{ display: "block", color: "#94a3b8", fontSize: 12, marginBottom: 5 }}>Title (optional)</label>
+        <Input data-testid="video-title-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g., Office Intro" style={{ background: DARK, border: `1px solid ${BORDER}`, color: "#f1f5f9", marginBottom: 14 }} />
+
+        <label style={{ display: "block", color: "#94a3b8", fontSize: 12, marginBottom: 5 }}>Describe the video scene</label>
+        <Textarea
+          data-testid="video-prompt-input"
+          value={prompt}
+          onChange={e => setPrompt(e.target.value)}
+          placeholder="Describe the scene, camera movement, mood, and setting…"
+          rows={4}
+          style={{ background: DARK, border: `1px solid ${BORDER}`, color: "#f1f5f9", marginBottom: 18 }}
+        />
+
+        <p style={{ color: "#475569", fontSize: 12, marginBottom: 8, fontWeight: 600 }}>Scene ideas:</p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 18 }}>
+          {EXAMPLES.map((ex, i) => (
+            <button key={i} onClick={() => setPrompt(ex.text)} data-testid={`video-example-${i}`}
+              style={{ background: DARK, border: `1px solid #1e293b`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", color: "#64748b", fontSize: 11, textAlign: "left", lineHeight: 1.4 }}>
+              <span style={{ color: GOLD, fontWeight: 700, fontSize: 10, display: "block", marginBottom: 2 }}>{ex.label}</span>
+              {ex.text.slice(0, 60)}…
+            </button>
+          ))}
+        </div>
+
+        <Button
+          data-testid="video-submit-btn"
+          onClick={() => generate.mutate()}
+          disabled={!prompt.trim() || generate.isPending}
+          style={{ background: GOLD, color: NAVY, fontWeight: 700, width: "100%", height: 46 }}
+        >
+          {generate.isPending ? (
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <RefreshCw size={14} className="animate-spin" /> Generating video… (2–3 min)
+            </span>
+          ) : (
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Clapperboard size={14} /> {result ? "Generate New Video" : "Generate Video"}
+            </span>
+          )}
+        </Button>
       </div>
     </div>
   );
