@@ -84,6 +84,21 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
       }
     }, [active, connected, isMuted, isSpeaking, isListening]);
 
+    // Suppress ElevenLabs SDK internal WebRTC crash (error_type on undefined)
+    // This is an event-handler error so React error boundaries can't catch it.
+    useEffect(() => {
+      function guard(e: ErrorEvent) {
+        const msg = e.message ?? "";
+        if (msg.includes("error_type") || (msg.includes("undefined") && e.filename?.includes("elevenlabs"))) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          cbRef.current.onError("Voice connection lost. Tap mic to retry.");
+        }
+      }
+      window.addEventListener("error", guard, true);
+      return () => window.removeEventListener("error", guard, true);
+    }, []);
+
     // Boot / teardown
     const bootRef = useRef<() => void>();
     const cancelRef = useRef(false);
@@ -135,6 +150,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           if (session.userContext?.firstName) dynVars["user_first_name"] = session.userContext.firstName;
           if (session.userContext?.role)      dynVars["user_role"]        = session.userContext.role;
           if (session.userContext?.platform)  dynVars["user_platform"]    = session.userContext.platform;
+          if (session.userContext?.jac_mode)  dynVars["jac_mode"]         = session.userContext.jac_mode;
 
           const params: Record<string, any> = { dynamicVariables: dynVars };
           if (session.signedUrl) params.signedUrl = session.signedUrl;
