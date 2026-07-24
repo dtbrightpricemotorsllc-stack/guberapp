@@ -16915,6 +16915,75 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
     }
   });
 
+  // ── JAC anonymous/investor voice brain ──────────────────────────────────────
+  // Called by convai/llm for sessions WITHOUT a logged-in userId (homepage
+  // visitors, investor page guests). Mirrors the same KB → multi-source →
+  // LLM pipeline as /api/jac/onboard so there is ONE central JAC system.
+  // mode="investor" uses JAC_INVESTOR_PROMPT; "homepage" uses the onboard
+  // identity (no structured-JSON response — voice only needs plain text).
+  async function runJacAnonymousVoice(
+    messages: Array<{ role: "user" | "assistant"; content: string }>,
+    mode: "homepage" | "investor",
+  ): Promise<string> {
+    const lastUserMsg = [...messages].reverse().find(m => m.role === "user")?.content ?? "";
+
+    // ── Voice-tech deterministic shortcut (same as onboard route) ─────────────
+    const VOICE_TECH_PATTERNS = [
+      /\b(11\s*labs|eleven\s*labs|elevenlabs)\b/,
+      /what\s+(powers|is)\s+your\s+voice/,
+    ];
+    if (VOICE_TECH_PATTERNS.some(p => p.test(lastUserMsg.toLowerCase()))) {
+      return "Yes — my voice is powered by ElevenLabs' AI voice engine, so I sound as natural as possible. If you can't hear me, check your device volume.";
+    }
+
+    // ── KB shortcut — same as onboard route ───────────────────────────────────
+    if (lastUserMsg) {
+      try {
+        const localAns = await tryLocalAnswer(lastUserMsg);
+        if (localAns && localAns.confidence >= 0.85) return localAns.answer;
+      } catch { /* non-fatal */ }
+    }
+
+    // ── Multi-source context — same as onboard route ─────────────────────────
+    let multiSourceSection = "";
+    if (lastUserMsg) {
+      try {
+        const sources = await getMultiSourceContext(lastUserMsg, 4);
+        if (sources.length > 0) {
+          multiSourceSection = `\nRELEVANT GUBER KNOWLEDGE (combine as needed):\n${sources.map((s: any, i: number) => `[${i + 1}] (${s.category}) ${s.title}: ${s.answer}`).join("\n")}\n`;
+        }
+      } catch { /* non-fatal */ }
+    }
+
+    // ── Select system prompt based on surface ─────────────────────────────────
+    // investor → JAC_INVESTOR_PROMPT (same as onboard route mode="investor")
+    // homepage → base JAC identity (same knowledge, no structured JSON for voice)
+    const baseSystemPrompt = mode === "investor"
+      ? JAC_INVESTOR_PROMPT
+      : `You are JAC — the coordinator of Team GUBER. GUBER stands for Global Unlimited Business & Employment Resources. You speak with visitors who have NOT signed up yet. Be warm, energetic, and practical. GUBER is a US-only local platform where workers earn on local jobs, hirers post jobs and hire verified workers. Also: Marketplace, Verify & Inspect, Load Board, Credits/Missions, GUBER Studio. Slogan: "Create Value In Yourself." VOICE: 1–2 short sentences, under 30 words. Answer the question and stop. Never dead-end — always suggest a next step.`;
+
+    const voiceAddendum = `\n\nVOICE RESPONSE RULES: Reply in plain conversational speech only — NO JSON, NO markdown, NO bullet points. 1–2 sentences maximum, under 30 words. Lead with the answer immediately.`;
+
+    const OpenAI = (await import("openai")).default;
+    const openai = new OpenAI({
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4.1-mini",
+      temperature: 0.3,
+      max_tokens: 120,
+      messages: [
+        { role: "system", content: baseSystemPrompt + multiSourceSection + voiceAddendum },
+        ...messages,
+      ],
+    });
+
+    return completion.choices?.[0]?.message?.content?.trim()
+      ?? (mode === "investor" ? "Welcome to GUBER — what would you like to know?" : "Hey! I'm JAC — what are we getting done today?");
+  }
+
   // JAC's single brain. Called by /api/ai/guber-assist (session-authed, web/native
   // text) AND by the ElevenLabs custom-LLM adapter below — one JAC everywhere, no
   // drift. Returns the structured reply; callers add latencyMs / choose transport.
@@ -17464,62 +17533,36 @@ CRITICAL — respond with JSON ONLY, no other text:
       const sanitized = sanitizeAssistMessages(Array.isArray(body.messages) ? body.messages : []);
       if (sanitized.length === 0) sanitized.push({ role: "user", content: "hello" });
 
-      // ── Investor mode: CID prefixed "investor_" → use JAC_INVESTOR_PROMPT ─────
-      const isInvestorConvai = typeof claims?.cid === "string" && claims.cid.startsWith("investor_");
-      if (isInvestorConvai) {
-        const OpenAI2 = (await import("openai")).default;
-        const openai2 = new OpenAI2({
-          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-        });
-        const sanitizedInv = [...sanitized]; // reuse already-sanitized messages
-        if (sanitizedInv.length === 0) sanitizedInv.push({ role: "user", content: "hello" });
-        const completion = await openai2.chat.completions.create({
-          model,
-          messages: [{ role: "system", content: JAC_INVESTOR_PROMPT }, ...sanitizedInv],
-          temperature: 0.3,
-          max_tokens: 120,
-          stream,
-        } as any);
-        const id = newCompletionId();
-        if (stream) {
-          res.setHeader("Content-Type", "text/event-stream");
-          res.setHeader("Cache-Control", "no-cache");
-          res.setHeader("Connection", "keep-alive");
-          for await (const chunk of completion as any) {
-            const delta = chunk.choices?.[0]?.delta?.content;
-            if (delta) res.write(`data: ${JSON.stringify({ id, object: "chat.completion.chunk", model, choices: [{ delta: { content: delta }, index: 0, finish_reason: null }] })}\n\n`);
-          }
-          res.write("data: [DONE]\n\n");
-          return res.end();
-        } else {
-          const text = (completion as any).choices?.[0]?.message?.content ?? "Welcome to GUBER — what would you like to know?";
-          return res.json(buildNonStreamCompletion({ id, model, content: text }));
-        }
-      }
+      // ── Route to the correct JAC surface — ONE central system ────────────────
+      // Logged-in users  → runGuberAssistBrain (full in-app assistant with user context)
+      // Anonymous users  → runJacAnonymousVoice (KB + multi-source + surface prompt)
+      //   investor CID   → mode "investor" uses JAC_INVESTOR_PROMPT
+      //   all others     → mode "homepage" uses base onboard identity
+      // ElevenLabs is only the voice transport — JAC intelligence always lives here.
+      const jacSurface = (typeof claims?.cid === "string" && claims.cid.startsWith("investor_"))
+        ? "investor" : "homepage";
 
-      // Safe fallback when no user context (ElevenLabs may not forward identity)
-      const effectiveUser = user ?? {
-        id: 0,
-        role: "user",
-        accountType: "consumer",
-        fullName: null,
-        username: "Guest",
-        day1OG: false,
-        city: null,
-        state: null,
-      };
       let content: string;
-      try {
-        const result = await runGuberAssistBrain(effectiveUser, sanitized, true);
-        content = (result?.reply || "Hey! I'm Jac — what are we getting done today?").toString();
-      } catch (brainErr: any) {
-        console.warn("[jac/convai/llm] brain error (anonymous fallback):", brainErr?.message);
-        // Never let a brain error return 500 to ElevenLabs — that terminates the session.
-        const lastMsg = sanitized.at(-1)?.content?.toLowerCase() ?? "";
-        content = lastMsg.length < 5
-          ? "Hey! I'm Jac, your GUBER assistant. What can I help you accomplish today?"
-          : "I got you. Tell me more and I'll help you get it done through GUBER.";
+      if (user) {
+        // Authenticated: full in-app assistant brain (has user context, memory, live data)
+        try {
+          const result = await runGuberAssistBrain(user, sanitized, true);
+          content = (result?.reply || "Hey! I'm JAC — what are we getting done today?").toString();
+        } catch (brainErr: any) {
+          console.warn("[jac/convai/llm] brain error:", brainErr?.message);
+          content = "I got you. Tell me more and I'll help you get it done through GUBER.";
+        }
+      } else {
+        // Anonymous (homepage visitor or investor page guest): central JAC via KB + LLM
+        try {
+          content = await runJacAnonymousVoice(sanitized, jacSurface);
+        } catch (anonErr: any) {
+          console.warn("[jac/convai/llm] anonymous voice error:", anonErr?.message);
+          const lastMsg = sanitized.at(-1)?.content?.toLowerCase() ?? "";
+          content = lastMsg.length < 5
+            ? (jacSurface === "investor" ? "Welcome to GUBER — what would you like to know?" : "Hey! I'm JAC — what are we getting done today?")
+            : "I got you. Tell me more and I'll help you get it done through GUBER.";
+        }
       }
       console.log("[jac/convai/llm] reply", content.length, "chars, stream:", stream);
       const id = newCompletionId();
