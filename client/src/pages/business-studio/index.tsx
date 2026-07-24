@@ -444,16 +444,16 @@ function GenerateView({ onBack }: { onBack: () => void }) {
   const [prompt, setPrompt] = useState("");
   const [title, setTitle] = useState("");
   const [platform, setPlatform] = useState("Instagram (1:1)");
-  const [result, setResult] = useState<{ id: number; thumbnailUrl: string } | null>(null);
+  const [result, setResult] = useState<{ id: number; previewUrl: string } | null>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
 
   const generate = useMutation({
     mutationFn: () => apiRequest("POST", API("/generate"), { prompt, title, platformFormat: platform }),
     onSuccess: (data: any) => {
-      setResult({ id: data.id, thumbnailUrl: data.thumbnailUrl });
+      setResult({ id: data.id, previewUrl: data.previewUrl || data.thumbnailUrl });
       qc.invalidateQueries({ queryKey: [API("/content")] });
-      toast({ title: "Image created!", description: "Added to your library — pending approval." });
+      toast({ title: "Image created!", description: "Saved to your library." });
     },
     onError: (err: any) => toast({ title: "Generation failed", description: err.message || "Please try again.", variant: "destructive" }),
   });
@@ -545,13 +545,8 @@ function GenerateView({ onBack }: { onBack: () => void }) {
         {result && (
           <div>
             <p style={{ color: "#94a3b8", fontSize: 12, marginBottom: 10 }}>Generated</p>
-            <img src={result.thumbnailUrl} alt="Generated" style={{ width: "100%", borderRadius: 12, border: `1px solid ${GOLD}44`, boxShadow: `0 0 24px ${GOLD}18` }} />
-            <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Badge style={{ background: "#fef08a18", color: "#fef08a", border: "1px solid #fef08a33", fontSize: 11 }}>
-                <Clock size={10} style={{ marginRight: 4 }} /> Pending Approval
-              </Badge>
-            </div>
-            <p style={{ color: "#475569", fontSize: 12, marginTop: 8, lineHeight: 1.6 }}>Saved to library. Staff must approve before publishing.</p>
+            <img src={result.previewUrl} alt="Generated" style={{ width: "100%", borderRadius: 12, border: `1px solid ${GOLD}44`, boxShadow: `0 0 24px ${GOLD}18` }} />
+            <p style={{ color: "#475569", fontSize: 12, marginTop: 10, lineHeight: 1.6 }}>✓ Saved to your library. Download it anytime from the Content Library.</p>
             <Button data-testid="generate-another-btn" variant="outline" onClick={() => { setResult(null); setPrompt(""); }} style={{ marginTop: 10, borderColor: BORDER, color: "#64748b", fontSize: 12 }}>
               Generate Another
             </Button>
@@ -574,16 +569,16 @@ function GenerateVideoView({ onBack }: { onBack: () => void }) {
   const [prompt, setPrompt] = useState("");
   const [title, setTitle] = useState("");
   const [aspectRatio, setAspectRatio] = useState("16:9");
-  const [result, setResult] = useState<{ id: number; thumbnailUrl: string } | null>(null);
+  const [result, setResult] = useState<{ id: number; previewUrl: string } | null>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
 
   const generate = useMutation({
     mutationFn: () => apiRequest("POST", API("/generate-video"), { prompt, title, aspectRatio }),
     onSuccess: (data: any) => {
-      setResult({ id: data.id, thumbnailUrl: data.thumbnailUrl });
+      setResult({ id: data.id, previewUrl: data.previewUrl || data.thumbnailUrl });
       qc.invalidateQueries({ queryKey: [API("/content")] });
-      toast({ title: "Video created!", description: "5-second AI video added to your library — pending approval." });
+      toast({ title: "Video created!", description: "5-second AI video saved to your library." });
     },
     onError: (err: any) => toast({ title: "Generation failed", description: err.message || "Please try again.", variant: "destructive" }),
   });
@@ -675,18 +670,19 @@ function GenerateVideoView({ onBack }: { onBack: () => void }) {
             <p style={{ color: "#94a3b8", fontSize: 12, marginBottom: 10 }}>Generated</p>
             <div style={{ background: DARK, border: `1px solid ${GOLD}44`, borderRadius: 12, overflow: "hidden", boxShadow: `0 0 24px ${GOLD}18` }}>
               <div style={{ position: "relative", paddingBottom: aspectRatio === "9:16" ? "177%" : aspectRatio === "1:1" ? "100%" : "56.25%", background: "#000" }}>
-                {result.thumbnailUrl && (
-                  <img src={result.thumbnailUrl} alt="Video thumb" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+                {result.previewUrl && (
+                  <video
+                    src={result.previewUrl}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                  />
                 )}
-                <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Film size={32} color={`${GOLD}99`} />
-                </div>
               </div>
             </div>
-            <Badge style={{ marginTop: 10, background: "#fef08a18", color: "#fef08a", border: "1px solid #fef08a33", fontSize: 11 }}>
-              <Clock size={10} style={{ marginRight: 4 }} /> Pending Approval
-            </Badge>
-            <p style={{ color: "#475569", fontSize: 12, marginTop: 8, lineHeight: 1.6 }}>Saved to library. Download it from your Content Library.</p>
+            <p style={{ color: "#475569", fontSize: 12, marginTop: 10, lineHeight: 1.6 }}>✓ Saved to your library. Download it anytime from the Content Library.</p>
             <Button variant="outline" onClick={() => { setResult(null); setPrompt(""); }} style={{ marginTop: 10, borderColor: BORDER, color: "#64748b", fontSize: 12 }}>
               Generate Another
             </Button>

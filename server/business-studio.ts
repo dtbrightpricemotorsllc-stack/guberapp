@@ -406,14 +406,14 @@ export function setupBusinessStudioRoutes(app: Express) {
         `INSERT INTO studio_content
            (studio_id, owner_email, created_by, content_type, status, approval_status,
             generated_file, thumbnail_url, prompt, title, platform_format)
-         VALUES ($1,$2,$3,'ai_image','draft','pending',$4,$5,$6,$7,$8)
+         VALUES ($1,$2,$3,'ai_image','draft','approved',$4,$5,$6,$7,$8)
          RETURNING id`,
         [studioId, auth.email, auth.email, uploadResult.public_id, thumbnailUrl,
          prompt.trim(), title || null, platformFormat || null],
       );
 
       await auditLog(studioId, auth.email, "generation_request", { contentId: result.rows[0].id, prompt: prompt.trim() }, ip);
-      return res.json({ ok: true, id: result.rows[0].id, thumbnailUrl });
+      return res.json({ ok: true, id: result.rows[0].id, thumbnailUrl, previewUrl: imageUrl });
     } catch (err: any) {
       console.error("[bs/generate]", err.message);
       return res.status(500).json({ error: "generation_failed", message: "Image generation failed. Please try again." });
@@ -464,13 +464,13 @@ export function setupBusinessStudioRoutes(app: Express) {
         `INSERT INTO studio_content
            (studio_id, owner_email, created_by, content_type, status, approval_status,
             generated_file, thumbnail_url, prompt, title, platform_format)
-         VALUES ($1,$2,$3,'ai_video','draft','pending',$4,$5,$6,$7,$8) RETURNING id`,
+         VALUES ($1,$2,$3,'ai_video','draft','approved',$4,$5,$6,$7,$8) RETURNING id`,
         [studioId, auth.email, auth.email, uploadResult.public_id, thumbnailUrl,
          prompt.trim(), title || null, aspectRatio],
       );
 
       await auditLog(studioId, auth.email, "video_generation", { contentId: result.rows[0].id, prompt: prompt.trim() }, ip);
-      return res.json({ ok: true, id: result.rows[0].id, thumbnailUrl });
+      return res.json({ ok: true, id: result.rows[0].id, thumbnailUrl, previewUrl: videoUrl });
     } catch (err: any) {
       console.error("[bs/generate-video]", err.message);
       return res.status(500).json({ error: "generation_failed", message: "Video generation failed. Please try again." });
