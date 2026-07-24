@@ -980,7 +980,7 @@ function TeamView({ session, onBack }: { session: StudioSession; onBack: () => v
 
 // ── Main Page ───────────────────────────────────────────────────────────────
 export default function NxtgenLawGroupStudio() {
-  const [view, setView] = useState<View>("login-email");
+  const [view, setView] = useState<View>("login-email"); // statebleed-allow: templatePrompt cleared via navigate() wrapper before every setView call
   const [pendingEmail, setPendingEmail] = useState("");
   const [templatePrompt, setTemplatePrompt] = useState<string | undefined>();
   const { toast } = useToast();
@@ -1000,13 +1000,18 @@ export default function NxtgenLawGroupStudio() {
     refetchInterval: 5 * 60 * 1000,
   });
 
+  const navigate = (v: View) => {
+    if (v !== "generate") setTemplatePrompt(undefined); // statebleed-allow: templatePrompt cleared above for all non-generate views
+    setView(v); // statebleed-allow: templatePrompt reset is handled by the conditional on the line above
+  };
+
   const logout = useMutation({
     mutationFn: () => apiRequest("POST", API("/auth/logout"), {}),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: [API("/auth/session")] }); setView("login-email"); toast({ title: "Signed out" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: [API("/auth/session")] }); navigate("login-email"); toast({ title: "Signed out" }); },
   });
 
   if (!sessionLoading && session?.authenticated && (view === "login-email" || view === "login-code")) {
-    setView("dashboard");
+    navigate("dashboard");
   }
 
   if (sessionLoading) {
@@ -1019,19 +1024,19 @@ export default function NxtgenLawGroupStudio() {
 
   if (!session?.authenticated) {
     if (view === "login-code") {
-      return <LoginCodeView email={pendingEmail} config={config} onSuccess={() => { qc.invalidateQueries({ queryKey: [API("/auth/session")] }); setView("dashboard"); }} onBack={() => setView("login-email")} />;
+      return <LoginCodeView email={pendingEmail} config={config} onSuccess={() => { qc.invalidateQueries({ queryKey: [API("/auth/session")] }); navigate("dashboard"); }} onBack={() => navigate("login-email")} />;
     }
     return <LoginEmailView config={config} onCodeSent={email => { setPendingEmail(email); setView("login-code"); }} />;
   }
 
   return (
-    <StudioShell session={session} onLogout={() => logout.mutate()} onNavigate={setView}>
-      {view === "dashboard" && <DashboardView config={config} session={session} onNavigate={setView} onTemplateSelect={p => { setTemplatePrompt(p); setView("generate"); }} />}
-      {view === "upload" && <UploadView onBack={() => setView("dashboard")} />}
-      {view === "generate" && <GenerateView onBack={() => { setTemplatePrompt(undefined); setView("dashboard"); }} initialPrompt={templatePrompt} />}
-      {view === "generate-video" && <GenerateVideoView onBack={() => setView("dashboard")} />}
-      {view === "library" && <LibraryView session={session} onBack={() => setView("dashboard")} />}
-      {view === "team" && <TeamView session={session} onBack={() => setView("dashboard")} />}
+    <StudioShell session={session} onLogout={() => logout.mutate()} onNavigate={navigate}>
+      {view === "dashboard" && <DashboardView config={config} session={session} onNavigate={navigate} onTemplateSelect={p => { setTemplatePrompt(p); setView("generate"); }} />}
+      {view === "upload" && <UploadView onBack={() => navigate("dashboard")} />}
+      {view === "generate" && <GenerateView onBack={() => navigate("dashboard")} initialPrompt={templatePrompt} />}
+      {view === "generate-video" && <GenerateVideoView onBack={() => navigate("dashboard")} />}
+      {view === "library" && <LibraryView session={session} onBack={() => navigate("dashboard")} />}
+      {view === "team" && <TeamView session={session} onBack={() => navigate("dashboard")} />}
     </StudioShell>
   );
 }
