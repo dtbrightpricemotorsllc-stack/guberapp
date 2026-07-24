@@ -360,23 +360,27 @@ export function setupBusinessStudioRoutes(app: Express) {
         return res.status(429).json({ error: "monthly_limit", message: "Monthly AI image limit reached. Contact your GUBER admin to increase it." });
       }
 
-      const OpenAI = (await import("openai")).default;
-      const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-      });
+      const { submitToFal } = await import("./fal.js");
 
       const enhancedPrompt = `Professional legal marketing image for a law firm. ${prompt.trim()}. Clean, professional, high quality, suitable for legal industry marketing. No text overlays in the image.`;
 
-      const imageRes = await openai.images.generate({
-        model: "dall-e-3",
-        prompt: enhancedPrompt,
-        size: "1024x1024",
-        quality: "standard",
-        n: 1,
-      });
+      // Map platform format to fal image size
+      const sizeMap: Record<string, string> = {
+        "Instagram (1:1)": "square_hd",
+        "Instagram Story (9:16)": "portrait_16_9",
+        "Facebook Cover (16:9)": "landscape_16_9",
+        "LinkedIn (1.91:1)": "landscape_4_3",
+        "Twitter/X (16:9)": "landscape_16_9",
+        "YouTube Thumbnail (16:9)": "landscape_16_9",
+      };
+      const imageSize = sizeMap[platformFormat ?? ""] ?? "square_hd";
 
-      const imageUrl = imageRes.data[0]?.url;
+      const falResult = await submitToFal<{ images: { url: string }[] }>(
+        "fal-ai/flux/schnell",
+        { prompt: enhancedPrompt, image_size: imageSize, num_images: 1, num_inference_steps: 4 },
+      );
+
+      const imageUrl = falResult.output?.images?.[0]?.url;
       if (!imageUrl) throw new Error("No image URL returned");
 
       // Archive to Cloudinary private storage
