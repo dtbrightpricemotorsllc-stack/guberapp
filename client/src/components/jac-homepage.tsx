@@ -869,7 +869,7 @@ export function JacHomepage() {
 
       {/* ── MAIN CONTENT — always rendered so ElevenLabs initialises ── */}
       <div
-        className="relative max-w-4xl mx-auto px-3 sm:px-6 flex flex-col md:flex-row items-end gap-4 md:gap-6 py-6 md:py-10"
+        className="relative max-w-4xl mx-auto px-3 sm:px-6 flex flex-row items-end gap-2 sm:gap-4 md:gap-6 py-4 md:py-10"
         style={{
           filter: powerOnPhase === "black"   ? "blur(20px) brightness(0)"
                 : powerOnPhase === "scanline" ? "blur(7px) brightness(0.06)"
@@ -879,7 +879,7 @@ export function JacHomepage() {
       >
 
         {/* ── PHONE (left) ── */}
-        <div className="flex-shrink-0 relative mx-auto md:mx-0" style={{ width: 280, maxWidth: "88vw" }}>
+        <div className="flex-shrink-0 relative" style={{ width: "min(280px, 46vw)" }}>
           {/* Side buttons */}
           <div className="absolute right-[-5px] top-[120px] w-1 h-14 rounded-r-full" style={{ background: "hsl(222 35% 16%)" }} />
           <div className="absolute left-[-5px] top-[98px] w-1 h-8 rounded-l-full"  style={{ background: "hsl(222 35% 16%)" }} />
@@ -888,8 +888,8 @@ export function JacHomepage() {
 
           {/* Phone body */}
           <div className="relative overflow-hidden flex flex-col" style={{
-            borderRadius: 42,
-            height: 530,
+            borderRadius: "clamp(24px, 6vw, 42px)",
+            height: "min(530px, 73vw)",
             background: "hsl(222 47% 6%)",
             border: "9px solid hsl(222 32% 12%)",
             boxShadow: "0 0 0 1px hsl(270 100% 65% / 0.22), 0 32px 90px rgba(0,0,0,0.75), inset 0 1px 0 hsl(270 100% 65% / 0.08)",
@@ -1047,10 +1047,10 @@ export function JacHomepage() {
         </div>
 
         {/* ── SPEECH BUBBLES + JAC (right) ── */}
-        <div className="flex-1 flex items-end gap-2 min-w-0 md:min-h-[530px]">
+        <div className="flex-1 flex items-end gap-1 sm:gap-2 min-w-0" style={{ minHeight: "min(530px, 73vw)" }}>
 
           {/* Speech bubble column — floats to JAC's left, tails point right toward her */}
-          <div className="flex-1 flex flex-col justify-end gap-3 pb-6 pr-2 min-w-0" style={{ minHeight: 320 }}>
+          <div className="flex-1 flex flex-col justify-end gap-2 sm:gap-3 pb-4 sm:pb-6 pr-1 sm:pr-2 min-w-0" style={{ minHeight: "min(320px, 45vw)" }}>
             {jacBubbles.length === 0 && !typing && (
               <p className="text-[11px] text-white/22 text-center font-display px-4 leading-relaxed">JAC is warming up…<br/>Tap the mic to talk</p>
             )}
@@ -1120,7 +1120,7 @@ export function JacHomepage() {
           </div>
 
           {/* JAC character — far right */}
-          <div className="flex-shrink-0 relative self-end" style={{ width: 210 }}>
+          <div className="flex-shrink-0 relative self-end" style={{ width: "min(210px, 30vw)" }}>
             <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-36 h-5 rounded-full blur-2xl opacity-40" style={{ background: "hsl(270 100% 65%)" }} />
             <img
               src={jacFull}
