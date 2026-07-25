@@ -8,6 +8,26 @@
  *
  * Must be rendered inside a <ConversationProvider>.
  */
+
+// ── Module-scope guard: must run at IMPORT TIME so it fires before Vite's ──
+// overlay handler. The ElevenLabs SDK throws "Cannot read properties of
+// undefined (reading 'error_type')" inside _WebRTCConnection.onMessage when
+// the peer sends a malformed frame. We suppress it silently here.
+if (typeof window !== "undefined") {
+  const _jacElevenLabsGuard = (e: ErrorEvent) => {
+    const msg = e?.message ?? "";
+    if (
+      msg.includes("error_type") ||
+      (msg.includes("Cannot read properties of undefined") &&
+        (e.filename?.includes("elevenlabs") || e.filename?.includes("eleven")))
+    ) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+  };
+  window.addEventListener("error", _jacElevenLabsGuard, true);
+}
+
 import { Component, forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import type { ReactNode } from "react";
 import { useConversation } from "@elevenlabs/react";
