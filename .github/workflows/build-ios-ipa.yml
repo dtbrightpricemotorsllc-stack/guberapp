@@ -137,9 +137,7 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM=${{ env.TEAM_ID }} \
             PROVISIONING_PROFILE_SPECIFIER="" \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            ENABLE_ON_DEMAND_RESOURCES=NO \
-            APP_THINNING=None
+            COMPILER_INDEX_STORE_ENABLE=NO
 
       - name: Export IPA and upload to App Store Connect
         env:
@@ -328,4 +326,3 @@ jobs:
           print('Next step: go to App Store Connect → GUBER → iOS App → 1.0.0')
           print('and click "Submit for Review" when ready.')
           PYEOF
-
