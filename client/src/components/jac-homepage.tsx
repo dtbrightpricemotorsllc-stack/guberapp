@@ -341,8 +341,11 @@ export function JacHomepage() {
     cancelSpeech();
     cancelAllJacAudio();
     if (listening) stopListening();
-    // Prevent text TTS from also playing a greeting — ElevenLabs will speak first
+    // Block text-TTS greeting immediately (sync) so the 120ms deferred speak()
+    // call from the touchstart listener no-ops — liveModeRef must be true before
+    // that timeout fires, but useEffect only runs after a re-render (too slow).
     greetingSpokenRef.current = true;
+    liveModeRef.current = true;   // sync guard — speak() checks this ref directly
     setLiveMode(true);
     setLiveState("listening");
     setConvaiKey(k => k + 1);
