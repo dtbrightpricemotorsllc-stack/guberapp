@@ -826,7 +826,6 @@ export function JacHomepage() {
       ref={convaiSessionRef}
       active={liveMode}
       sessionEndpoint="/api/jac/convai/investor-session"
-      suppressFirstMessage
       onPhaseChange={handleConvaiPhaseChange}
       onUserTranscript={handleConvaiUserTranscript}
       onJacResponse={handleConvaiJacResponse}
@@ -1047,10 +1046,10 @@ export function JacHomepage() {
         </div>
 
         {/* ── SPEECH BUBBLES + JAC (right) ── */}
-        <div className="flex-1 flex items-end gap-1 sm:gap-2 min-w-0" style={{ minHeight: "min(530px, 73vw)" }}>
+        <div className="flex-1 flex flex-col items-stretch min-w-0" style={{ minHeight: "min(530px, 73vw)" }}>
 
-          {/* Speech bubble column — floats to JAC's left, tails point right toward her */}
-          <div className="flex-1 flex flex-col justify-end gap-2 sm:gap-3 pb-4 sm:pb-6 pr-1 sm:pr-2 min-w-0" style={{ minHeight: "min(320px, 45vw)" }}>
+          {/* Speech bubble column — sits ABOVE JAC, tail points down toward her head */}
+          <div className="flex-1 flex flex-col justify-end gap-2 sm:gap-3 pb-3 px-1 sm:px-2 min-w-0">
             {jacBubbles.length === 0 && !typing && (
               <p className="text-[11px] text-white/22 text-center font-display px-4 leading-relaxed">JAC is warming up…<br/>Tap the mic to talk</p>
             )}
@@ -1076,28 +1075,30 @@ export function JacHomepage() {
                         : "0 4px 18px rgba(0,0,0,0.4)",
                       transition: "border-color 0.3s, box-shadow 0.3s",
                       wordBreak: "break-word",
+                      marginBottom: isNewest ? 6 : 0,
                     }}
                     data-testid={isNewest ? "jac-latest-bubble" : undefined}
                   >
                     {msg.content}
 
-                    {/* Tail fill (inner colour) */}
-                    <div style={{
-                      position: "absolute", right: -15, bottom: 18,
-                      width: 0, height: 0,
-                      borderTop: "9px solid transparent",
-                      borderBottom: "9px solid transparent",
-                      borderLeft: `14px solid ${bubbleBg}`,
-                    }} />
-                    {/* Tail border */}
-                    <div style={{
-                      position: "absolute", right: -19, bottom: 16,
-                      width: 0, height: 0,
-                      borderTop: "11px solid transparent",
-                      borderBottom: "11px solid transparent",
-                      borderLeft: `17px solid ${borderCol}`,
-                      zIndex: -1,
-                    }} />
+                    {/* Tail — points DOWN toward JAC's head (only on newest bubble) */}
+                    {isNewest && <>
+                      <div style={{
+                        position: "absolute", bottom: -13, left: "50%", transform: "translateX(-50%)",
+                        width: 0, height: 0,
+                        borderLeft: "9px solid transparent",
+                        borderRight: "9px solid transparent",
+                        borderTop: `13px solid ${bubbleBg}`,
+                      }} />
+                      <div style={{
+                        position: "absolute", bottom: -17, left: "50%", transform: "translateX(-50%)",
+                        width: 0, height: 0,
+                        borderLeft: "11px solid transparent",
+                        borderRight: "11px solid transparent",
+                        borderTop: `16px solid ${borderCol}`,
+                        zIndex: -1,
+                      }} />
+                    </>}
                   </div>
                 </div>
               );
@@ -1105,28 +1106,29 @@ export function JacHomepage() {
 
             {/* Typing dots bubble */}
             {typing && (
-              <div data-testid="jac-typing">
+              <div data-testid="jac-typing" style={{ marginBottom: 6 }}>
                 <div className="relative inline-flex rounded-[22px] px-4 py-3 items-center gap-1.5"
                   style={{ background: "hsl(0 0% 93%)", border: "2.5px solid hsl(222 30% 30%)", boxShadow: "0 4px 16px rgba(0,0,0,0.38)" }}
                 >
                   <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: "hsl(222 40% 35%)", animationDelay: "0ms" }} />
                   <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: "hsl(222 40% 35%)", animationDelay: "160ms" }} />
                   <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: "hsl(222 40% 35%)", animationDelay: "320ms" }} />
-                  <div style={{ position: "absolute", right: -15, bottom: 18, width: 0, height: 0, borderTop: "9px solid transparent", borderBottom: "9px solid transparent", borderLeft: "14px solid hsl(0 0% 93%)" }} />
-                  <div style={{ position: "absolute", right: -19, bottom: 16, width: 0, height: 0, borderTop: "11px solid transparent", borderBottom: "11px solid transparent", borderLeft: "17px solid hsl(222 30% 30%)", zIndex: -1 }} />
+                  {/* Tail pointing down */}
+                  <div style={{ position: "absolute", bottom: -13, left: "50%", transform: "translateX(-50%)", width: 0, height: 0, borderLeft: "9px solid transparent", borderRight: "9px solid transparent", borderTop: "13px solid hsl(0 0% 93%)" }} />
+                  <div style={{ position: "absolute", bottom: -17, left: "50%", transform: "translateX(-50%)", width: 0, height: 0, borderLeft: "11px solid transparent", borderRight: "11px solid transparent", borderTop: "16px solid hsl(222 30% 30%)", zIndex: -1 }} />
                 </div>
               </div>
             )}
           </div>
 
-          {/* JAC character — far right */}
-          <div className="flex-shrink-0 relative self-end" style={{ width: "min(210px, 30vw)" }}>
+          {/* JAC character — bottom, beneath the bubbles */}
+          <div className="flex-shrink-0 relative self-center" style={{ width: "min(210px, 34vw)" }}>
             <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-36 h-5 rounded-full blur-2xl opacity-40" style={{ background: "hsl(270 100% 65%)" }} />
             <img
               src={jacFull}
               alt="JAC"
               className="relative w-full h-auto object-contain object-bottom"
-              style={{ maxHeight: 390, filter: "drop-shadow(0 0 30px hsl(270 100% 65% / 0.42))" }}
+              style={{ maxHeight: 340, filter: "drop-shadow(0 0 30px hsl(270 100% 65% / 0.42))" }}
               data-testid="img-jac-standing"
             />
             <p className="text-center text-[8px] font-display font-black tracking-[0.28em] mt-1" style={{ color: "hsl(270 100% 65% / 0.38)" }}>TEAM GUBER · JAC</p>

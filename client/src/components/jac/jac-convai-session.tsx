@@ -178,6 +178,12 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           else                   params.agentId   = session.agentId;
           if (suppressFirstMessage) params.overrides = { agent: { firstMessage: "" } };
 
+          // Give the audio context 500 ms to fully unlock after the user gesture
+          // before ElevenLabs starts streaming audio — prevents the greeting
+          // being silently swallowed by a still-suspended AudioContext.
+          await new Promise<void>((r) => setTimeout(r, 500));
+          if (cancelRef.current) return;
+
           startSession(params as any);
         } catch (err: any) {
           if (!cancelRef.current) cbRef.current.onError(err?.message || "Could not start JAC voice.");
