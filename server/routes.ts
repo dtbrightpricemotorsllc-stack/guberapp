@@ -14265,6 +14265,44 @@ export async function registerRoutes(
     });
   });
 
+  // ── Video Agent — start job ───────────────────────────────────────────────
+  app.post("/api/studio/agent/start", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!process.env.FAL_KEY) return res.status(503).json({ message: "Studio generation not configured (FAL_KEY missing)." });
+      if (!process.env.AI_INTEGRATIONS_OPENAI_API_KEY) return res.status(503).json({ message: "Studio agent not configured (OpenAI key missing)." });
+      const userId = req.session.userId!;
+      const { images, instruction } = req.body as { images: Array<{ slot: number; name: string; url: string }>; instruction: string };
+      if (!Array.isArray(images) || images.length === 0) return res.status(400).json({ message: "At least one image is required." });
+      if (!instruction?.trim()) return res.status(400).json({ message: "An instruction prompt is required." });
+      const { startAgentJob } = await import("./studio/video-agent");
+      const job = await startAgentJob(userId, { images, instruction: instruction.trim() });
+      res.json({ jobId: job.id });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Video Agent — poll status ─────────────────────────────────────────────
+  app.get("/api/studio/agent/status/:jobId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { getAgentJob } = await import("./studio/video-agent");
+      const job = getAgentJob(String(req.params.jobId));
+      if (!job) return res.status(404).json({ message: "Job not found or expired." });
+      if (job.userId !== req.session.userId!) return res.status(403).json({ message: "Forbidden." });
+      res.json({
+        jobId: job.id,
+        status: job.status,
+        phase: job.phase,
+        logs: job.logs,
+        manifest: job.manifest,
+        videoUrl: job.videoUrl,
+        error: job.error,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/stripe/trust-box-checkout", requireAuth, demoGuard, requireFullCommerce, async (req: Request, res: Response) => {
     try {
       const user = await storage.getUser(req.session.userId!);
