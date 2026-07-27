@@ -134,28 +134,32 @@ async function parseEdits(
 ): Promise<EditPlan> {
   log(job, 2, "Parsing edit instructions against asset manifest…");
 
+  const availableSlots = images.map((i) => i.slot);
+  const slotList = availableSlots.join(", ");
+
   const systemPrompt =
     `You are an AI video production director. ` +
     `Given an asset manifest (objects in each image slot) and user editing instructions, ` +
     `produce a JSON plan with "edits" (image modifications needed) and "scenes" (ordered video timeline). ` +
     `Each scene should have a motionPrompt suitable for Kling image-to-video. ` +
-    `The total scene durations should sum to roughly 30 seconds. ` +
+    `CRITICAL: scenes MUST only reference slot numbers from this list: [${slotList}]. ` +
+    `If only one image is available, all scenes must use that same slot — reuse it for variety (different motionPrompts). ` +
+    `The total scene durations should sum to roughly 15 seconds (5 seconds per scene max). ` +
     `Return ONLY valid JSON, no other text.`;
 
   const userMsg =
+    `Available image slots: [${slotList}]\n` +
     `Asset manifest:\n${JSON.stringify(manifest, null, 2)}\n\n` +
     `User instructions: "${instruction}"\n\n` +
-    `Return JSON in this format:\n` +
+    `Return JSON in this format (scenes MUST use only slots: ${slotList}):\n` +
     `{\n` +
     `  "edits": [\n` +
-    `    {"type":"remove","slot":1,"object":"dog"},\n` +
-    `    {"type":"composite","slots":[1,2],"description":"blend the two scenes"},\n` +
-    `    {"type":"keep","slot":3}\n` +
+    `    {"type":"keep","slot":1}\n` +
     `  ],\n` +
     `  "scenes": [\n` +
-    `    {"slot":1,"duration":12,"motionPrompt":"cinematic pan across the driveway"},\n` +
-    `    {"slot":2,"duration":12,"motionPrompt":"slow zoom in on the house"},\n` +
-    `    {"slot":3,"duration":6,"isEndCard":true,"motionPrompt":"logo fade in and glow"}\n` +
+    `    {"slot":1,"duration":5,"motionPrompt":"cinematic slow zoom in"},\n` +
+    `    {"slot":1,"duration":5,"motionPrompt":"gentle pan left to right"},\n` +
+    `    {"slot":1,"duration":5,"isEndCard":true,"motionPrompt":"slow fade out with glow"}\n` +
     `  ]\n` +
     `}`;
 
@@ -224,9 +228,13 @@ async function applyEdits(
     }
   }
 
+  // Fallback: if AI planned a scene for a slot that doesn't exist (e.g. only
+  // 1 image uploaded but AI generated 3 slots), use the first available image.
+  const anyUrl = images[0]?.url ?? "";
+
   return (plan.scenes ?? []).map((s) => ({
     ...s,
-    originalUrl: urlBySlot.get(s.slot) ?? "",
+    originalUrl: urlBySlot.get(s.slot) ?? anyUrl,
     modifiedUrl: modifiedBySlot.get(s.slot),
   }));
 }
@@ -317,6 +325,53 @@ async function generateVoiceover(job: AgentJob, script: string): Promise<string 
 
 // ── Phase 4 — Video generation + stitching ────────────────────────────────────
 
+// Kling standard image-to-video with a 12-minute per-scene timeout.
+// Uses the queue/poll pattern directly so we're not bound by submitToFal's
+// 5-minute global cap. Standard (~1-3 min) instead of Pro (~5-10 min).
+async function renderKlingScene(
+  job: AgentJob,
+  sceneIdx: number,
+  imageUrl: string,
+  motionPrompt: string,
+  duration: 5 | 10,
+): Promise<string | null> {
+  const key = process.env.FAL_KEY;
+  if (!key) { log(job, 4, "FAL_KEY not set — cannot render video"); return null; }
+
+  const endpoint = "fal-ai/kling-video/v1.6/standard/image-to-video";
+  const submitRes = await fetch(`https://queue.fal.run/${endpoint}`, {
+    method: "POST",
+    headers: { "Authorization": `Key ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ image_url: imageUrl, prompt: motionPrompt, duration, aspect_ratio: "16:9" }),
+  });
+  if (!submitRes.ok) {
+    const t = await submitRes.text().catch(() => "");
+    throw new Error(`Fal.ai submit ${submitRes.status}: ${t.slice(0, 200)}`);
+  }
+  const { request_id: requestId, status_url: statusUrl, response_url: responseUrl } =
+    (await submitRes.json()) as { request_id?: string; status_url?: string; response_url?: string };
+  if (!requestId || !statusUrl || !responseUrl) throw new Error("Fal.ai missing queue fields");
+
+  // Poll up to 12 minutes
+  const deadline = Date.now() + 12 * 60 * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 6000));
+    const st = await fetch(statusUrl, { headers: { "Authorization": `Key ${key}` } });
+    if (!st.ok) continue;
+    const { status } = (await st.json()) as { status?: string };
+    if (status === "FAILED") throw new Error("Kling generation failed");
+    if (status !== "COMPLETED") { log(job, 4, `Scene ${sceneIdx + 1} rendering… (${status})`); continue; }
+
+    const finalRes = await fetch(responseUrl, { headers: { "Authorization": `Key ${key}` } });
+    if (!finalRes.ok) throw new Error(`Response fetch ${finalRes.status}`);
+    const out = (await finalRes.json()) as any;
+    const vUrl = out?.video?.url ?? out?.url;
+    if (!vUrl) throw new Error("No video URL in Kling response");
+    return vUrl;
+  }
+  throw new Error("Kling render timed out after 12 minutes");
+}
+
 async function generateSceneVideos(job: AgentJob, scenes: ScenePlan[]): Promise<string[]> {
   const videoUrls: string[] = [];
 
@@ -328,18 +383,12 @@ async function generateSceneVideos(job: AgentJob, scenes: ScenePlan[]): Promise<
       continue;
     }
 
-    log(job, 4, `Rendering Scene ${i + 1}/${scenes.length} via Kling image-to-video…`);
+    log(job, 4, `Rendering Scene ${i + 1}/${scenes.length} via Kling Standard image-to-video…`);
 
     try {
-      const dur = scene.duration <= 5 ? "5" : "10";
-      const { output } = await submitToFal<any>("fal-ai/kling-video/v1.6/pro/image-to-video", {
-        image_url: imageUrl,
-        prompt: scene.motionPrompt,
-        duration: dur,
-        aspect_ratio: "16:9",
-      });
-      const vUrl = output?.video?.url ?? output?.url;
-      if (!vUrl) throw new Error("No video URL in response");
+      const dur: 5 | 10 = scene.duration <= 5 ? 5 : 10;
+      const vUrl = await renderKlingScene(job, i, imageUrl, scene.motionPrompt, dur);
+      if (!vUrl) throw new Error("No video URL returned");
       videoUrls.push(vUrl);
       log(job, 4, `Scene ${i + 1} rendered ✓`);
     } catch (err: any) {
