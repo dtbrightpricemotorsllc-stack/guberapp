@@ -1894,6 +1894,27 @@ app.use((req, res, next) => {
     )
   `).catch(e => console.error("[seed] studio_audit_log table error:", e));
 
+  // Studio Video Agent jobs — persisted for 24 hours
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS studio_video_jobs (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'running',
+      phase INTEGER NOT NULL DEFAULT 0,
+      logs JSONB NOT NULL DEFAULT '[]',
+      manifest JSONB,
+      video_url TEXT,
+      error TEXT,
+      target_duration INTEGER NOT NULL DEFAULT 15,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '24 hours')
+    )
+  `).catch(e => console.error("[seed] studio_video_jobs table error:", e));
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS studio_video_jobs_user_idx
+      ON studio_video_jobs(user_id, created_at DESC)
+  `).catch(e => console.error("[seed] studio_video_jobs index error:", e));
+
   // Seed NXTGEN Law Group studio
   const { seedNxtgenStudio } = await import("./business-studio");
   await seedNxtgenStudio();

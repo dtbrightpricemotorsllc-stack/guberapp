@@ -5,10 +5,14 @@
 // Phase 2 : Edit + compositing  — fal.ai inpainting / image-to-image
 // Phase 3 : Script + voiceover  — GPT-4o script → ElevenLabs TTS → Cloudinary
 // Phase 4 : Video + stitch      — Kling i2v per scene → ffmpeg merge → audio
+//
+// Jobs are persisted to studio_video_jobs for 24 hours so users can close the
+// app and return to find their video ready.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import crypto from "crypto";
-import { submitToFal, FalNotConfiguredError, FalGenerationError } from "../fal";
+import { pool } from "../db";
+import { submitToFal } from "../fal";
 
 // ── Job state ─────────────────────────────────────────────────────────────────
 
@@ -18,17 +22,42 @@ export type AgentJob = {
   id: string;
   userId: number;
   status: "running" | "complete" | "error";
-  phase: number;            // 0-4
+  phase: number;
   logs: AgentLog[];
-  manifest: Record<string, string[]> | null;  // Image N → detected objects
+  manifest: Record<string, string[]> | null;
   videoUrl: string | null;
   error: string | null;
+  targetDuration: number;
   createdAt: Date;
 };
 
+// In-memory map for active jobs (fast log streaming during processing)
 const jobs = new Map<string, AgentJob>();
 
-// Clean up jobs older than 2 hours
+// Flush job state to DB (called on phase changes and completion)
+async function persist(job: AgentJob): Promise<void> {
+  try {
+    await pool.query(
+      `UPDATE studio_video_jobs
+          SET status = $1, phase = $2, logs = $3, manifest = $4,
+              video_url = $5, error = $6
+        WHERE id = $7`,
+      [
+        job.status,
+        job.phase,
+        JSON.stringify(job.logs),
+        job.manifest ? JSON.stringify(job.manifest) : null,
+        job.videoUrl,
+        job.error,
+        job.id,
+      ],
+    );
+  } catch (err: any) {
+    console.error(`[video-agent][${job.id}] DB persist error: ${err.message}`);
+  }
+}
+
+// Clean up in-memory entries older than 2 hours (DB row lives 24 h)
 setInterval(() => {
   const cutoff = Date.now() - 2 * 60 * 60 * 1000;
   for (const [id, job] of jobs) {
@@ -36,8 +65,77 @@ setInterval(() => {
   }
 }, 30 * 60 * 1000);
 
+// Purge expired DB rows daily
+setInterval(async () => {
+  try {
+    await pool.query("DELETE FROM studio_video_jobs WHERE expires_at < NOW()");
+  } catch {}
+}, 60 * 60 * 1000);
+
 export function getAgentJob(id: string): AgentJob | undefined {
   return jobs.get(id);
+}
+
+/** Return a job from DB — used by the status endpoint when the job is no longer in memory */
+export async function getAgentJobFromDb(id: string): Promise<AgentJob | null> {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, user_id, status, phase, logs, manifest, video_url, error,
+              target_duration, created_at
+         FROM studio_video_jobs WHERE id = $1 AND expires_at > NOW()`,
+      [id],
+    );
+    if (!rows[0]) return null;
+    const r = rows[0];
+    return {
+      id: r.id,
+      userId: r.user_id,
+      status: r.status,
+      phase: r.phase,
+      logs: r.logs ?? [],
+      manifest: r.manifest ?? null,
+      videoUrl: r.video_url,
+      error: r.error,
+      targetDuration: r.target_duration ?? 15,
+      createdAt: r.created_at,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Return the most-recent non-expired job for a user (for client resume) */
+export async function getUserLatestJob(userId: number): Promise<AgentJob | null> {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, user_id, status, phase, logs, manifest, video_url, error,
+              target_duration, created_at
+         FROM studio_video_jobs
+        WHERE user_id = $1 AND expires_at > NOW()
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [userId],
+    );
+    if (!rows[0]) return null;
+    const r = rows[0];
+    // Merge with in-memory if available (has latest logs)
+    const live = jobs.get(r.id);
+    if (live) return live;
+    return {
+      id: r.id,
+      userId: r.user_id,
+      status: r.status,
+      phase: r.phase,
+      logs: r.logs ?? [],
+      manifest: r.manifest ?? null,
+      videoUrl: r.video_url,
+      error: r.error,
+      targetDuration: r.target_duration ?? 15,
+      createdAt: r.created_at,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -68,6 +166,17 @@ function extractJson(text: string): any {
   const m = text.match(/\{[\s\S]*\}/);
   if (!m) throw new Error("No JSON found in AI response");
   return JSON.parse(m[0]);
+}
+
+// ── Duration → scene plan ─────────────────────────────────────────────────────
+// Kling only supports 5 s or 10 s clips.
+// Map target total duration → { sceneCount, clipDuration }
+function durationPlan(targetSeconds: number): { sceneCount: number; clipDuration: 5 | 10 } {
+  if (targetSeconds <= 5)  return { sceneCount: 1, clipDuration: 5 };
+  if (targetSeconds <= 10) return { sceneCount: 2, clipDuration: 5 };
+  if (targetSeconds <= 15) return { sceneCount: 3, clipDuration: 5 };
+  if (targetSeconds <= 20) return { sceneCount: 2, clipDuration: 10 };
+  return                          { sceneCount: 3, clipDuration: 10 }; // 30 s
 }
 
 // ── Phase 1 — Vision indexing ─────────────────────────────────────────────────
@@ -114,9 +223,9 @@ type EditAction =
 
 type ScenePlan = {
   slot: number;
-  modifiedUrl?: string;   // set after fal edit
+  modifiedUrl?: string;
   originalUrl: string;
-  duration: number;       // seconds
+  duration: number;
   isEndCard?: boolean;
   motionPrompt: string;
 };
@@ -131,11 +240,13 @@ async function parseEdits(
   manifest: Record<string, string[]>,
   instruction: string,
   images: Array<{ slot: number; url: string }>,
+  targetDuration: number,
 ): Promise<EditPlan> {
   log(job, 2, "Parsing edit instructions against asset manifest…");
 
   const availableSlots = images.map((i) => i.slot);
   const slotList = availableSlots.join(", ");
+  const { sceneCount, clipDuration } = durationPlan(targetDuration);
 
   const systemPrompt =
     `You are an AI video production director. ` +
@@ -143,38 +254,55 @@ async function parseEdits(
     `produce a JSON plan with "edits" (image modifications needed) and "scenes" (ordered video timeline). ` +
     `Each scene should have a motionPrompt suitable for Kling image-to-video. ` +
     `CRITICAL: scenes MUST only reference slot numbers from this list: [${slotList}]. ` +
-    `If only one image is available, all scenes must use that same slot — reuse it for variety (different motionPrompts). ` +
-    `The total scene durations should sum to roughly 15 seconds (5 seconds per scene max). ` +
+    `If only one image is available, all scenes must use that same slot with different motionPrompts. ` +
+    `Plan EXACTLY ${sceneCount} scene${sceneCount > 1 ? "s" : ""}, each ${clipDuration} seconds long ` +
+    `(total = ${targetDuration} seconds). ` +
     `Return ONLY valid JSON, no other text.`;
+
+  const exampleScenes = Array.from({ length: sceneCount }, (_, i) => {
+    const prompts = [
+      "cinematic slow zoom in on subject",
+      "gentle pan left to right across scene",
+      "slow fade out with warm glow",
+      "dramatic push-in with lens flare",
+    ];
+    return `    {"slot":${availableSlots[0]},"duration":${clipDuration},"motionPrompt":"${prompts[i % prompts.length]}"}`;
+  }).join(",\n");
 
   const userMsg =
     `Available image slots: [${slotList}]\n` +
     `Asset manifest:\n${JSON.stringify(manifest, null, 2)}\n\n` +
-    `User instructions: "${instruction}"\n\n` +
-    `Return JSON in this format (scenes MUST use only slots: ${slotList}):\n` +
+    `User instructions: "${instruction}"\n` +
+    `Target video length: ${targetDuration} seconds (${sceneCount} scene${sceneCount > 1 ? "s" : ""} × ${clipDuration}s each)\n\n` +
+    `Return JSON (scenes MUST use only slots: [${slotList}], EXACTLY ${sceneCount} scenes):\n` +
     `{\n` +
-    `  "edits": [\n` +
-    `    {"type":"keep","slot":1}\n` +
-    `  ],\n` +
-    `  "scenes": [\n` +
-    `    {"slot":1,"duration":5,"motionPrompt":"cinematic slow zoom in"},\n` +
-    `    {"slot":1,"duration":5,"motionPrompt":"gentle pan left to right"},\n` +
-    `    {"slot":1,"duration":5,"isEndCard":true,"motionPrompt":"slow fade out with glow"}\n` +
-    `  ]\n` +
+    `  "edits": [{"type":"keep","slot":${availableSlots[0]}}],\n` +
+    `  "scenes": [\n${exampleScenes}\n  ]\n` +
     `}`;
 
   const raw = await openaiChat(
     [{ role: "system", content: systemPrompt }, { role: "user", content: userMsg }],
-    800,
+    900,
   );
   const plan = extractJson(raw) as EditPlan;
 
+  // Enforce slot constraints — remap any invalid slot to the first available
+  const validSlots = new Set(availableSlots);
+  const fallbackSlot = availableSlots[0];
+  if (plan.scenes) {
+    plan.scenes = plan.scenes.map((s) => ({
+      ...s,
+      slot: validSlots.has(s.slot) ? s.slot : fallbackSlot,
+      duration: clipDuration,
+    }));
+  }
+
   for (const e of plan.edits ?? []) {
     if (e.type === "remove")    log(job, 2, `Planned removal: "${e.object}" from Image ${e.slot}`);
-    if (e.type === "composite") log(job, 2, `Planned composite: Images ${e.slots.join(" + ")}`);
+    if (e.type === "composite") log(job, 2, `Planned composite: Images ${(e as any).slots.join(" + ")}`);
     if (e.type === "keep")      log(job, 2, `Image ${e.slot} used as-is`);
   }
-  log(job, 2, `${plan.scenes?.length ?? 0} scenes planned`);
+  log(job, 2, `${plan.scenes?.length ?? 0} scene${plan.scenes?.length === 1 ? "" : "s"} planned (${targetDuration}s total)`);
 
   return plan;
 }
@@ -185,7 +313,7 @@ async function applyEdits(
   images: Array<{ slot: number; url: string }>,
 ): Promise<ScenePlan[]> {
   const urlBySlot = new Map(images.map((i) => [i.slot, i.url]));
-  const modifiedBySlot = new Map<number, string>(); // slot → edited url
+  const modifiedBySlot = new Map<number, string>();
 
   for (const edit of plan.edits ?? []) {
     if (edit.type === "remove") {
@@ -197,7 +325,6 @@ async function applyEdits(
           image_url: origUrl,
           model: "General Use (Light)",
         });
-        // birefnet returns background-removed image
         const editedUrl = output?.image?.url ?? output?.images?.[0]?.url ?? origUrl;
         modifiedBySlot.set(edit.slot, editedUrl);
         log(job, 2, `Image ${edit.slot} background-stripped ✓`);
@@ -207,29 +334,28 @@ async function applyEdits(
     }
 
     if (edit.type === "composite") {
-      const baseSlot = edit.slots[0];
+      const slots = (edit as any).slots as number[];
+      const baseSlot = slots[0];
       const baseUrl = modifiedBySlot.get(baseSlot) ?? urlBySlot.get(baseSlot);
       if (!baseUrl) continue;
-      log(job, 2, `Compositing Images ${edit.slots.join(" + ")} via fal.ai image-to-image…`);
+      log(job, 2, `Compositing Images ${slots.join(" + ")} via fal.ai image-to-image…`);
       try {
         const { output } = await submitToFal<any>("fal-ai/flux/dev/image-to-image", {
           image_url: baseUrl,
-          prompt: edit.description ?? "Blend the elements naturally into a cohesive scene",
+          prompt: (edit as any).description ?? "Blend the elements naturally into a cohesive scene",
           strength: 0.6,
           num_images: 1,
           enable_safety_checker: true,
         });
         const compositeUrl = output?.images?.[0]?.url ?? output?.image?.url ?? baseUrl;
-        for (const slot of edit.slots) modifiedBySlot.set(slot, compositeUrl);
-        log(job, 2, `Composite for Images ${edit.slots.join("+")} complete ✓`);
+        for (const slot of slots) modifiedBySlot.set(slot, compositeUrl);
+        log(job, 2, `Composite for Images ${slots.join("+")} complete ✓`);
       } catch (err: any) {
         log(job, 2, `Composite failed (${err.message}) — using base image`);
       }
     }
   }
 
-  // Fallback: if AI planned a scene for a slot that doesn't exist (e.g. only
-  // 1 image uploaded but AI generated 3 slots), use the first available image.
   const anyUrl = images[0]?.url ?? "";
 
   return (plan.scenes ?? []).map((s) => ({
@@ -246,16 +372,19 @@ async function generateScript(
   manifest: Record<string, string[]>,
   instruction: string,
   scenes: ScenePlan[],
+  targetDuration: number,
 ): Promise<string> {
-  log(job, 3, "Generating 30-second voiceover script via GPT-4o…");
+  const approxWords = Math.round(targetDuration * 2.3); // ~140 wpm
+  log(job, 3, `Generating ${targetDuration}s voiceover script via GPT-4o…`);
 
   const raw = await openaiChat(
     [
       {
         role: "system",
         content:
-          `You are a professional video scriptwriter. Write a compelling ~70-word voiceover script ` +
-          `(approximately 30 seconds when read aloud) that flows naturally across the visual scenes described. ` +
+          `You are a professional video scriptwriter. Write a compelling ~${approxWords}-word voiceover script ` +
+          `(approximately ${targetDuration} seconds when read aloud at a natural pace) ` +
+          `that flows naturally across the visual scenes described. ` +
           `Return ONLY the script text, no stage directions, no JSON.`,
       },
       {
@@ -263,10 +392,10 @@ async function generateScript(
         content:
           `Visual scenes: ${scenes.map((s, i) => `Scene ${i + 1}: ${s.motionPrompt}`).join("; ")}.\n` +
           `User's creative intent: "${instruction}".\n` +
-          `Write the voiceover script now.`,
+          `Write the voiceover script now (target ~${approxWords} words / ${targetDuration} seconds).`,
       },
     ],
-    300,
+    400,
   );
 
   log(job, 3, `Script generated (${raw.trim().split(/\s+/).length} words)`);
@@ -281,7 +410,7 @@ async function generateVoiceover(job: AgentJob, script: string): Promise<string 
   }
 
   const voiceId = "21m00Tcm4TlvDq8ikWAM"; // Rachel — clear, professional
-  log(job, 3, "Synthesizing 30s voiceover via ElevenLabs…");
+  log(job, 3, "Synthesizing voiceover via ElevenLabs…");
 
   const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
     method: "POST",
@@ -304,14 +433,13 @@ async function generateVoiceover(job: AgentJob, script: string): Promise<string 
   }
 
   const buf = Buffer.from(await res.arrayBuffer());
-  log(job, 3, `Voiceover synthesized (${Math.round(buf.length / 1024)}KB) — uploading to storage…`);
+  log(job, 3, `Voiceover synthesized (${Math.round(buf.length / 1024)}KB) — uploading…`);
 
-  // Upload MP3 to Cloudinary for a hosted URL
   try {
     const cloudinary = (await import("../cloudinary.js")).default;
     const dataUrl = `data:audio/mpeg;base64,${buf.toString("base64")}`;
     const up = await (cloudinary as any).uploader.upload(dataUrl, {
-      resource_type: "video", // Cloudinary treats audio as "video" type
+      resource_type: "video",
       folder: "guber-studio-voiceover",
       format: "mp3",
     });
@@ -325,9 +453,6 @@ async function generateVoiceover(job: AgentJob, script: string): Promise<string 
 
 // ── Phase 4 — Video generation + stitching ────────────────────────────────────
 
-// Kling standard image-to-video with a 12-minute per-scene timeout.
-// Uses the queue/poll pattern directly so we're not bound by submitToFal's
-// 5-minute global cap. Standard (~1-3 min) instead of Pro (~5-10 min).
 async function renderKlingScene(
   job: AgentJob,
   sceneIdx: number,
@@ -352,7 +477,7 @@ async function renderKlingScene(
     (await submitRes.json()) as { request_id?: string; status_url?: string; response_url?: string };
   if (!requestId || !statusUrl || !responseUrl) throw new Error("Fal.ai missing queue fields");
 
-  // Poll up to 12 minutes
+  // Poll up to 12 minutes per scene
   const deadline = Date.now() + 12 * 60 * 1000;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 6000));
@@ -383,7 +508,7 @@ async function generateSceneVideos(job: AgentJob, scenes: ScenePlan[]): Promise<
       continue;
     }
 
-    log(job, 4, `Rendering Scene ${i + 1}/${scenes.length} via Kling Standard image-to-video…`);
+    log(job, 4, `Rendering Scene ${i + 1}/${scenes.length} via Kling Standard…`);
 
     try {
       const dur: 5 | 10 = scene.duration <= 5 ? 5 : 10;
@@ -391,6 +516,7 @@ async function generateSceneVideos(job: AgentJob, scenes: ScenePlan[]): Promise<
       if (!vUrl) throw new Error("No video URL returned");
       videoUrls.push(vUrl);
       log(job, 4, `Scene ${i + 1} rendered ✓`);
+      await persist(job); // checkpoint after each successful clip
     } catch (err: any) {
       log(job, 4, `Scene ${i + 1} failed (${err.message}) — skipped`);
     }
@@ -440,10 +566,15 @@ async function mergeAudio(job: AgentJob, videoUrl: string, audioUrl: string): Pr
 export interface AgentInput {
   images: Array<{ slot: number; name: string; url: string }>;
   instruction: string;
+  targetDuration?: number; // seconds — 5 | 10 | 15 | 20 | 30
 }
 
 export async function startAgentJob(userId: number, input: AgentInput): Promise<AgentJob> {
   const id = crypto.randomUUID();
+  const targetDuration = [5, 10, 15, 20, 30].includes(input.targetDuration ?? 0)
+    ? input.targetDuration!
+    : 15;
+
   const job: AgentJob = {
     id, userId,
     status: "running",
@@ -452,40 +583,57 @@ export async function startAgentJob(userId: number, input: AgentInput): Promise<
     manifest: null,
     videoUrl: null,
     error: null,
+    targetDuration,
     createdAt: new Date(),
   };
   jobs.set(id, job);
+
+  // Create DB row immediately so the client can resume after a page close
+  try {
+    await pool.query(
+      `INSERT INTO studio_video_jobs
+         (id, user_id, status, phase, logs, target_duration)
+       VALUES ($1, $2, 'running', 0, '[]', $3)`,
+      [id, userId, targetDuration],
+    );
+  } catch (err: any) {
+    console.error(`[video-agent][${id}] DB insert error: ${err.message}`);
+  }
 
   // Run pipeline in background — do not await
   runPipeline(job, input).catch((err) => {
     job.status = "error";
     job.error = err.message;
     log(job, job.phase, `Fatal error: ${err.message}`);
+    persist(job);
   });
 
   return job;
 }
 
 async function runPipeline(job: AgentJob, input: AgentInput): Promise<void> {
-  const { images, instruction } = input;
+  const { images, instruction, targetDuration = 15 } = input;
 
   // ── Phase 1 ──────────────────────────────────────────────────────────────
   job.phase = 1;
   job.manifest = await indexAssets(job, images);
+  await persist(job);
 
   // ── Phase 2 ──────────────────────────────────────────────────────────────
   job.phase = 2;
-  const plan = await parseEdits(job, job.manifest, instruction, images);
+  const plan = await parseEdits(job, job.manifest, instruction, images, targetDuration);
   const scenes = await applyEdits(job, plan, images);
+  await persist(job);
 
   // ── Phase 3 ──────────────────────────────────────────────────────────────
   job.phase = 3;
-  const script = await generateScript(job, job.manifest, instruction, scenes);
+  const script = await generateScript(job, job.manifest, instruction, scenes, targetDuration);
   const audioUrl = await generateVoiceover(job, script);
+  await persist(job);
 
   // ── Phase 4 ──────────────────────────────────────────────────────────────
   job.phase = 4;
-  log(job, 4, "Starting video rendering…");
+  log(job, 4, `Starting video rendering (${scenes.length} scene${scenes.length === 1 ? "" : "s"}, ${targetDuration}s total)…`);
   const clipUrls = await generateSceneVideos(job, scenes);
   if (clipUrls.length === 0) {
     throw new Error("No video clips were generated — check FAL_KEY and image URLs");
@@ -499,4 +647,5 @@ async function runPipeline(job: AgentJob, input: AgentInput): Promise<void> {
   job.videoUrl = finalUrl;
   job.status = "complete";
   log(job, 4, "🎬 Video Agent complete — your video is ready!");
+  await persist(job);
 }
