@@ -14430,11 +14430,12 @@ export async function registerRoutes(
     try {
       const {
         brandName, tagline, productDescription, stylePreset,
-        callToAction, images, targetDuration,
+        callToAction, images, imageFocus, logoUrl, features, targetDuration,
       } = req.body as {
         brandName: string; tagline?: string; productDescription: string;
         stylePreset?: string; callToAction?: string;
-        images: string[]; targetDuration?: number;
+        images: string[]; imageFocus?: string[]; logoUrl?: string;
+        features?: string[]; targetDuration?: number;
       };
       if (!brandName?.trim()) return res.status(400).json({ message: "Brand name is required." });
 
@@ -14452,7 +14453,7 @@ export async function registerRoutes(
         try {
           const { renderPromoVideo } = await import("./studio/promo-renderer");
           const mp4 = await renderPromoVideo(
-            { brandName, tagline, productDescription: productDescription ?? "", stylePreset: stylePreset ?? "professional", callToAction, images: images ?? [], targetDuration: targetDuration ?? 15 },
+            { brandName, tagline, productDescription: productDescription ?? "", stylePreset: stylePreset ?? "professional", callToAction, images: images ?? [], imageFocus: imageFocus as any, logoUrl, features, targetDuration: targetDuration ?? 15 },
             (frame, total) => { job.frame = frame; job.total = total; },
           );
 

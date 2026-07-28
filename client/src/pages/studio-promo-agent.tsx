@@ -306,7 +306,7 @@ export default function StudioPromoAgentPage() {
   const uploadImage = useCallback(async (slot: number, file: File) => {
     setUploading((s) => new Set(s).add(slot));
     try {
-      const dataUrl = await compressImageToDataUrl(file, 1200, 0.85);
+      const dataUrl = await compressImageToDataUrl(file);
       const res = await apiRequest("POST", "/api/studio/upload", { dataUrl, kind: "image" });
       if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.message || "Upload failed"); }
       const { file: f } = await res.json();

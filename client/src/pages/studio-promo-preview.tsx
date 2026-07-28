@@ -1,15 +1,12 @@
-// GUBER Studio — Promo Video Render Target
-// This page is loaded by both:
-//   1. The live preview iframe in the main promo page
-//   2. Playwright headless browser for frame-by-frame MP4 export
-//
-// Scene transitions use setTimeout — Playwright's fake clock controls these in headless mode.
-// In-scene animations use Framer Motion (rAF-based) — also controlled by Playwright's fake clock.
+// GUBER Studio — Promo Video Render Target (Quality v2)
+// Loaded by: (1) live preview iframe, (2) Playwright headless for MP4 export.
+// Scene transitions are setTimeout-based → Playwright fake clock controls them.
+// In-scene animations are Framer Motion (rAF-based) → also fake-clock controlled.
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Data types ────────────────────────────────────────────────────────────────
 
 export interface PromoData {
   brandName: string;
@@ -18,7 +15,10 @@ export interface PromoData {
   stylePreset: string;
   callToAction?: string;
   images: string[];
-  targetDuration: number; // seconds
+  imageFocus?: ("top" | "center" | "bottom")[];
+  logoUrl?: string;
+  features?: string[];
+  targetDuration: number;
 }
 
 interface StyleTheme {
@@ -30,412 +30,559 @@ interface StyleTheme {
   subtext: string;
   titleFont: string;
   bodyFont: string;
-  transitionDuration: number;
+  td: number;            // transition duration
   ease: string;
+  toneColor: string;     // rgba for color-tone overlay on images
+  imageFilter: string;   // CSS filter for images
+  accentDark: string;    // darker accent for text on light accent bg
 }
 
-// ── Style themes ──────────────────────────────────────────────────────────────
+// ── Themes ────────────────────────────────────────────────────────────────────
 
 const THEMES: Record<string, StyleTheme> = {
   energetic: {
-    bg: "#0a0a0a", bg2: "#111111",
+    bg: "#080808", bg2: "#0f0f0f",
     accent: "#FFD600", accent2: "#FF8C00",
-    text: "#ffffff", subtext: "#cccccc",
+    text: "#ffffff", subtext: "#d0d0d0",
     titleFont: '"Arial Black", Impact, sans-serif',
-    bodyFont: "Arial, sans-serif",
-    transitionDuration: 0.25, ease: "backOut",
+    bodyFont: "Arial, Helvetica, sans-serif",
+    td: 0.22, ease: "backOut",
+    toneColor: "rgba(255,180,0,0.07)",
+    imageFilter: "contrast(1.12) saturate(1.2)",
+    accentDark: "#000",
   },
   professional: {
-    bg: "#0d1b2e", bg2: "#162544",
-    accent: "#4A90E2", accent2: "#2563EB",
-    text: "#ffffff", subtext: "#b8cce8",
-    titleFont: "Georgia, serif",
-    bodyFont: '"Trebuchet MS", sans-serif',
-    transitionDuration: 0.5, ease: "easeInOut",
+    bg: "#0a1628", bg2: "#0f1f3d",
+    accent: "#4A90E2", accent2: "#1d6fd4",
+    text: "#ffffff", subtext: "#a8c0dc",
+    titleFont: "Georgia, 'Times New Roman', serif",
+    bodyFont: '"Trebuchet MS", Arial, sans-serif',
+    td: 0.5, ease: "easeInOut",
+    toneColor: "rgba(40,100,200,0.08)",
+    imageFilter: "contrast(1.08) saturate(0.95) brightness(0.97)",
+    accentDark: "#fff",
   },
   luxury: {
-    bg: "#13100a", bg2: "#1c160d",
-    accent: "#C9A84C", accent2: "#E8C878",
-    text: "#f5f0e8", subtext: "#c8b99a",
-    titleFont: "Palatino, Georgia, serif",
+    bg: "#100d07", bg2: "#1a150d",
+    accent: "#C9A84C", accent2: "#e8c878",
+    text: "#f5f0e8", subtext: "#c0a97a",
+    titleFont: '"Palatino Linotype", Palatino, Georgia, serif',
     bodyFont: "Georgia, serif",
-    transitionDuration: 0.9, ease: "easeOut",
+    td: 0.85, ease: "easeOut",
+    toneColor: "rgba(180,130,30,0.1)",
+    imageFilter: "contrast(1.05) saturate(0.85) sepia(0.12)",
+    accentDark: "#000",
   },
   friendly: {
-    bg: "#0a1f1a", bg2: "#0d2820",
-    accent: "#2DD4BF", accent2: "#06B6D4",
-    text: "#ffffff", subtext: "#a7f3d0",
+    bg: "#081a15", bg2: "#0d2420",
+    accent: "#2DD4BF", accent2: "#06b6d4",
+    text: "#ffffff", subtext: "#99e8da",
     titleFont: '"Trebuchet MS", Arial, sans-serif',
-    bodyFont: "Arial, sans-serif",
-    transitionDuration: 0.4, ease: "easeOut",
+    bodyFont: "Arial, Helvetica, sans-serif",
+    td: 0.38, ease: "easeOut",
+    toneColor: "rgba(0,200,180,0.07)",
+    imageFilter: "contrast(1.06) saturate(1.1)",
+    accentDark: "#000",
   },
   dramatic: {
-    bg: "#050005", bg2: "#0f000a",
-    accent: "#E53E3E", accent2: "#C0392B",
+    bg: "#040004", bg2: "#0e000a",
+    accent: "#E53E3E", accent2: "#c0392b",
     text: "#ffffff", subtext: "#fca5a5",
     titleFont: '"Arial Black", Impact, sans-serif',
-    bodyFont: "Arial, sans-serif",
-    transitionDuration: 0.35, ease: "easeIn",
+    bodyFont: "Arial, Helvetica, sans-serif",
+    td: 0.3, ease: "easeIn",
+    toneColor: "rgba(200,30,30,0.1)",
+    imageFilter: "contrast(1.18) saturate(0.8) brightness(0.9)",
+    accentDark: "#fff",
   },
   bold: {
-    bg: "#080f1e", bg2: "#0f1a30",
-    accent: "#FF6B2B", accent2: "#EA4C0D",
+    bg: "#060c18", bg2: "#0c1830",
+    accent: "#FF6B2B", accent2: "#ea4c0d",
     text: "#ffffff", subtext: "#fed7aa",
     titleFont: '"Arial Black", Impact, sans-serif',
-    bodyFont: "Arial, sans-serif",
-    transitionDuration: 0.3, ease: "backOut",
+    bodyFont: "Arial, Helvetica, sans-serif",
+    td: 0.28, ease: "backOut",
+    toneColor: "rgba(255,100,30,0.08)",
+    imageFilter: "contrast(1.1) saturate(1.15)",
+    accentDark: "#fff",
   },
 };
 
-// ── Scene 1 — Brand Reveal ────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Split text into word spans with staggered animation */
+function WordReveal({
+  text, delay = 0, stagger = 0.07,
+  style,
+}: {
+  text: string; delay?: number; stagger?: number; style?: React.CSSProperties;
+}) {
+  const words = text.trim().split(/\s+/);
+  return (
+    <span style={{ display: "inline" }}>
+      {words.map((w, i) => (
+        <motion.span
+          key={i}
+          initial={{ opacity: 0, y: 12, filter: "blur(4px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          transition={{ delay: delay + i * stagger, duration: 0.35, ease: "easeOut" }}
+          style={{ display: "inline-block", marginRight: "0.28em", ...style }}
+        >
+          {w}
+        </motion.span>
+      ))}
+    </span>
+  );
+}
+
+/** Persistent logo bug in top-right corner */
+function LogoBug({ logoUrl }: { logoUrl: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.4, delay: 0.3 }}
+      style={{
+        position: "absolute", top: 24, right: 28, zIndex: 50,
+        maxWidth: 160, maxHeight: 64,
+        display: "flex", alignItems: "center", justifyContent: "flex-end",
+        filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.6))",
+      }}
+    >
+      <img src={logoUrl} alt="logo" style={{ maxWidth: 160, maxHeight: 64, objectFit: "contain" }} />
+    </motion.div>
+  );
+}
+
+/** Vignette + tone overlay (on every scene) */
+function SceneChrome({ theme, logoUrl }: { theme: StyleTheme; logoUrl?: string }) {
+  return (
+    <>
+      {/* Vignette */}
+      <div style={{
+        position: "absolute", inset: 0, zIndex: 10, pointerEvents: "none",
+        background: "radial-gradient(ellipse 110% 90% at 50% 50%, transparent 40%, rgba(0,0,0,0.72) 100%)",
+      }} />
+      {/* Persistent logo bug */}
+      {logoUrl && <div style={{ position: "absolute", inset: 0, zIndex: 20 }}><LogoBug logoUrl={logoUrl} /></div>}
+    </>
+  );
+}
+
+/** Horizontal accent divider line */
+function AccentLine({ theme, delay = 0, width = 100 }: { theme: StyleTheme; delay?: number; width?: number }) {
+  return (
+    <motion.div
+      initial={{ scaleX: 0 }} animate={{ scaleX: 1 }}
+      transition={{ duration: 0.6, delay, ease: "easeOut" }}
+      style={{
+        height: 3, width,
+        background: `linear-gradient(to right, ${theme.accent}, ${theme.accent2}, transparent)`,
+        transformOrigin: "left", borderRadius: 2, margin: "14px 0",
+      }}
+    />
+  );
+}
+
+/** Full-image with focal point + color grade + tone overlay */
+function StyledImage({
+  src, focus = "center", theme, style,
+}: {
+  src: string; focus?: "top" | "center" | "bottom"; theme: StyleTheme; style?: React.CSSProperties;
+}) {
+  const posY = focus === "top" ? "20%" : focus === "bottom" ? "80%" : "50%";
+  return (
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden", ...style }}>
+      <img
+        src={src} alt=""
+        style={{
+          width: "100%", height: "100%",
+          objectFit: "cover", objectPosition: `50% ${posY}`,
+          filter: theme.imageFilter,
+        }}
+      />
+      {/* Color tone overlay */}
+      <div style={{
+        position: "absolute", inset: 0,
+        background: theme.toneColor,
+        mixBlendMode: "multiply",
+      }} />
+    </div>
+  );
+}
+
+// ── Scene 0 — Brand Reveal ────────────────────────────────────────────────────
 
 function BrandScene({ data, theme }: { data: PromoData; theme: StyleTheme }) {
-  const hasImage = data.images.length > 0;
+  const img = data.images[0];
+  const focus = data.imageFocus?.[0] ?? "center";
+  const hasImg = !!img;
 
   return (
     <motion.div
-      key="brand"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0, scale: 1.04 }}
-      transition={{ duration: theme.transitionDuration }}
-      style={{
-        position: "absolute", inset: 0,
-        background: `linear-gradient(135deg, ${theme.bg} 0%, ${theme.bg2} 100%)`,
-        display: "flex", alignItems: "center",
-        overflow: "hidden",
-      }}
+      key="brand" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 1.03 }}
+      transition={{ duration: theme.td }}
+      style={{ position: "absolute", inset: 0, overflow: "hidden",
+        background: `linear-gradient(145deg, ${theme.bg} 0%, ${theme.bg2} 100%)` }}
     >
-      {/* Accent bar left */}
+      {/* Background image — faded, right-biased */}
+      {hasImg && (
+        <motion.div
+          initial={{ x: 120, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
+          transition={{ duration: theme.td * 3, ease: "easeOut" }}
+          style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "52%" }}
+        >
+          <StyledImage src={img} focus={focus} theme={theme} />
+          {/* Fade left edge into bg */}
+          <div style={{
+            position: "absolute", top: 0, left: 0, bottom: 0, width: 240,
+            background: `linear-gradient(to right, ${theme.bg}, transparent)`,
+          }} />
+          {/* Fade right edge */}
+          <div style={{
+            position: "absolute", top: 0, right: 0, bottom: 0, width: 80,
+            background: `linear-gradient(to left, ${theme.bg}, transparent)`,
+          }} />
+        </motion.div>
+      )}
+
+      {/* Left accent bar */}
       <motion.div
-        initial={{ scaleY: 0 }}
-        animate={{ scaleY: 1 }}
-        transition={{ duration: theme.transitionDuration * 2, ease: theme.ease }}
+        initial={{ scaleY: 0 }} animate={{ scaleY: 1 }}
+        transition={{ duration: theme.td * 2.5, ease: theme.ease }}
         style={{
-          position: "absolute", left: 0, top: 0, bottom: 0, width: 8,
+          position: "absolute", left: 0, top: "15%", bottom: "15%", width: 6,
           background: `linear-gradient(to bottom, ${theme.accent}, ${theme.accent2})`,
-          transformOrigin: "top",
+          transformOrigin: "top", borderRadius: "0 3px 3px 0",
         }}
       />
 
-      {/* Diagonal accent stripe */}
-      <motion.div
-        initial={{ x: -300, opacity: 0 }}
-        animate={{ x: 0, opacity: 0.07 }}
-        transition={{ duration: theme.transitionDuration * 3, ease: "easeOut" }}
-        style={{
-          position: "absolute", top: -100, left: -50,
-          width: 500, height: 900,
-          background: theme.accent,
-          transform: "rotate(15deg)",
-        }}
-      />
-
-      {/* Content left half */}
+      {/* Content */}
       <div style={{
-        flex: "0 0 auto",
-        width: hasImage ? "52%" : "80%",
-        padding: "0 80px",
-        zIndex: 1,
+        position: "absolute", top: 0, left: 0, bottom: 0,
+        width: hasImg ? "55%" : "85%",
+        padding: "0 72px",
+        display: "flex", flexDirection: "column", justifyContent: "center",
+        zIndex: 5,
       }}>
         {/* Brand name */}
         <motion.div
-          initial={{ y: 50, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: theme.transitionDuration * 2, delay: 0.15, ease: theme.ease }}
+          initial={{ x: -40, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
+          transition={{ duration: theme.td * 2, delay: 0.12, ease: theme.ease }}
         >
           <div style={{
             fontFamily: theme.titleFont,
-            fontSize: hasImage ? 72 : 96,
+            fontSize: hasImg ? 78 : 100,
             fontWeight: 900,
             color: theme.text,
-            lineHeight: 1.05,
+            lineHeight: 1.0,
             letterSpacing: -1,
             textTransform: "uppercase",
-            textShadow: `0 4px 20px rgba(0,0,0,0.5)`,
+            textShadow: "0 4px 24px rgba(0,0,0,0.7)",
           }}>
             {data.brandName}
           </div>
         </motion.div>
 
-        {/* Accent divider */}
-        <motion.div
-          initial={{ scaleX: 0 }}
-          animate={{ scaleX: 1 }}
-          transition={{ duration: theme.transitionDuration * 2, delay: 0.35, ease: "easeOut" }}
-          style={{
-            height: 4, width: 120,
-            background: `linear-gradient(to right, ${theme.accent}, ${theme.accent2})`,
-            margin: "20px 0",
-            transformOrigin: "left",
-            borderRadius: 2,
-          }}
-        />
+        <AccentLine theme={theme} delay={0.4} width={140} />
 
-        {/* Tagline */}
+        {/* Tagline — word-by-word */}
         {data.tagline && (
-          <motion.div
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: theme.transitionDuration * 2, delay: 0.5 }}
-          >
-            <div style={{
-              fontFamily: theme.bodyFont,
-              fontSize: 28,
-              color: theme.subtext,
-              lineHeight: 1.4,
-              fontStyle: "italic",
-            }}>
-              {data.tagline}
-            </div>
-          </motion.div>
+          <div style={{
+            fontFamily: theme.bodyFont, fontSize: 30,
+            color: theme.subtext, lineHeight: 1.45,
+            fontStyle: "italic", maxWidth: 480,
+            textShadow: "0 2px 8px rgba(0,0,0,0.6)",
+          }}>
+            <WordReveal text={data.tagline} delay={0.55} />
+          </div>
         )}
       </div>
 
-      {/* Image right half */}
-      {hasImage && (
-        <motion.div
-          initial={{ x: 120, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ duration: theme.transitionDuration * 3, delay: 0.2, ease: "easeOut" }}
-          style={{
-            flex: 1,
-            height: "100%",
-            position: "relative",
-          }}
-        >
-          {/* Gradient fade on left edge */}
+      <SceneChrome theme={theme} logoUrl={data.logoUrl} />
+    </motion.div>
+  );
+}
+
+// ── Scene 1 — Key Highlights ──────────────────────────────────────────────────
+
+function HighlightsScene({ data, theme }: { data: PromoData; theme: StyleTheme }) {
+  const features = (data.features ?? []).filter(Boolean).slice(0, 3);
+  const img = data.images[1] ?? data.images[0];
+  const focus = data.imageFocus?.[1] ?? data.imageFocus?.[0] ?? "center";
+
+  return (
+    <motion.div
+      key="highlights" initial={{ opacity: 0, x: 60 }} animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -60 }}
+      transition={{ duration: theme.td * 1.2 }}
+      style={{ position: "absolute", inset: 0, overflow: "hidden",
+        background: `linear-gradient(165deg, ${theme.bg2} 0%, ${theme.bg} 100%)` }}
+    >
+      {/* Background image very dim */}
+      {img && (
+        <>
+          <StyledImage src={img} focus={focus} theme={theme} />
           <div style={{
-            position: "absolute", top: 0, left: 0, bottom: 0, width: 200, zIndex: 1,
-            background: `linear-gradient(to right, ${theme.bg}, transparent)`,
+            position: "absolute", inset: 0,
+            background: `linear-gradient(to right, ${theme.bg}f0 0%, ${theme.bg}cc 55%, ${theme.bg}88 100%)`,
           }} />
-          <img
-            src={data.images[0]}
-            alt=""
-            style={{
-              width: "100%", height: "100%",
-              objectFit: "cover", objectPosition: "center",
-            }}
-          />
-        </motion.div>
+        </>
       )}
+      {!img && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: `radial-gradient(ellipse at 30% 50%, ${theme.accent}18 0%, transparent 60%)`,
+        }} />
+      )}
+
+      {/* Section label */}
+      <motion.div
+        initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1 }}
+        style={{
+          position: "absolute", top: 48, left: 72,
+          fontFamily: theme.bodyFont, fontSize: 18, fontWeight: 700,
+          color: theme.accent, letterSpacing: 4, textTransform: "uppercase",
+          zIndex: 5,
+        }}
+      >
+        Why Choose {data.brandName}
+      </motion.div>
+
+      {/* Feature rows */}
+      <div style={{
+        position: "absolute", top: "50%", left: 72, right: 72,
+        transform: "translateY(-50%)",
+        display: "flex", flexDirection: "column", gap: 28, zIndex: 5,
+      }}>
+        {features.map((f, i) => (
+          <motion.div
+            key={i}
+            initial={{ x: -60, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ duration: 0.45, delay: 0.25 + i * 0.4, ease: "easeOut" }}
+            style={{ display: "flex", alignItems: "center", gap: 28 }}
+          >
+            {/* Number badge */}
+            <div style={{
+              width: 52, height: 52, borderRadius: "50%", flexShrink: 0,
+              background: `linear-gradient(135deg, ${theme.accent}, ${theme.accent2})`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: theme.titleFont, fontSize: 26, fontWeight: 900,
+              color: theme.accentDark,
+              boxShadow: `0 4px 16px ${theme.accent}55`,
+            }}>
+              {i + 1}
+            </div>
+
+            <div style={{ flex: 1 }}>
+              {/* Accent underline */}
+              <motion.div
+                initial={{ scaleX: 0 }} animate={{ scaleX: 1 }}
+                transition={{ duration: 0.4, delay: 0.5 + i * 0.4, ease: "easeOut" }}
+                style={{
+                  height: 2, background: `${theme.accent}60`,
+                  transformOrigin: "left", marginBottom: 6,
+                }}
+              />
+              <div style={{
+                fontFamily: theme.titleFont, fontSize: 36, fontWeight: 900,
+                color: theme.text, lineHeight: 1.15,
+                textShadow: "0 2px 12px rgba(0,0,0,0.7)",
+              }}>
+                <WordReveal text={f} delay={0.3 + i * 0.4} stagger={0.05} />
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      <SceneChrome theme={theme} logoUrl={data.logoUrl} />
     </motion.div>
   );
 }
 
 // ── Scene 2 — Product Showcase ────────────────────────────────────────────────
 
-function ProductScene({ data, theme }: { data: PromoData; theme: StyleTheme }) {
-  const image = data.images.length > 1 ? data.images[1] : data.images[0];
+function ProductScene({ data, theme, imgIdx }: { data: PromoData; theme: StyleTheme; imgIdx: number }) {
+  const img = data.images[imgIdx] ?? data.images[0];
+  const focus = data.imageFocus?.[imgIdx] ?? data.imageFocus?.[0] ?? "center";
 
   return (
     <motion.div
-      key="product"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
+      key="product" initial={{ opacity: 0, scale: 1.04 }} animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: theme.transitionDuration }}
-      style={{ position: "absolute", inset: 0, background: theme.bg, overflow: "hidden" }}
+      transition={{ duration: theme.td * 1.5 }}
+      style={{ position: "absolute", inset: 0, overflow: "hidden" }}
     >
-      {/* Full-bleed image with Ken Burns */}
-      {image && (
+      {img ? (
         <motion.div
-          initial={{ scale: 1.0 }}
-          animate={{ scale: 1.08 }}
-          transition={{ duration: 12, ease: "linear" }}
+          initial={{ scale: 1.0 }} animate={{ scale: 1.09 }}
+          transition={{ duration: 14, ease: "linear" }}
           style={{ position: "absolute", inset: 0 }}
         >
-          <img
-            src={image}
-            alt=""
-            style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
-          />
+          <StyledImage src={img} focus={focus} theme={theme} />
         </motion.div>
+      ) : (
+        <div style={{ position: "absolute", inset: 0, background: theme.bg }} />
       )}
 
-      {/* Dark overlay */}
-      <div style={{
-        position: "absolute", inset: 0,
-        background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.0) 100%)",
-      }} />
-
-      {/* Accent bar top */}
+      {/* Top color bar */}
       <motion.div
-        initial={{ scaleX: 0 }}
-        animate={{ scaleX: 1 }}
-        transition={{ duration: 0.8, ease: "easeOut" }}
+        initial={{ scaleX: 0 }} animate={{ scaleX: 1 }}
+        transition={{ duration: 0.7, ease: "easeOut" }}
         style={{
-          position: "absolute", top: 0, left: 0, right: 0, height: 6,
+          position: "absolute", top: 0, left: 0, right: 0, height: 5,
           background: `linear-gradient(to right, ${theme.accent}, ${theme.accent2})`,
-          transformOrigin: "left",
+          transformOrigin: "left", zIndex: 10,
         }}
       />
 
-      {/* Brand name top left */}
+      {/* Gradient overlay — heavier at bottom */}
+      <div style={{
+        position: "absolute", inset: 0, zIndex: 5,
+        background: "linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0) 75%)",
+      }} />
+
+      {/* Brand name top-left */}
       <motion.div
-        initial={{ y: -20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.5, delay: 0.2 }}
+        initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.45, delay: 0.25 }}
         style={{
-          position: "absolute", top: 36, left: 60,
-          fontFamily: theme.titleFont, fontSize: 32, fontWeight: 900,
-          color: theme.accent, letterSpacing: 1, textTransform: "uppercase",
+          position: "absolute", top: 32, left: 60, zIndex: 15,
+          fontFamily: theme.titleFont, fontSize: 28, fontWeight: 900,
+          color: theme.accent, letterSpacing: 2, textTransform: "uppercase",
+          textShadow: "0 2px 8px rgba(0,0,0,0.8)",
         }}
       >
         {data.brandName}
       </motion.div>
 
-      {/* Product description bottom */}
+      {/* Description bottom */}
       <motion.div
-        initial={{ y: 40, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.4, ease: "easeOut" }}
-        style={{ position: "absolute", bottom: 60, left: 60, right: 60 }}
+        initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.55, delay: 0.35, ease: "easeOut" }}
+        style={{ position: "absolute", bottom: 60, left: 60, right: 200, zIndex: 15 }}
       >
         <div style={{
-          fontFamily: theme.bodyFont, fontSize: 36,
-          color: theme.text, lineHeight: 1.4, fontWeight: 600,
-          textShadow: "0 2px 8px rgba(0,0,0,0.8)",
+          height: 3, width: 80, borderRadius: 2, marginBottom: 14,
+          background: `linear-gradient(to right, ${theme.accent}, transparent)`,
+        }} />
+        <div style={{
+          fontFamily: theme.bodyFont, fontSize: 34, fontWeight: 600,
+          color: "#ffffff", lineHeight: 1.38,
+          textShadow: "0 2px 10px rgba(0,0,0,0.9)",
         }}>
-          {data.productDescription.length > 120
-            ? data.productDescription.slice(0, 120) + "…"
-            : data.productDescription}
+          <WordReveal
+            text={data.productDescription.length > 110
+              ? data.productDescription.slice(0, 110) + "…"
+              : data.productDescription}
+            delay={0.45} stagger={0.04}
+          />
         </div>
       </motion.div>
+
+      <SceneChrome theme={theme} logoUrl={data.logoUrl} />
     </motion.div>
   );
 }
 
-// ── Scene 3 — CTA Close ───────────────────────────────────────────────────────
+// ── Scene 3 — CTA ─────────────────────────────────────────────────────────────
 
 function CTAScene({ data, theme }: { data: PromoData; theme: StyleTheme }) {
   const cta = data.callToAction || "Learn More";
-  const image = data.images.length > 2 ? data.images[2] : (data.images.length > 1 ? data.images[1] : data.images[0]);
+  // Pick last available image as dim background
+  const img = data.images[data.images.length - 1];
 
   return (
     <motion.div
-      key="cta"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: theme.transitionDuration }}
+      key="cta" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: theme.td * 1.2 }}
       style={{
-        position: "absolute", inset: 0,
+        position: "absolute", inset: 0, overflow: "hidden",
         background: `linear-gradient(160deg, ${theme.bg} 0%, ${theme.bg2} 60%, ${theme.bg} 100%)`,
-        display: "flex", flexDirection: "column",
-        alignItems: "center", justifyContent: "center",
-        overflow: "hidden",
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       }}
     >
-      {/* Background image if available, dimmed */}
-      {image && (
+      {/* Dim background image */}
+      {img && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.12 }}
-          transition={{ duration: 1 }}
+          initial={{ opacity: 0 }} animate={{ opacity: 0.13 }}
+          transition={{ duration: 1.2 }}
           style={{ position: "absolute", inset: 0 }}
         >
-          <img src={image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <StyledImage src={img} focus="center" theme={theme} />
         </motion.div>
       )}
 
       {/* Radial glow */}
       <div style={{
-        position: "absolute", inset: 0, zIndex: 0,
-        background: `radial-gradient(circle at 50% 50%, ${theme.accent}22 0%, transparent 70%)`,
+        position: "absolute", inset: 0,
+        background: `radial-gradient(circle at 50% 55%, ${theme.accent}26 0%, transparent 65%)`,
       }} />
 
-      {/* Corner accents */}
-      <motion.div
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
-        style={{
-          position: "absolute", top: 0, left: 0,
-          width: 120, height: 8,
-          background: `linear-gradient(to right, ${theme.accent}, transparent)`,
-        }}
-      />
-      <motion.div
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ duration: 0.4, delay: 0.15 }}
-        style={{
-          position: "absolute", top: 0, left: 0,
-          width: 8, height: 120,
-          background: `linear-gradient(to bottom, ${theme.accent}, transparent)`,
-        }}
-      />
-      <motion.div
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ duration: 0.4, delay: 0.2 }}
-        style={{
-          position: "absolute", bottom: 0, right: 0,
-          width: 120, height: 8,
-          background: `linear-gradient(to left, ${theme.accent}, transparent)`,
-        }}
-      />
-      <motion.div
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ duration: 0.4, delay: 0.25 }}
-        style={{
-          position: "absolute", bottom: 0, right: 0,
-          width: 8, height: 120,
-          background: `linear-gradient(to top, ${theme.accent}, transparent)`,
-        }}
-      />
-
-      {/* CTA button */}
-      <motion.div
-        initial={{ scale: 0.6, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.5, delay: 0.2, ease: "backOut" }}
-        style={{ zIndex: 1, textAlign: "center" }}
-      >
-        <div style={{
-          background: `linear-gradient(135deg, ${theme.accent}, ${theme.accent2})`,
-          borderRadius: 12,
-          padding: "28px 72px",
-          display: "inline-block",
-          marginBottom: 40,
-          boxShadow: `0 8px 40px ${theme.accent}55`,
-        }}>
+      {/* Corner marks */}
+      {[
+        { top: 0, left: 0, bx: "right", by: "bottom" },
+        { top: 0, right: 0, bx: "left", by: "bottom" },
+        { bottom: 0, left: 0, bx: "right", by: "top" },
+        { bottom: 0, right: 0, bx: "left", by: "top" },
+      ].map((pos, i) => (
+        <motion.div key={i}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+          transition={{ delay: 0.05 * i, duration: 0.3 }}
+          style={{ position: "absolute", ...pos, zIndex: 5 }}
+        >
           <div style={{
-            fontFamily: theme.titleFont,
-            fontSize: 56,
-            fontWeight: 900,
-            color: "#000000",
-            textTransform: "uppercase",
-            letterSpacing: 2,
-            lineHeight: 1,
+            width: 32, height: 3,
+            background: theme.accent, opacity: 0.6,
+            ...(pos.bx === "left" ? { borderLeft: `3px solid ${theme.accent}` } : { borderRight: `3px solid ${theme.accent}` }),
+          }} />
+        </motion.div>
+      ))}
+
+      {/* CTA pill */}
+      <motion.div
+        initial={{ scale: 0.55, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.5, delay: 0.2, ease: "backOut" }}
+        style={{ zIndex: 10, textAlign: "center", marginBottom: 36 }}
+      >
+        <motion.div
+          animate={{ boxShadow: [`0 8px 40px ${theme.accent}44`, `0 12px 60px ${theme.accent}88`, `0 8px 40px ${theme.accent}44`] }}
+          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+          style={{
+            background: `linear-gradient(135deg, ${theme.accent}, ${theme.accent2})`,
+            borderRadius: 14, padding: "28px 80px", display: "inline-block",
+          }}
+        >
+          <div style={{
+            fontFamily: theme.titleFont, fontSize: 60, fontWeight: 900,
+            color: theme.accentDark === "#000" ? "#000" : "#fff",
+            textTransform: "uppercase", letterSpacing: 3, lineHeight: 1,
           }}>
             {cta}
           </div>
-        </div>
+        </motion.div>
       </motion.div>
 
-      {/* Brand name */}
+      {/* Brand */}
       <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
+        initial={{ y: 24, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5, delay: 0.5 }}
-        style={{ zIndex: 1, textAlign: "center" }}
+        style={{ zIndex: 10, textAlign: "center" }}
       >
         <div style={{
-          fontFamily: theme.titleFont,
-          fontSize: 42, fontWeight: 900,
-          color: theme.text, textTransform: "uppercase",
-          letterSpacing: 3,
+          fontFamily: theme.titleFont, fontSize: 44, fontWeight: 900,
+          color: theme.text, textTransform: "uppercase", letterSpacing: 4,
+          textShadow: "0 2px 12px rgba(0,0,0,0.7)",
         }}>
           {data.brandName}
         </div>
         {data.tagline && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.7, duration: 0.4 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            transition={{ delay: 0.75, duration: 0.4 }}
           >
             <div style={{
               fontFamily: theme.bodyFont, fontSize: 24,
@@ -446,46 +593,87 @@ function CTAScene({ data, theme }: { data: PromoData; theme: StyleTheme }) {
           </motion.div>
         )}
       </motion.div>
+
+      <SceneChrome theme={theme} logoUrl={data.logoUrl} />
     </motion.div>
   );
 }
 
-// ── Main player ───────────────────────────────────────────────────────────────
+// ── Scene scheduler ───────────────────────────────────────────────────────────
 
-function PromoPlayer({ data, isHeadless }: { data: PromoData; isHeadless: boolean }) {
+function buildTimeline(data: PromoData): {
+  scene: number; startMs: number; endMs: number;
+}[] {
+  const d = data.targetDuration * 1000;
+  const hasFeatures = (data.features ?? []).filter(Boolean).length > 0;
+  const hasExtraImg = data.images.length >= 2;
+  const longEnough = data.targetDuration >= 10;
+
+  // Decide which scenes to include
+  const scenes: number[] = [0]; // always Brand
+  if (hasFeatures && longEnough) scenes.push(1);
+  scenes.push(2);                // always Product
+  if (hasExtraImg && longEnough && !hasFeatures) scenes.push(3); // Secondary only if no features
+  scenes.push(99);               // always CTA (sentinel)
+
+  // Weights — Brand gets 25%, Features 25%, Product 35%, Secondary 20%, CTA 20%
+  const weights: Record<number, number> = { 0: 0.25, 1: 0.25, 2: 0.35, 3: 0.20, 99: 0.20 };
+  const included = scenes.slice(0, -1); // exclude CTA from weight sum, CTA always gets remainder
+  const sumW = included.reduce((s, sc) => s + weights[sc], 0);
+  const ctaW = 0.20;
+  const scale = (1 - ctaW) / sumW;
+
+  let cursor = 0;
+  const timeline: { scene: number; startMs: number; endMs: number }[] = [];
+  for (let i = 0; i < included.length; i++) {
+    const sc = included[i];
+    const dur = Math.round(d * weights[sc] * scale);
+    timeline.push({ scene: sc, startMs: cursor, endMs: cursor + dur });
+    cursor += dur;
+  }
+  // CTA gets the remainder
+  timeline.push({ scene: 99, startMs: cursor, endMs: d });
+  return timeline;
+}
+
+// ── Player ────────────────────────────────────────────────────────────────────
+
+function PromoPlayer({ data }: { data: PromoData }) {
   const theme = THEMES[data.stylePreset] ?? THEMES.professional;
-  const [sceneIndex, setSceneIndex] = useState(0);
+  const [sceneIdx, setSceneIdx] = useState(0);
+
+  const timeline = buildTimeline(data);
 
   useEffect(() => {
-    // These setTimeout calls are controlled by Playwright's fake clock in headless mode
-    const d = data.targetDuration * 1000;
-    const t1 = setTimeout(() => setSceneIndex(1), d * 0.30);
-    const t2 = setTimeout(() => setSceneIndex(2), d * 0.80);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [data.targetDuration]);
+    const timers = timeline.slice(1).map(({ startMs }, i) =>
+      setTimeout(() => setSceneIdx(i + 1), startMs),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [data.targetDuration, data.stylePreset, data.features?.join(",")]);
 
-  const scenes = [
-    <BrandScene key="brand" data={data} theme={theme} />,
-    <ProductScene key="product" data={data} theme={theme} />,
-    <CTAScene key="cta" data={data} theme={theme} />,
-  ];
+  const current = timeline[sceneIdx];
+  const productImgIdx = (data.features ?? []).filter(Boolean).length > 0 ? 1 : 1;
+
+  const renderScene = () => {
+    const sceneId = current?.scene ?? 0;
+    if (sceneId === 0) return <BrandScene data={data} theme={theme} />;
+    if (sceneId === 1) return <HighlightsScene data={data} theme={theme} />;
+    if (sceneId === 2) return <ProductScene data={data} theme={theme} imgIdx={productImgIdx} />;
+    if (sceneId === 3) return <ProductScene key="product2" data={data} theme={theme} imgIdx={2} />;
+    return <CTAScene data={data} theme={theme} />;
+  };
 
   return (
     <div
-      className={isHeadless ? "" : "promo-player"}
       style={{
         width: 1280, height: 720,
         position: "relative", overflow: "hidden",
         background: theme.bg,
-        // Centre in viewport for preview
-        transformOrigin: "top left",
       }}
     >
       <AnimatePresence mode="wait">
-        {scenes[sceneIndex]}
+        {renderScene()}
       </AnimatePresence>
-
-      {/* "Ready" marker for Playwright waitForSelector */}
       <div className="promo-ready" style={{ display: "none" }} />
     </div>
   );
@@ -495,50 +683,47 @@ function PromoPlayer({ data, isHeadless }: { data: PromoData; isHeadless: boolea
 
 export default function StudioPromoPreviewPage() {
   const [data, setData] = useState<PromoData | null>(null);
-  const [isHeadless, setIsHeadless] = useState(false);
 
   useEffect(() => {
     const url = new URL(window.location.href);
     const raw = url.searchParams.get("d");
-    const headless = url.searchParams.get("headless") === "1";
-    setIsHeadless(headless);
     if (raw) {
       try { setData(JSON.parse(atob(decodeURIComponent(raw)))); }
-      catch { console.error("Failed to parse promo data"); }
+      catch (e) { console.error("Failed to parse promo data", e); }
     }
   }, []);
 
+  const scale =
+    typeof window !== "undefined"
+      ? Math.min(window.innerWidth / 1280, window.innerHeight / 720)
+      : 1;
+
   if (!data) {
     return (
-      <div style={{
-        width: "100vw", height: "100vh", background: "#000",
-        display: "flex", alignItems: "center", justifyContent: "center",
-      }}>
+      <div style={{ width: "100vw", height: "100vh", background: "#000", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div className="promo-ready" style={{ display: "none" }} />
       </div>
     );
   }
 
-  // Scale to fit viewport for browser preview
-  const scaleStyle = isHeadless ? {} : {
-    position: "fixed" as const,
-    inset: 0,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "#000",
-    overflow: "hidden",
-  };
+  const isHeadless = new URL(window.location.href).searchParams.get("headless") === "1";
 
-  const innerStyle = isHeadless ? {} : {
-    transform: `scale(${Math.min(window.innerWidth / 1280, window.innerHeight / 720)})`,
-    transformOrigin: "center center" as const,
-  };
+  if (isHeadless) {
+    // Playwright captures at exactly 1280×720 — no scaling
+    return (
+      <div style={{ width: 1280, height: 720, overflow: "hidden", background: "#000" }}>
+        <PromoPlayer data={data} />
+      </div>
+    );
+  }
 
   return (
-    <div style={scaleStyle}>
-      <div style={innerStyle}>
-        <PromoPlayer data={data} isHeadless={isHeadless} />
+    <div style={{
+      position: "fixed", inset: 0, background: "#000",
+      display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
+    }}>
+      <div style={{ transform: `scale(${scale})`, transformOrigin: "center center" }}>
+        <PromoPlayer data={data} />
       </div>
     </div>
   );
