@@ -14414,6 +14414,75 @@ export async function registerRoutes(
     }
   });
 
+  // ── Promo Code Renderer — start ───────────────────────────────────────────
+  // Launches Playwright, renders the animated React component frame-by-frame,
+  // encodes to MP4 with ffmpeg, uploads to Cloudinary, returns download URL.
+  type RenderJob = {
+    status: "pending" | "rendering" | "complete" | "error";
+    frame: number;
+    total: number;
+    videoUrl: string | null;
+    error: string | null;
+  };
+  const renderJobs = new Map<string, RenderJob>();
+
+  app.post("/api/studio/promo/render", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const {
+        brandName, tagline, productDescription, stylePreset,
+        callToAction, images, targetDuration,
+      } = req.body as {
+        brandName: string; tagline?: string; productDescription: string;
+        stylePreset?: string; callToAction?: string;
+        images: string[]; targetDuration?: number;
+      };
+      if (!brandName?.trim()) return res.status(400).json({ message: "Brand name is required." });
+
+      const renderId = crypto.randomUUID();
+      const job: RenderJob = { status: "rendering", frame: 0, total: (targetDuration ?? 15) * 24, videoUrl: null, error: null };
+      renderJobs.set(renderId, job);
+
+      // Expire in-memory jobs after 10 minutes
+      setTimeout(() => renderJobs.delete(renderId), 10 * 60 * 1000);
+
+      res.json({ renderId });
+
+      // Run render in background
+      (async () => {
+        try {
+          const { renderPromoVideo } = await import("./studio/promo-renderer");
+          const mp4 = await renderPromoVideo(
+            { brandName, tagline, productDescription: productDescription ?? "", stylePreset: stylePreset ?? "professional", callToAction, images: images ?? [], targetDuration: targetDuration ?? 15 },
+            (frame, total) => { job.frame = frame; job.total = total; },
+          );
+
+          // Upload MP4 to Cloudinary
+          const cloudinary = (await import("./cloudinary.js")).default;
+          const dataUrl = `data:video/mp4;base64,${mp4.toString("base64")}`;
+          const up = await (cloudinary as any).uploader.upload(dataUrl, {
+            resource_type: "video",
+            folder: "guber-studio-promo",
+            format: "mp4",
+          });
+          job.videoUrl = up.secure_url as string;
+          job.status = "complete";
+        } catch (err: any) {
+          job.error = err.message;
+          job.status = "error";
+          console.error("[promo-render] Error:", err.message);
+        }
+      })();
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/studio/promo/render/:renderId/status", requireAuth, async (req: Request, res: Response) => {
+    const job = renderJobs.get(String(req.params.renderId));
+    if (!job) return res.status(404).json({ message: "Render job not found or expired." });
+    res.json({ status: job.status, frame: job.frame, total: job.total, videoUrl: job.videoUrl, error: job.error });
+  });
+
   app.post("/api/stripe/trust-box-checkout", requireAuth, demoGuard, requireFullCommerce, async (req: Request, res: Response) => {
     try {
       const user = await storage.getUser(req.session.userId!);
