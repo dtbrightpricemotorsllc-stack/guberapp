@@ -14314,7 +14314,88 @@ export async function registerRoutes(
   app.get("/api/studio/agent/latest", requireAuth, async (req: Request, res: Response) => {
     try {
       const { getUserLatestJob } = await import("./studio/video-agent");
-      const job = await getUserLatestJob(req.session.userId!);
+      const job = await getUserLatestJob(req.session.userId!, "video");
+      if (!job) return res.json({ job: null });
+      res.json({
+        job: {
+          jobId: job.id,
+          status: job.status,
+          phase: job.phase,
+          logs: job.logs,
+          manifest: job.manifest,
+          videoUrl: job.videoUrl,
+          error: job.error,
+          targetDuration: job.targetDuration,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Promo Agent — start ───────────────────────────────────────────────────
+  app.post("/api/studio/promo/start", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!process.env.FAL_KEY) return res.status(503).json({ message: "Studio generation not configured (FAL_KEY missing)." });
+      if (!process.env.AI_INTEGRATIONS_OPENAI_API_KEY) return res.status(503).json({ message: "Studio agent not configured (OpenAI key missing)." });
+      const userId = req.session.userId!;
+      const {
+        brandName, tagline, productDescription, stylePreset,
+        targetAudience, callToAction, images, targetDuration,
+      } = req.body as {
+        brandName: string; tagline?: string; productDescription: string;
+        stylePreset: string; targetAudience?: string; callToAction?: string;
+        images: Array<{ slot: number; name: string; url: string }>;
+        targetDuration?: number;
+      };
+      if (!brandName?.trim()) return res.status(400).json({ message: "Brand name is required." });
+      if (!productDescription?.trim()) return res.status(400).json({ message: "Product description is required." });
+      if (!Array.isArray(images) || images.length === 0) return res.status(400).json({ message: "At least one image is required." });
+
+      const STYLE_DESCRIPTIONS: Record<string, string> = {
+        energetic: "fast-paced dynamic zooms and bold cuts — high energy that grabs attention instantly",
+        professional: "clean steady camera movements, polished and authoritative corporate confidence",
+        luxury: "slow cinematic reveals with elegant transitions and a premium aspirational atmosphere",
+        friendly: "warm soft pans, approachable movements, inviting and trustworthy tone",
+        dramatic: "high-contrast cinematic zooms with intense atmosphere and powerful emotional impact",
+        bold: "strong confident cuts, impactful visuals, direct and commanding presence",
+      };
+
+      const styleDesc = STYLE_DESCRIPTIONS[stylePreset] ?? stylePreset;
+      const audience = targetAudience?.trim() || "general audience";
+      const cta = callToAction?.trim() || "Learn more";
+      const tag = tagline?.trim();
+
+      // Build the instruction automatically — no manual prompt needed from the user
+      const instruction =
+        `Create a ${targetDuration ?? 15}-second promotional video for ${brandName}` +
+        (tag ? ` — "${tag}"` : "") + `. ` +
+        `Product/Service: ${productDescription}. ` +
+        `Visual style: ${styleDesc}. ` +
+        `Target audience: ${audience}. ` +
+        `Close every scene leading toward the call to action: "${cta}". ` +
+        `Use Image 1${images.length > 1 ? ` through Image ${images.length}` : ""} as the primary visuals. ` +
+        `The voiceover must speak directly to ${audience} and end with "${cta}". ` +
+        `Make it feel like a professional TV/social media advertisement.`;
+
+      const { startAgentJob } = await import("./studio/video-agent");
+      const job = await startAgentJob(userId, {
+        images,
+        instruction,
+        targetDuration,
+        jobType: "promo",
+      });
+      res.json({ jobId: job.id });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Promo Agent — latest job (resume) ─────────────────────────────────────
+  app.get("/api/studio/promo/latest", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { getUserLatestJob } = await import("./studio/video-agent");
+      const job = await getUserLatestJob(req.session.userId!, "promo");
       if (!job) return res.json({ job: null });
       res.json({
         job: {

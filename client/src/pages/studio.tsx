@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
-import { Coins, ImageIcon, Layers, ChevronRight, Sparkles, Zap } from "lucide-react";
+import { Coins, ImageIcon, Layers, ChevronRight, Sparkles, Zap, Megaphone } from "lucide-react";
 
 type StudioMe = {
   credits: number;
@@ -148,7 +148,54 @@ export default function StudioPage() {
           </div>
         </Link>
 
-        {/* Tool 2 — Video Agent */}
+        {/* Tool 2 — Promo Video */}
+        <Link href="/studio/promo">
+          <div
+            className="group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 hover:scale-[1.015] active:scale-[0.99]"
+            style={{
+              background: "hsl(222 47% 7%)",
+              border: "1px solid hsl(25 100% 55% / 0.25)",
+            }}
+          >
+            <div
+              className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+              style={{ background: "radial-gradient(ellipse at 30% 50%, hsl(25 100% 55% / 0.08), transparent 70%)" }}
+            />
+            <div className="relative flex items-center gap-4 px-5 py-5">
+              <div
+                className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
+                style={{ background: "linear-gradient(135deg, hsl(25 100% 45%), hsl(45 100% 52%))" }}
+              >
+                <Megaphone className="w-7 h-7 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <h2 className="text-base font-bold text-white">Promo Video</h2>
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                    style={{ background: "hsl(25 100% 55% / 0.15)", color: "hsl(25 100% 70%)", border: "1px solid hsl(25 100% 55% / 0.25)" }}
+                  >
+                    New
+                  </span>
+                </div>
+                <p className="text-sm text-white/50 leading-snug">
+                  Fill in your brand, product, and style — the AI writes the brief and generates a polished promo video automatically.
+                </p>
+                <div className="flex flex-wrap items-center gap-3 mt-2">
+                  {["No prompt needed", "6 style presets", "5–30s video"].map((tag) => (
+                    <div key={tag} className="flex items-center gap-1 text-[11px] text-white/35">
+                      <Sparkles className="w-3 h-3" />
+                      {tag}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-white/20 group-hover:text-white/50 transition-colors flex-shrink-0" />
+            </div>
+          </div>
+        </Link>
+
+        {/* Tool 3 — Video Agent */}
         <Link href="/studio/video-agent">
           <div
             className="group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 hover:scale-[1.015] active:scale-[0.99]"

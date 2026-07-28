@@ -1906,6 +1906,7 @@ app.use((req, res, next) => {
       video_url TEXT,
       error TEXT,
       target_duration INTEGER NOT NULL DEFAULT 15,
+      job_type TEXT NOT NULL DEFAULT 'video',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '24 hours')
     )
@@ -1914,6 +1915,10 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS studio_video_jobs_user_idx
       ON studio_video_jobs(user_id, created_at DESC)
   `).catch(e => console.error("[seed] studio_video_jobs index error:", e));
+  // Migrate existing rows that predate job_type column
+  await pool.query(`
+    ALTER TABLE studio_video_jobs ADD COLUMN IF NOT EXISTS job_type TEXT NOT NULL DEFAULT 'video'
+  `).catch(e => console.error("[seed] studio_video_jobs job_type migration error:", e));
 
   // Seed NXTGEN Law Group studio
   const { seedNxtgenStudio } = await import("./business-studio");

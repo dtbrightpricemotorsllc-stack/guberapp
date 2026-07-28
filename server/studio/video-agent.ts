@@ -28,6 +28,7 @@ export type AgentJob = {
   videoUrl: string | null;
   error: string | null;
   targetDuration: number;
+  jobType: "video" | "promo";
   createdAt: Date;
 };
 
@@ -81,7 +82,7 @@ export async function getAgentJobFromDb(id: string): Promise<AgentJob | null> {
   try {
     const { rows } = await pool.query(
       `SELECT id, user_id, status, phase, logs, manifest, video_url, error,
-              target_duration, created_at
+              target_duration, job_type, created_at
          FROM studio_video_jobs WHERE id = $1 AND expires_at > NOW()`,
       [id],
     );
@@ -97,6 +98,7 @@ export async function getAgentJobFromDb(id: string): Promise<AgentJob | null> {
       videoUrl: r.video_url,
       error: r.error,
       targetDuration: r.target_duration ?? 15,
+      jobType: (r.job_type as "video" | "promo") ?? "video",
       createdAt: r.created_at,
     };
   } catch {
@@ -104,21 +106,21 @@ export async function getAgentJobFromDb(id: string): Promise<AgentJob | null> {
   }
 }
 
-/** Return the most-recent non-expired job for a user (for client resume) */
-export async function getUserLatestJob(userId: number): Promise<AgentJob | null> {
+/** Return the most-recent non-expired job for a user, optionally filtered by jobType */
+export async function getUserLatestJob(userId: number, jobType?: "video" | "promo"): Promise<AgentJob | null> {
   try {
     const { rows } = await pool.query(
       `SELECT id, user_id, status, phase, logs, manifest, video_url, error,
-              target_duration, created_at
+              target_duration, job_type, created_at
          FROM studio_video_jobs
         WHERE user_id = $1 AND expires_at > NOW()
+          AND ($2::text IS NULL OR job_type = $2)
         ORDER BY created_at DESC
         LIMIT 1`,
-      [userId],
+      [userId, jobType ?? null],
     );
     if (!rows[0]) return null;
     const r = rows[0];
-    // Merge with in-memory if available (has latest logs)
     const live = jobs.get(r.id);
     if (live) return live;
     return {
@@ -131,6 +133,7 @@ export async function getUserLatestJob(userId: number): Promise<AgentJob | null>
       videoUrl: r.video_url,
       error: r.error,
       targetDuration: r.target_duration ?? 15,
+      jobType: (r.job_type as "video" | "promo") ?? "video",
       createdAt: r.created_at,
     };
   } catch {
@@ -567,6 +570,7 @@ export interface AgentInput {
   images: Array<{ slot: number; name: string; url: string }>;
   instruction: string;
   targetDuration?: number; // seconds — 5 | 10 | 15 | 20 | 30
+  jobType?: "video" | "promo";
 }
 
 export async function startAgentJob(userId: number, input: AgentInput): Promise<AgentJob> {
@@ -574,6 +578,7 @@ export async function startAgentJob(userId: number, input: AgentInput): Promise<
   const targetDuration = [5, 10, 15, 20, 30].includes(input.targetDuration ?? 0)
     ? input.targetDuration!
     : 15;
+  const jobType: "video" | "promo" = input.jobType === "promo" ? "promo" : "video";
 
   const job: AgentJob = {
     id, userId,
@@ -584,6 +589,7 @@ export async function startAgentJob(userId: number, input: AgentInput): Promise<
     videoUrl: null,
     error: null,
     targetDuration,
+    jobType,
     createdAt: new Date(),
   };
   jobs.set(id, job);
@@ -592,9 +598,9 @@ export async function startAgentJob(userId: number, input: AgentInput): Promise<
   try {
     await pool.query(
       `INSERT INTO studio_video_jobs
-         (id, user_id, status, phase, logs, target_duration)
-       VALUES ($1, $2, 'running', 0, '[]', $3)`,
-      [id, userId, targetDuration],
+         (id, user_id, status, phase, logs, target_duration, job_type)
+       VALUES ($1, $2, 'running', 0, '[]', $3, $4)`,
+      [id, userId, targetDuration, jobType],
     );
   } catch (err: any) {
     console.error(`[video-agent][${id}] DB insert error: ${err.message}`);

@@ -86,6 +86,7 @@ const StudioPromoClip = lazy(() => import("@/pages/studio-promo-clip"));
 const StudioQuickPic = lazy(() => import("@/pages/studio-quick-pic"));
 const StudioAiDirector = lazy(() => import("@/pages/studio-ai-director"));
 const StudioVideoAgent = lazy(() => import("@/pages/studio-video-agent"));
+const StudioPromoAgent = lazy(() => import("@/pages/studio-promo-agent"));
 const Investors = lazy(() => import("@/pages/investors"));
 const PitchDeck = lazy(() => import("@/pages/pitch-deck"));
 const MobileCheckout = lazy(() => import("@/pages/mobile-checkout"));
@@ -438,6 +439,7 @@ function Router() {
       <Route path="/studio/quick-pic" component={() => <ProtectedRoute component={StudioQuickPic} />} />
       <Route path="/studio/ai-director" component={() => <ProtectedRoute component={StudioAiDirector} />} />
       <Route path="/studio/video-agent" component={() => <ProtectedRoute component={StudioVideoAgent} />} />
+      <Route path="/studio/promo" component={() => <ProtectedRoute component={StudioPromoAgent} />} />
       <Route path="/biz/login" component={() => <Redirect to="/login" />} />
       <Route path="/biz/dashboard" component={() => <BizRoute component={BizDashboard} />} />
       <Route path="/biz/post-job" component={() => <BizRoute component={BizPostJob} />} />
