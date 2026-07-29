@@ -176,7 +176,17 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           const params: Record<string, any> = { dynamicVariables: dynVars };
           if (session.signedUrl) params.signedUrl = session.signedUrl;
           else                   params.agentId   = session.agentId;
-          if (suppressFirstMessage) params.overrides = { agent: { firstMessage: "" } };
+
+          // Always apply overrides — target ~500ms silence → end of turn (default is ~2-3s);
+          // optionally suppress the agent's configured auto-greeting when the caller has
+          // already shown/spoken it via text-TTS so users don't hear two greetings.
+          // `turn` is sent as conversation_config_override.agent.turn in the WebSocket handshake.
+          params.overrides = {
+            agent: {
+              ...(suppressFirstMessage ? { firstMessage: "" } : {}),
+              turn: { turn_timeout: 0.5, mode: "turn" },
+            },
+          } as any;
 
           // Give the audio context 500 ms to fully unlock after the user gesture
           // before ElevenLabs starts streaming audio — prevents the greeting

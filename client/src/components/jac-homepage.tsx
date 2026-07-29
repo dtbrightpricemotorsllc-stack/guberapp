@@ -102,7 +102,7 @@ const OPENING_OPTIONS = [
 
 const GREETING: JacMsg = {
   role: "assistant",
-  content: "Welcome to Team GUBER. I'm JAC — tell me what you need, what you can do, or what you have available. I'll help you find your next move.",
+  content: "Welcome to Team GUBER! I'm JAC, your Job Assistance Coordinator. Tap the microphone below and tell me what we're getting done today.",
   buttons: OPENING_OPTIONS,
 };
 
@@ -175,6 +175,7 @@ function buildReturningGreeting(data: JacUpdates): string {
 }
 
 const JAC_FLOAT_HINT_KEY = "jac_float_hint_shown";
+const JAC_MIC_HINT_KEY   = "jac_hp_mic_hint_done";
 
 // ── GUBER context detection for phone content cards ───────────────────
 type GuberCtx = "jobs" | "cash" | "vi" | "business" | "studio" | "default";
@@ -286,6 +287,10 @@ export function JacHomepage() {
   const [showFloatHint, setShowFloatHint] = useState(() => {
     try { return localStorage.getItem(JAC_FLOAT_HINT_KEY) !== "1"; } catch { return false; }
   });
+  // Mic guidance — pulsing button + "Tap to talk" label until first mic use
+  const [micHintDone, setMicHintDone] = useState(() => {
+    try { return localStorage.getItem(JAC_MIC_HINT_KEY) === "1"; } catch { return false; }
+  });
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const feedbackDraftRef = useRef<{ ready: boolean; category: string; description: string } | null>(null);
@@ -349,6 +354,11 @@ export function JacHomepage() {
     setLiveMode(true);
     setLiveState("listening");
     setConvaiKey(k => k + 1);
+    // Mark mic hint done on first use
+    if (!micHintDone) {
+      setMicHintDone(true);
+      try { localStorage.setItem(JAC_MIC_HINT_KEY, "1"); } catch {}
+    }
   }
 
   // speak — text-mode TTS only; no-ops when ConvAI is active (ElevenLabs handles audio)
@@ -829,6 +839,7 @@ export function JacHomepage() {
       ref={convaiSessionRef}
       active={liveMode}
       sessionEndpoint="/api/jac/convai/investor-session"
+      suppressFirstMessage
       onPhaseChange={handleConvaiPhaseChange}
       onUserTranscript={handleConvaiUserTranscript}
       onJacResponse={handleConvaiJacResponse}
@@ -1006,29 +1017,54 @@ export function JacHomepage() {
                   <Volume2 className="w-3.5 h-3.5" />
                 </button>
                 {micSupported && (
-                  <button
-                    onClick={toggleLiveMode}
-                    className={`relative w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center transition-all duration-200 ${liveMode ? "scale-105" : "hover:scale-105 active:scale-95"}`}
-                    style={{
-                      background: liveMode
-                        ? liveState === "speaking"  ? "linear-gradient(135deg, hsl(152 90% 40%), hsl(152 70% 30%))"
-                          : liveState === "recording" ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
-                          : "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))"
-                        : "linear-gradient(135deg, hsl(270 70% 22%), hsl(152 60% 14%))",
-                      color: "white",
-                      boxShadow: liveMode ? "0 0 0 2px hsl(270 100% 65% / 0.4), 0 0 16px hsl(270 100% 65% / 0.5)" : "0 0 8px hsl(270 100% 65% / 0.3)",
-                    }}
-                    data-testid="button-jac-mic"
-                    disabled={typing}
-                    aria-label={liveMode ? "End voice chat" : "Start voice chat with JAC"}
-                  >
-                    {liveMode && <span className="absolute inset-0 rounded-xl animate-ping opacity-20" style={{ background: "hsl(270 100% 65%)" }} />}
-                    {liveMode
-                      ? liveState === "recording" ? <Mic className="w-4 h-4" />
-                        : liveState === "speaking"  ? <Volume2 className="w-4 h-4" />
-                        : <Loader2 className="w-4 h-4 animate-spin" />
-                      : <Mic className="w-4 h-4" />}
-                  </button>
+                  <div className="relative flex flex-col items-center">
+                    {/* "Tap to talk" guidance label — shows until first mic use */}
+                    {!liveMode && !micHintDone && (
+                      <span
+                        className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-display font-semibold tracking-wide pointer-events-none select-none"
+                        style={{
+                          color: "hsl(270 100% 75%)",
+                          textShadow: "0 0 8px hsl(270 100% 65% / 0.6)",
+                          animation: "pulse 2s ease-in-out infinite",
+                        }}
+                      >
+                        Tap to talk ↓
+                      </span>
+                    )}
+                    <button
+                      onClick={toggleLiveMode}
+                      className={`relative w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center transition-all duration-200 ${liveMode ? "scale-105" : "hover:scale-105 active:scale-95"}`}
+                      style={{
+                        background: liveMode
+                          ? liveState === "speaking"  ? "linear-gradient(135deg, hsl(152 90% 40%), hsl(152 70% 30%))"
+                            : liveState === "recording" ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
+                            : "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))"
+                          : "linear-gradient(135deg, hsl(270 70% 22%), hsl(152 60% 14%))",
+                        color: "white",
+                        boxShadow: liveMode
+                          ? "0 0 0 2px hsl(270 100% 65% / 0.4), 0 0 16px hsl(270 100% 65% / 0.5)"
+                          : !micHintDone
+                            ? "0 0 0 2px hsl(270 100% 65% / 0.5), 0 0 20px hsl(270 100% 65% / 0.4)"
+                            : "0 0 8px hsl(270 100% 65% / 0.3)",
+                      }}
+                      data-testid="button-jac-mic"
+                      disabled={typing}
+                      aria-label={liveMode ? "End voice chat" : "Start voice chat with JAC"}
+                    >
+                      {/* Ping ring — active when live OR when hinting user to start */}
+                      {(liveMode || !micHintDone) && (
+                        <span
+                          className="absolute inset-0 rounded-xl animate-ping opacity-25"
+                          style={{ background: liveMode ? "hsl(270 100% 65%)" : "hsl(270 80% 60%)" }}
+                        />
+                      )}
+                      {liveMode
+                        ? liveState === "recording" ? <Mic className="w-4 h-4 relative" />
+                          : liveState === "speaking"  ? <Volume2 className="w-4 h-4 relative" />
+                          : <Loader2 className="w-4 h-4 animate-spin relative" />
+                        : <Mic className="w-4 h-4 relative" />}
+                    </button>
+                  </div>
                 )}
                 <button
                   onClick={() => processInput(input)}
@@ -1054,7 +1090,11 @@ export function JacHomepage() {
           {/* Speech bubble column — sits ABOVE JAC, tail points down toward her head */}
           <div className="flex-1 flex flex-col justify-end gap-2 sm:gap-3 pb-3 px-1 sm:px-2 min-w-0">
             {jacBubbles.length === 0 && !typing && (
-              <p className="text-[11px] text-white/22 text-center font-display px-4 leading-relaxed">JAC is warming up…<br/>Tap the mic to talk</p>
+              <p className="text-[11px] text-white/30 text-center font-display px-4 leading-relaxed">
+                {micSupported
+                  ? <>Tap the <span style={{ color: "hsl(270 100% 72%)" }}>mic</span> to talk · or type below</>
+                  : "Type a message below to get started"}
+              </p>
             )}
 
             {jacBubbles.map((msg, i) => {

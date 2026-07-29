@@ -76,10 +76,11 @@ interface Message {
 }
 
 const DD_GREETING =
-  "Welcome to Team GUBER. I'm JAC — tell me what you need, what you can do, or what you have available. I'll help you find your next move.";
+  "Welcome to Team GUBER! I'm JAC, your Job Assistance Coordinator. Tell me what you need, what you can do, or what you have available and I'll find your next move.";
 const SESSION_KEY = "jac_v1_messages";
 const SEEN_KEY = "jac_v1_seen";
 const FAB_HINT_KEY = "jac_fab_hint_shown";
+const MIC_HINT_KEY_DD = "jac_dd_mic_hint_done";
 
 const LISTING_PATTERNS = [
   /\bstart a listing\b/i,
@@ -385,6 +386,13 @@ export function GUBERAssistant() {
   const [convaiKey, setConvaiKey] = useState(0);
   useEffect(() => { convaiActiveRef.current = convaiActive; }, [convaiActive]);
 
+  // Mic guidance — pulse animation + "Tap to talk" label until first mic use
+  const [micHintDone, setMicHintDone] = useState(() => {
+    try { return localStorage.getItem(MIC_HINT_KEY_DD) === "1"; } catch { return false; }
+  });
+  const micHintDoneRef = useRef(micHintDone);
+  useEffect(() => { micHintDoneRef.current = micHintDone; }, [micHintDone]);
+
   const [jacVolume, setJacVolumeState] = useState(() => getJacVolume());
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
@@ -393,10 +401,20 @@ export function GUBERAssistant() {
     cancelSpeech();
     cancelAllJacAudio();
     setConvaiError(null);
+    // Set ref synchronously so the 300ms text-TTS greeting no-ops if it hasn't
+    // fired yet — useEffect-based ref update (below) is async and too slow.
+    convaiActiveRef.current = true;
     setConvaiActive(true);
+    // Mark mic hint done on first use
+    if (!micHintDoneRef.current) {
+      micHintDoneRef.current = true;
+      setMicHintDone(true);
+      try { localStorage.setItem(MIC_HINT_KEY_DD, "1"); } catch {}
+    }
   }
 
   function stopConvai() {
+    convaiActiveRef.current = false;  // sync guard — mirror of startConvai
     setConvaiActive(false);
     setConvaiPhase("idle");
     setConvaiError(null);
@@ -882,6 +900,7 @@ export function GUBERAssistant() {
           key={convaiKey}
           ref={convaiSessionRef}
           active={convaiActive}
+          suppressFirstMessage
           onPhaseChange={handleConvaiPhaseChange}
           onUserTranscript={handleConvaiUserTranscript}
           onJacResponse={handleConvaiJacResponse}
@@ -1395,32 +1414,62 @@ export function GUBERAssistant() {
             </button>
 
             {/* Mic button — ElevenLabs ConvAI voice session */}
-            <button
-              onClick={convaiActive ? stopConvai : startConvai}
-              className="relative w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95"
-              style={{
-                background: convaiActive
-                  ? "linear-gradient(135deg, hsl(270 100% 55%), hsl(152 100% 38%))"
-                  : "hsl(222 47% 14%)",
-                border: convaiActive ? "none" : "1px solid hsl(270 100% 65% / 0.22)",
-                color: convaiActive ? "black" : "hsl(270 100% 72%)",
-                boxShadow: convaiActive ? "0 0 14px hsl(270 100% 65% / 0.45)" : "none",
-              }}
-              data-testid="button-dd-mic"
-              aria-label={convaiActive ? "End voice" : "Start voice"}
-            >
-              {(convaiPhase === "connecting" || convaiPhase === "thinking") ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (convaiPhase === "listening" || convaiPhase === "speaking") ? (
-                <span className="relative flex h-3.5 w-3.5 items-center justify-center">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-40"
-                    style={{ background: "currentColor" }} />
-                  <Mic className="w-3.5 h-3.5 relative" />
+            <div className="relative flex flex-col items-center">
+              {/* "Tap to talk" guidance label — shows until first mic use */}
+              {!convaiActive && !micHintDone && (
+                <span
+                  className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-display font-semibold tracking-wide pointer-events-none select-none"
+                  style={{
+                    color: "hsl(270 100% 75%)",
+                    textShadow: "0 0 6px hsl(270 100% 65% / 0.5)",
+                    animation: "pulse 2s ease-in-out infinite",
+                  }}
+                >
+                  Tap to talk
                 </span>
-              ) : (
-                <Mic className="w-3.5 h-3.5" />
               )}
-            </button>
+              <button
+                onClick={convaiActive ? stopConvai : startConvai}
+                className="relative w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95"
+                style={{
+                  background: convaiActive
+                    ? "linear-gradient(135deg, hsl(270 100% 55%), hsl(152 100% 38%))"
+                    : "hsl(222 47% 14%)",
+                  border: convaiActive
+                    ? "none"
+                    : !micHintDone
+                      ? "1px solid hsl(270 100% 65% / 0.55)"
+                      : "1px solid hsl(270 100% 65% / 0.22)",
+                  color: convaiActive ? "black" : "hsl(270 100% 72%)",
+                  boxShadow: convaiActive
+                    ? "0 0 14px hsl(270 100% 65% / 0.45)"
+                    : !micHintDone
+                      ? "0 0 10px hsl(270 100% 65% / 0.35)"
+                      : "none",
+                }}
+                data-testid="button-dd-mic"
+                aria-label={convaiActive ? "End voice" : "Start voice"}
+              >
+                {/* Ping ring — hint pulse until first use */}
+                {!convaiActive && !micHintDone && (
+                  <span
+                    className="absolute inset-0 rounded-xl animate-ping opacity-30"
+                    style={{ background: "hsl(270 100% 65%)" }}
+                  />
+                )}
+                {(convaiPhase === "connecting" || convaiPhase === "thinking") ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin relative" />
+                ) : (convaiPhase === "listening" || convaiPhase === "speaking") ? (
+                  <span className="relative flex h-3.5 w-3.5 items-center justify-center">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-40"
+                      style={{ background: "currentColor" }} />
+                    <Mic className="w-3.5 h-3.5 relative" />
+                  </span>
+                ) : (
+                  <Mic className="w-3.5 h-3.5 relative" />
+                )}
+              </button>
+            </div>
 
             {/* Send button */}
             <Button
