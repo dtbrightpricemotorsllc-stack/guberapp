@@ -78,6 +78,57 @@ import { useConversation } from "@elevenlabs/react";
 import { apiRequest } from "@/lib/queryClient";
 import { unlockAudioContext, setJacConvaiActive, cancelAllJacAudio } from "@/lib/jac-tts";
 
+// ── Platform detection ────────────────────────────────────────────────────────
+// Detects the runtime environment so we can tailor error messages and
+// session metadata.  Called at boot time (client-side only).
+function detectJacPlatform(): string {
+  if (typeof navigator === "undefined") return "web";
+  const ua = navigator.userAgent;
+  const isNative = (window as any)?.Capacitor?.isNativePlatform?.();
+  if (isNative) return /iphone|ipad|ipod/i.test(ua) ? "ios_native" : "android_native";
+  if (/FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua))  return "facebook_iab";
+  if (/Instagram/i.test(ua))                       return "instagram_iab";
+  if (/TikTok/i.test(ua))                          return "tiktok_iab";
+  if (/LinkedInApp/i.test(ua))                     return "linkedin_iab";
+  try {
+    if (window.matchMedia("(display-mode: standalone)").matches) return "pwa";
+  } catch {}
+  if (/iphone|ipad|ipod/i.test(ua)) return "ios_safari";
+  if (/android/i.test(ua))          return "android_chrome";
+  return "web";
+}
+
+// ── Session pre-warm cache ────────────────────────────────────────────────────
+// Call prewarmJacSession() on component mount so the signed URL is already
+// fetched by the time the user taps the mic — eliminates the biggest startup
+// latency (ElevenLabs /get-signed-url round-trip + our server call).
+//
+// Cache lifetime: 90 s.  Used once then evicted so the next tap gets a fresh
+// token.  A failed fetch is silently discarded — boot() falls back to a live
+// fetch automatically.
+const _prewarmCache = new Map<string, { promise: Promise<any>; expiresAt: number }>();
+const PREWARM_TTL_MS = 90_000;
+
+export function prewarmJacSession(endpoint: string): void {
+  const now = Date.now();
+  const existing = _prewarmCache.get(endpoint);
+  if (existing && existing.expiresAt > now) return; // already in flight / valid
+  const promise = apiRequest("POST", endpoint, { platform: detectJacPlatform() })
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+  _prewarmCache.set(endpoint, { promise, expiresAt: now + PREWARM_TTL_MS });
+}
+
+function consumePrewarm(endpoint: string): Promise<any> | null {
+  const entry = _prewarmCache.get(endpoint);
+  if (!entry || entry.expiresAt < Date.now()) {
+    _prewarmCache.delete(endpoint);
+    return null;
+  }
+  _prewarmCache.delete(endpoint); // use once
+  return entry.promise;
+}
+
 export type ConvaiPhase =
   | "idle"
   | "connecting"
@@ -188,34 +239,45 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
       async function boot() {
         try {
           unlockAudioContext();
+          const platform = detectJacPlatform();
+          const isIAB = /iab/.test(platform); // facebook_iab, instagram_iab, etc.
+
+          // Run mic permission + session fetch in parallel.
+          // Use the pre-warmed session promise if available (avoids a round-trip
+          // to our server + ElevenLabs, saving ~500-1500 ms on first open).
+          const prewarm = consumePrewarm(sessionEndpoint);
+          const sessionFetch = prewarm
+            ?? apiRequest("POST", sessionEndpoint, { platform })
+               .then(r => {
+                 if (!r.ok) throw Object.assign(new Error("session_error"), { status: r.status });
+                 return r.json();
+               });
 
           const [micResult, sessionResult] = await Promise.allSettled([
             navigator.mediaDevices.getUserMedia({ audio: true }),
-            apiRequest("POST", sessionEndpoint, { platform: "web" }),
+            sessionFetch,
           ]);
           if (cancelRef.current) return;
 
           if (micResult.status === "rejected") {
-            cbRef.current.onError("Mic access denied — allow mic in your browser settings.");
+            cbRef.current.onError(
+              isIAB
+                ? "Open this page in Chrome or Safari to use JAC voice — in-app browsers block the mic."
+                : "Mic access denied — allow mic in your browser settings."
+            );
             return;
           }
           (micResult.value as MediaStream).getTracks().forEach(t => t.stop());
 
           if (sessionResult.status === "rejected") {
+            const err = sessionResult.reason as any;
+            if (err?.status === 401) { cbRef.current.onError("Sign in to use JAC voice."); return; }
             cbRef.current.onError("Could not reach JAC voice. Try again.");
             return;
           }
-          const resp = sessionResult.value as Response;
-          if (resp.status === 401) {
-            cbRef.current.onError("Sign in to use JAC voice.");
-            return;
-          }
-          if (!resp.ok) {
-            cbRef.current.onError(`Voice session error (${resp.status}). Try again.`);
-            return;
-          }
 
-          const session = await resp.json();
+          const session = sessionResult.value;
+          if (!session) { cbRef.current.onError("Voice session error. Try again."); return; }
           if (cancelRef.current) return;
 
           const dynVars: Record<string, string> = {
@@ -223,17 +285,14 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           };
           if (session.userContext?.firstName) dynVars["user_first_name"] = session.userContext.firstName;
           if (session.userContext?.role)      dynVars["user_role"]        = session.userContext.role;
-          if (session.userContext?.platform)  dynVars["user_platform"]    = session.userContext.platform;
+          if (session.userContext?.platform)  dynVars["user_platform"]    = platform; // actual detected platform
           if (session.userContext?.jac_mode)  dynVars["jac_mode"]         = session.userContext.jac_mode;
 
           const params: Record<string, any> = { dynamicVariables: dynVars };
           if (session.signedUrl) params.signedUrl = session.signedUrl;
           else                   params.agentId   = session.agentId;
 
-          // Always apply overrides — target ~500ms silence → end of turn (default is ~2-3s);
-          // optionally suppress the agent's configured auto-greeting when the caller has
-          // already shown/spoken it via text-TTS so users don't hear two greetings.
-          // `turn` is sent as conversation_config_override.agent.turn in the WebSocket handshake.
+          // Always apply overrides — target ~500ms silence → end of turn (default is ~2-3s).
           params.overrides = {
             agent: {
               ...(suppressFirstMessage ? { firstMessage: "" } : {}),
@@ -241,10 +300,9 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
             },
           } as any;
 
-          // Give the audio context 500 ms to fully unlock after the user gesture
-          // before ElevenLabs starts streaming audio — prevents the greeting
-          // being silently swallowed by a still-suspended AudioContext.
-          await new Promise<void>((r) => setTimeout(r, 500));
+          // 100ms settle for AudioContext — reduced from 500ms since unlockAudioContext()
+          // was already called before the parallel fetch above.
+          await new Promise<void>((r) => setTimeout(r, 100));
           if (cancelRef.current) return;
 
           startSession(params as any);

@@ -12,7 +12,7 @@ import {
 import { useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
 import { ConversationProvider } from "@elevenlabs/react";
-import { JacConvaiSession, type ConvaiPhase, type JacConvaiSessionHandle } from "@/components/jac/jac-convai-session";
+import { JacConvaiSession, prewarmJacSession, type ConvaiPhase, type JacConvaiSessionHandle } from "@/components/jac/jac-convai-session";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { saveListingPrefill, clearListingPrefill } from "@/lib/jac-listing-prefill";
@@ -76,7 +76,7 @@ interface Message {
 }
 
 const DD_GREETING =
-  "Welcome to Team GUBER! I'm JAC, your Job Assistance Coordinator. Tell me what you need, what you can do, or what you have available and I'll find your next move.";
+  "To talk to me, tap the mic button! 🎤";
 const SESSION_KEY = "jac_v1_messages";
 const SEEN_KEY = "jac_v1_seen";
 const FAB_HINT_KEY = "jac_fab_hint_shown";
@@ -432,6 +432,12 @@ export function GUBERAssistant() {
     if (muted || convaiActiveRef.current) return;
     jacSpeak(text, { muted });
   }
+
+  // Pre-warm the ConvAI session token on mount so it's ready when the sheet
+  // opens — eliminates the biggest startup latency (~500-1500 ms).
+  useEffect(() => {
+    prewarmJacSession("/api/jac/convai/session");
+  }, []);
 
   // Tear down the ConvAI session whenever JAC closes, the app is backgrounded,
   // or the tab goes hidden — never leave an open mic stream running unattended.

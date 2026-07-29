@@ -5,7 +5,7 @@ import { JacConvaiVoice } from "@/components/jac/jac-convai-voice";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
 import { ConversationProvider } from "@elevenlabs/react";
-import { JacConvaiSession, type JacConvaiSessionHandle, type ConvaiPhase } from "@/components/jac/jac-convai-session";
+import { JacConvaiSession, prewarmJacSession, type JacConvaiSessionHandle, type ConvaiPhase } from "@/components/jac/jac-convai-session";
 type ConversationState = "idle" | "listening" | "recording" | "processing" | "speaking";
 import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
@@ -102,7 +102,7 @@ const OPENING_OPTIONS = [
 
 const GREETING: JacMsg = {
   role: "assistant",
-  content: "Welcome to Team GUBER! I'm JAC, your Job Assistance Coordinator. Tap the microphone below and tell me what we're getting done today.",
+  content: "To talk to me, tap the mic button! 🎤",
   buttons: OPENING_OPTIONS,
 };
 
@@ -372,6 +372,12 @@ export function JacHomepage() {
   const speak = useCallback((text: string) => {
     if (mutedRef.current || liveModeRef.current) return;
     jacSpeak(text, { muted: mutedRef.current });
+  }, []);
+
+  // Pre-warm the ConvAI session token on mount so it's ready before the user
+  // taps the mic — eliminates the biggest startup latency (~500-1500 ms).
+  useEffect(() => {
+    prewarmJacSession("/api/jac/convai/investor-session");
   }, []);
 
   useEffect(() => {
