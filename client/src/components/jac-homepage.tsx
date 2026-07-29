@@ -327,7 +327,14 @@ export function JacHomepage() {
   }, []);
 
   const handleConvaiJacResponse = useCallback((text: string) => {
-    setMessages(prev => [...prev, { role: "assistant" as const, content: text }]);
+    setMessages(prev => {
+      // Replace the initial static greeting with the first ConvAI transcript
+      // so only one greeting bubble is ever shown (ConvAI's own words).
+      if (prev.length === 1 && prev[0].role === "assistant") {
+        return [{ role: "assistant" as const, content: text }];
+      }
+      return [...prev, { role: "assistant" as const, content: text }];
+    });
   }, []);
 
   const handleConvaiError = useCallback((_msg: string) => {
