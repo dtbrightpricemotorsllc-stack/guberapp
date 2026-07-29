@@ -405,37 +405,32 @@ export function JacHomepage() {
   // (user types before tapping mic) and toggleLiveMode (user taps mic first).
   const greetingSpokenRef = useRef(false);
 
-  // Auto-speak greeting on first user interaction.
-  // All platforms need a user gesture before audio plays — on iOS/Android the
-  // AudioContext starts suspended even in Capacitor native builds, so firing
-  // before a gesture sends audio to the earpiece (or nowhere).  Waiting for
-  // the gesture guarantees the AudioContext is running and audio goes to the
-  // loudspeaker.  The mic-button path is handled inside toggleLiveMode so this
-  // listener is only the fallback for users who type or tap elsewhere first.
+  // Unlock AudioContext on first user gesture — do NOT speak via text-TTS.
+  // ElevenLabs ConvAI is the sole voice; it will play its configured greeting
+  // automatically once the session connects (when the user taps the mic button).
+  // The greeting text is always shown on screen regardless of voice mode.
   useEffect(() => {
     if (mode !== "chat") return;
     if (greetingSpokenRef.current) return;
 
-    const currentGreeting = messages[0]?.content ?? GREETING.content;
-
-    function speakGreeting() {
+    function unlockOnGesture() {
       if (greetingSpokenRef.current) return;
       greetingSpokenRef.current = true;
       unlockAudioContext();
-      setTimeout(() => speak(currentGreeting), 120);
+      // No speak() call — ConvAI voices the greeting when the mic is tapped
     }
 
     const opts = { once: true, passive: true } as const;
     const cleanup = () => {
-      document.removeEventListener("click",      speakGreeting, opts);
-      document.removeEventListener("touchstart", speakGreeting, opts);
-      document.removeEventListener("keydown",    speakGreeting, opts);
+      document.removeEventListener("click",      unlockOnGesture, opts);
+      document.removeEventListener("touchstart", unlockOnGesture, opts);
+      document.removeEventListener("keydown",    unlockOnGesture, opts);
     };
-    document.addEventListener("click",      speakGreeting, opts);
-    document.addEventListener("touchstart", speakGreeting, opts);
-    document.addEventListener("keydown",    speakGreeting, opts);
+    document.addEventListener("click",      unlockOnGesture, opts);
+    document.addEventListener("touchstart", unlockOnGesture, opts);
+    document.addEventListener("keydown",    unlockOnGesture, opts);
     return cleanup;
-  }, [mode, messages]);
+  }, [mode]);
 
   // CRT power-on: plays once per mount so ElevenLabs has ~3s to initialize
   useEffect(() => {
@@ -839,7 +834,6 @@ export function JacHomepage() {
       ref={convaiSessionRef}
       active={liveMode}
       sessionEndpoint="/api/jac/convai/investor-session"
-      suppressFirstMessage
       onPhaseChange={handleConvaiPhaseChange}
       onUserTranscript={handleConvaiUserTranscript}
       onJacResponse={handleConvaiJacResponse}

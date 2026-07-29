@@ -61,6 +61,16 @@ let _currentAudio: HTMLAudioElement | null = null;
 let _audioUnlocked = false;
 let _currentAbort: AbortController | null = null;
 
+// ── ConvAI ownership flag ──────────────────────────────────────────────────
+// When ElevenLabs ConvAI is active it is the sole audio owner.
+// jacSpeak() and webSpeechFallback() both no-op while this is true,
+// preventing any TTS from firing alongside the ConvAI voice.
+let _convaiActive = false;
+export function setJacConvaiActive(active: boolean): void {
+  _convaiActive = active;
+  if (active) cancelAllJacAudio(); // evict any in-flight TTS immediately
+}
+
 // AudioContext — routes to the loudspeaker on iOS instead of the earpiece
 // (the default for <audio> elements). Created inside the first user gesture
 // via unlockAudioContext() so iOS allows it.
@@ -184,33 +194,15 @@ export function unlockAudioContext() {
     a.volume = 0;
     a.play().then(() => { _audioUnlocked = true; }).catch(() => {});
   }
-  // Unlock speechSynthesis on every user gesture.
-  // - Chrome Android: resume() lifts suspension caused by mic activity.
-  // - iOS Safari PWA: the FIRST speak() call must happen inside a user-gesture
-  //   handler or all subsequent async speak() calls are silently blocked.
-  //   We speak a zero-volume utterance immediately and cancel it — this primes
-  //   the engine so JAC's real responses (which arrive async after an API call)
-  //   will actually play.
+  // Resume speechSynthesis (Chrome Android suspends it after mic activity).
+  // We do NOT speak a primer utterance here — the old approach fired an audible
+  // browser/Web Speech voice blip before ElevenLabs ConvAI started, which was
+  // exactly the "ChatGPT voice" users heard at startup.
+  // ElevenLabs ConvAI is now the sole voice owner; Web Speech is only a last-
+  // resort fallback for text-mode TTS when ConvAI is NOT active.
   try {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      const ss = window.speechSynthesis;
-      ss.resume();
-      // iOS WebKit (Safari + CriOS) requires speechSynthesis.speak() to be
-      // called synchronously inside each user-gesture handler before any async
-      // speak() will play. volume=0 is discarded by iOS — use 0.01 so the
-      // engine registers it. At rate=16 + one space it finishes in <10 ms.
-      //
-      // On Android/desktop we only need this once (_audioUnlocked gate).
-      // On iOS we must re-prime on EVERY gesture because the module-level
-      // _audioUnlocked flag persists across SPA navigations, so without this
-      // the greeting silently fails after the very first page visit.
-      const onIOS = typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
-      if (!_audioUnlocked || onIOS) {
-        const primer = new SpeechSynthesisUtterance(" ");
-        primer.volume = 0.01;
-        primer.rate   = 16;
-        ss.speak(primer);
-      }
+      window.speechSynthesis.resume();
     }
   } catch {}
 }
@@ -250,6 +242,8 @@ export async function jacSpeak(
   opts: { muted?: boolean; onFallback?: () => void; onStart?: () => void } = {}
 ): Promise<void> {
   if (opts.muted) return;
+  // ConvAI owns audio — silently discard any TTS request while a session is active
+  if (_convaiActive) return;
 
   // Cancel any ongoing speech from either JAC component before starting
   cancelAllJacAudio();
@@ -528,6 +522,8 @@ function isIOSBrowser(): boolean {
 
 function webSpeechFallback(text: string, onStart?: () => void) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  // Never use Web Speech while ElevenLabs ConvAI is the active voice owner
+  if (_convaiActive) return;
   const ss = window.speechSynthesis;
   ss.cancel();
   // Chrome Android suspends speechSynthesis when the mic is active (or after

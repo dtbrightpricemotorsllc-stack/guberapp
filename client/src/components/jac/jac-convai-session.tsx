@@ -9,10 +9,54 @@
  * Must be rendered inside a <ConversationProvider>.
  */
 
-// ── Module-scope guard: must run at IMPORT TIME so it fires before Vite's ──
-// overlay handler. The ElevenLabs SDK throws "Cannot read properties of
-// undefined (reading 'error_type')" inside _WebRTCConnection.onMessage when
-// the peer sends a malformed frame. We suppress it silently here.
+// ── RTCDataChannel monkey-patch — must run at IMPORT TIME before the SDK ──────
+//
+// The ElevenLabs SDK's _WebRTCConnection.onMessage crashes with:
+//   "Cannot read properties of undefined (reading 'error_type')"
+// when the WebRTC DataChannel delivers an empty or malformed frame, because
+// the SDK reads `message.error_type` without first checking whether `message`
+// is defined.
+//
+// Fix: intercept the RTCDataChannel.prototype.onmessage setter so every handler
+// the SDK installs is wrapped in:
+//   1. A null/empty-frame guard  — skip frames with no data
+//   2. A try-catch               — absorb crashes instead of white-screening JAC
+//
+// This is a root-cause fix, not a Vite-overlay suppress. The DataChannel receives
+// all events (audio, transcript, ping, error, etc.) so unknown types are logged
+// at debug level and discarded rather than crashing the whole session.
+if (typeof RTCDataChannel !== "undefined") {
+  try {
+    const _dcDesc = Object.getOwnPropertyDescriptor(RTCDataChannel.prototype, "onmessage");
+    if (_dcDesc?.set) {
+      Object.defineProperty(RTCDataChannel.prototype, "onmessage", {
+        configurable: true,
+        enumerable: _dcDesc.enumerable,
+        get() { return _dcDesc.get?.call(this); },
+        set(rawHandler: ((e: MessageEvent) => void) | null) {
+          if (!rawHandler) { _dcDesc.set!.call(this, rawHandler); return; }
+          _dcDesc.set!.call(this, (event: MessageEvent) => {
+            // Guard 1 — discard empty/null frames before the SDK sees them
+            if (!event?.data) {
+              console.warn("[JAC ConvAI] Empty WebRTC DataChannel frame — ignored.");
+              return;
+            }
+            // Guard 2 — absorb any crash the SDK's handler might throw
+            try {
+              rawHandler(event);
+            } catch (err) {
+              console.warn("[JAC ConvAI] Suppressed WebRTC message crash:", (err as Error)?.message);
+            }
+          });
+        },
+      });
+    }
+  } catch (patchErr) {
+    console.debug("[JAC ConvAI] RTCDataChannel patch skipped:", patchErr);
+  }
+}
+
+// ── Belt-and-suspenders: window error guard catches any crash the patch misses ─
 if (typeof window !== "undefined") {
   const _jacElevenLabsGuard = (e: ErrorEvent) => {
     const msg = e?.message ?? "";
@@ -32,7 +76,7 @@ import { Component, forwardRef, useEffect, useImperativeHandle, useRef } from "r
 import type { ReactNode } from "react";
 import { useConversation } from "@elevenlabs/react";
 import { apiRequest } from "@/lib/queryClient";
-import { unlockAudioContext } from "@/lib/jac-tts";
+import { unlockAudioContext, setJacConvaiActive, cancelAllJacAudio } from "@/lib/jac-tts";
 
 export type ConvaiPhase =
   | "idle"
@@ -74,9 +118,18 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
       isMuted,
       setMuted,
     } = useConversation({
-      onConnect: () => {},
-      onDisconnect: () => {},
+      onConnect: () => {
+        // ElevenLabs ConvAI now owns audio — cancel any in-flight text-TTS
+        // and block jacSpeak() for the duration of this session.
+        setJacConvaiActive(true);
+        cancelAllJacAudio();
+      },
+      onDisconnect: () => {
+        // Release audio ownership so text-mode TTS can resume if needed
+        setJacConvaiActive(false);
+      },
       onError: (msg: string) => {
+        setJacConvaiActive(false);
         cbRef.current.onError(msg || "Voice connection lost.");
       },
       onMessage: (({ source, message }: { source: "ai" | "user"; message: string }) => {

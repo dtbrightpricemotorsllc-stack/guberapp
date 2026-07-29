@@ -480,11 +480,13 @@ export function GUBERAssistant() {
     setTimeout(() => { el.scrollTop = el.scrollHeight; }, 80);
   }, [messages, s.open]);
 
-  // Speak greeting + personalise for returning users on first open
+  // Personalise greeting for returning users on first open.
+  // NOTE: We no longer auto-speak any greeting here — ElevenLabs ConvAI is the
+  // sole voice source and speaks its own configured first message when the session
+  // connects. Text is always shown in the chat regardless.
   useEffect(() => {
     if (!s.open) return;
     if (messages.length !== 1) return; // already has a thread
-    unlockAudioContext();
 
     // ── Resume pending pre-login draft for newly logged-in users ──────────
     if (userRef.current) {
@@ -501,17 +503,14 @@ export function GUBERAssistant() {
           actions: [{ label: "Continue where I left off", message: "__resume__" }],
         };
         setMessages(prev => [...prev, resumeMsg]);
-        speak(resumeContent);
+        // No speak() — ConvAI will voice this once it connects
         return;
       }
     }
 
     const returning = localStorage.getItem("jac_returning") === "1";
     if (!returning) {
-      if (!greetingSpokenRef.current) {
-        greetingSpokenRef.current = true;
-        setTimeout(() => speak(DD_GREETING), 300);
-      }
+      // Greeting text is shown in chat; ConvAI voices it on connection
       return;
     }
     fetch("/api/jac/updates")
@@ -888,7 +887,15 @@ export function GUBERAssistant() {
       open={s.open}
       onOpenChange={(v) => {
         patchStore({ open: v });
-        if (!v) cancelSpeech();
+        if (v) {
+          // User gesture — unlock audio and immediately start ElevenLabs ConvAI.
+          // ConvAI is the sole voice; it will play its configured greeting once ready.
+          unlockAudioContext();
+          if (!convaiActive) startConvai();
+        } else {
+          cancelSpeech();
+          stopConvai();
+        }
       }}
     >
       <SheetContent
@@ -900,7 +907,6 @@ export function GUBERAssistant() {
           key={convaiKey}
           ref={convaiSessionRef}
           active={convaiActive}
-          suppressFirstMessage
           onPhaseChange={handleConvaiPhaseChange}
           onUserTranscript={handleConvaiUserTranscript}
           onJacResponse={handleConvaiJacResponse}
