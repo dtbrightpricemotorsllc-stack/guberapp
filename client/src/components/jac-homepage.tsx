@@ -461,19 +461,15 @@ export function JacHomepage() {
     setMode("chat");
   }
 
-  // Personalise greeting for returning visitors
+  // Returning-visitor personalisation — ConvAI now voices the greeting, so we
+  // no longer overwrite the chat bubble here; the static GREETING stays until
+  // ConvAI's first transcript replaces it.
   useEffect(() => {
     const returning = localStorage.getItem("jac_returning") === "1";
     if (!returning) return;
-    fetch("/api/jac/updates")
-      .then((r) => r.json())
-      .then((data: JacUpdates) => {
-        const content = buildReturningGreeting(data);
-        setMessages([{ role: "assistant", content }]);
-      })
-      .catch(() => {
-        setMessages([{ role: "assistant", content: "Welcome back! Good to see you again. What can I help you with today?" }]);
-      });
+    // Pre-fetch updates so they're ready for JAC's backend context, but
+    // don't touch the message bubble — ConvAI handles the spoken greeting.
+    fetch("/api/jac/updates").catch(() => {});
   }, []);
 
   useEffect(() => {

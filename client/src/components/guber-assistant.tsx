@@ -528,12 +528,9 @@ export function GUBERAssistant() {
         if ((data.hirerOpen ?? 0) > 0) parts.push(`${data.hirerOpen} open job${data.hirerOpen! > 1 ? "s" : ""} you posted`);
         if ((data.unreadNotifs ?? 0) > 0) parts.push(`${data.unreadNotifs} new notification${data.unreadNotifs! > 1 ? "s" : ""}`);
         if ((data.walletBalance ?? 0) > 0) parts.push(`$${(data.walletBalance!).toFixed(2)} in your wallet`);
-        let content: string;
-        if (parts.length === 0) content = `Welcome back${name}! Good to see you. What can I help you with?`;
-        else if (parts.length === 1) content = `Welcome back${name}! Quick update — ${parts[0]}. What else can I help you with?`;
-        else { const last = parts.pop(); content = `Welcome back${name}! Quick update — ${parts.join(", ")} and ${last}. What can I help you with?`; }
-        // Don't overwrite if briefing already injected (briefingInjectedRef set synchronously before its fetch)
-        if (!briefingInjectedRef.current) setMessages([{ role: "assistant", content }]);
+        // ConvAI now voices the personalised greeting — don't overwrite the
+        // static bubble here; it will be replaced by ConvAI's first transcript.
+        void name; void parts; // context still useful for JAC backend
       })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
