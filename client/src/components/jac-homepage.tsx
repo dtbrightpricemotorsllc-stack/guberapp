@@ -310,8 +310,13 @@ export function JacHomepage() {
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [convaiKey, setConvaiKey] = useState(0);
   const convaiSessionRef = useRef<JacConvaiSessionHandle | null>(null);
-  const [powerOnPhase, setPowerOnPhase] = useState<"black" | "scanline" | "fadein" | "done">("black");
-  const powerOnPlayedRef = useRef(false);
+  // Skip the CRT animation for returning visitors — they've seen it.
+  // First-timers get the full 3.2s effect; everybody else goes straight to "done".
+  const _crtAlreadySeen = typeof window !== "undefined" && localStorage.getItem("jac_crt_seen") === "1";
+  const [powerOnPhase, setPowerOnPhase] = useState<"black" | "scanline" | "fadein" | "done">(
+    _crtAlreadySeen ? "done" : "black"
+  );
+  const powerOnPlayedRef = useRef(_crtAlreadySeen);
   const liveModeRef = useRef(false);
   useEffect(() => { liveModeRef.current = liveMode; }, [liveMode]);
 
@@ -360,7 +365,9 @@ export function JacHomepage() {
     liveModeRef.current = true;   // sync guard — speak() checks this ref directly
     setLiveMode(true);
     setLiveState("listening");
-    setConvaiKey(k => k + 1);
+    // Do NOT bump convaiKey here — that remounts the component and wastes ~100ms.
+    // The active prop change alone restarts the session correctly.
+    // (Key only changes on explicit reconnect after an error.)
     // Mark mic hint done on first use
     if (!micHintDone) {
       setMicHintDone(true);
@@ -445,14 +452,18 @@ export function JacHomepage() {
     return cleanup;
   }, [mode]);
 
-  // CRT power-on: plays once per mount so ElevenLabs has ~3s to initialize
+  // CRT power-on: plays once for first-time visitors only.
+  // Mark as seen in localStorage so subsequent visits skip straight to "done".
   useEffect(() => {
     if (mode !== "chat") return;
     if (powerOnPlayedRef.current) return;
     powerOnPlayedRef.current = true;
     const t1 = setTimeout(() => setPowerOnPhase("scanline"), 500);
     const t2 = setTimeout(() => setPowerOnPhase("fadein"), 1500);
-    const t3 = setTimeout(() => setPowerOnPhase("done"), 3200);
+    const t3 = setTimeout(() => {
+      setPowerOnPhase("done");
+      try { localStorage.setItem("jac_crt_seen", "1"); } catch {}
+    }, 3200);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [mode]);
 
@@ -1095,12 +1106,26 @@ export function JacHomepage() {
 
           {/* Speech bubble column — sits ABOVE JAC, tail points down toward her head */}
           <div className="flex-1 flex flex-col justify-end gap-2 sm:gap-3 pb-3 px-1 sm:px-2 min-w-0">
-            {jacBubbles.length === 0 && !typing && (
+            {jacBubbles.length === 0 && !typing && !liveMode && (
               <p className="text-[11px] text-white/30 text-center font-display px-4 leading-relaxed">
                 {micSupported
                   ? <>Tap the <span style={{ color: "hsl(270 100% 72%)" }}>mic</span> to talk · or type below</>
                   : "Type a message below to get started"}
               </p>
+            )}
+            {/* Instant "connecting" indicator — shows as soon as mic is tapped,
+                disappears the moment ConvAI's first transcript replaces the greeting */}
+            {liveMode && liveState !== "speaking" && messages.length === 1 && messages[0].content === "To talk to me, tap the mic button! 🎤" && (
+              <div className="flex items-center gap-2 px-4 py-2.5 rounded-[22px] self-start"
+                style={{ background: "hsl(0 0% 97%)", border: "2.5px solid hsl(222 30% 30%)" }}>
+                <span className="flex gap-0.5 items-end h-4">
+                  {[0, 150, 300].map(delay => (
+                    <span key={delay} className="w-1 rounded-full animate-bounce"
+                      style={{ height: 6 + (delay / 100), background: "hsl(270 100% 55%)", animationDelay: `${delay}ms` }} />
+                  ))}
+                </span>
+                <span className="text-[11px] font-display" style={{ color: "hsl(222 47% 18%)" }}>JAC is connecting…</span>
+              </div>
             )}
 
             {jacBubbles.map((msg, i) => {
