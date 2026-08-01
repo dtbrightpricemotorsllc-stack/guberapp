@@ -2,7 +2,8 @@
 // Uses Playwright's fake clock to control Framer Motion frame-by-frame,
 // captures screenshots, then encodes to MP4 with ffmpeg.
 
-import { chromium } from "playwright-core";
+// playwright-core is loaded dynamically so esbuild never statically bundles it
+// (it arrives at runtime as a transitive dep of @playwright/test).
 import { execFile } from "child_process";
 import { promisify } from "util";
 import fs from "fs/promises";
@@ -62,6 +63,7 @@ export async function renderPromoVideo(
     const previewUrl = `http://localhost:${process.env.PORT ?? 5000}/studio/promo/preview?d=${encoded}&headless=1`;
 
     // ── Launch Playwright ────────────────────────────────────────────────────
+    const { chromium } = await import("playwright-core");
     const browser = await chromium.launch({
       executablePath: getChromiumPath(),
       args: [

@@ -56,7 +56,12 @@ async function buildAll() {
       "process.env.NODE_ENV": '"production"',
     },
     minify: true,
-    external: externals,
+    // playwright-core and chromium-bidi are not listed in package.json directly
+    // (they arrive transitively via @playwright/test), so they won't appear in
+    // allDeps and would otherwise be bundled. Bundling playwright-core causes
+    // esbuild to chase its internal chromium-bidi require, which isn't installed
+    // as a standalone package and breaks the build.
+    external: [...externals, "playwright-core", "playwright", "chromium-bidi", "@playwright/test"],
     logLevel: "info",
   });
 }
