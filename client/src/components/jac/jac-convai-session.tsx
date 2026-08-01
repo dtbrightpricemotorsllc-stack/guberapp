@@ -300,11 +300,8 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
             },
           } as any;
 
-          // 100ms settle for AudioContext — reduced from 500ms since unlockAudioContext()
-          // was already called before the parallel fetch above.
-          await new Promise<void>((r) => setTimeout(r, 100));
+          // AudioContext was already unlocked above — start session immediately.
           if (cancelRef.current) return;
-
           startSession(params as any);
         } catch (err: any) {
           if (!cancelRef.current) cbRef.current.onError(err?.message || "Could not start JAC voice.");

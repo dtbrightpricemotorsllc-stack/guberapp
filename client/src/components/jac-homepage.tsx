@@ -895,7 +895,7 @@ export function JacHomepage() {
       >
 
         {/* ── PHONE (left) ── */}
-        <div className="flex-shrink-0 relative" style={{ width: "min(280px, 46vw)" }}>
+        <div className="flex-shrink-0 relative" style={{ width: "min(300px, 52vw)" }}>
           {/* Side buttons */}
           <div className="absolute right-[-5px] top-[120px] w-1 h-14 rounded-r-full" style={{ background: "hsl(222 35% 16%)" }} />
           <div className="absolute left-[-5px] top-[98px] w-1 h-8 rounded-l-full"  style={{ background: "hsl(222 35% 16%)" }} />
@@ -905,7 +905,7 @@ export function JacHomepage() {
           {/* Phone body */}
           <div className="relative overflow-hidden flex flex-col" style={{
             borderRadius: "clamp(24px, 6vw, 42px)",
-            height: "min(530px, 73vw)",
+            height: "min(580px, 88vw)",
             background: "hsl(222 47% 6%)",
             border: "9px solid hsl(222 32% 12%)",
             boxShadow: "0 0 0 1px hsl(270 100% 65% / 0.22), 0 32px 90px rgba(0,0,0,0.75), inset 0 1px 0 hsl(270 100% 65% / 0.08)",
@@ -1091,7 +1091,7 @@ export function JacHomepage() {
         </div>
 
         {/* ── SPEECH BUBBLES + JAC (right) ── */}
-        <div className="flex-1 flex flex-col items-stretch min-w-0" style={{ minHeight: "min(530px, 73vw)" }}>
+        <div className="flex-1 flex flex-col items-stretch min-w-0" style={{ minHeight: "min(580px, 88vw)" }}>
 
           {/* Speech bubble column — sits ABOVE JAC, tail points down toward her head */}
           <div className="flex-1 flex flex-col justify-end gap-2 sm:gap-3 pb-3 px-1 sm:px-2 min-w-0">
