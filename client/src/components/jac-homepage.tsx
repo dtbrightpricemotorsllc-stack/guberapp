@@ -975,14 +975,17 @@ export function JacHomepage() {
               <GuberContextCard msg={latestJacMsg?.content ?? ""} />
             </div>
 
-            {/* Option chips */}
+            {/* Option chips — single-row horizontal scroll so the mic bar is always visible */}
             {activeButtons.length > 0 && (
-              <div className="px-3 py-2 flex flex-wrap gap-1.5 flex-shrink-0" style={{ borderTop: "1px solid hsl(222 47% 11%)", background: "hsl(222 47% 5%)" }}>
+              <div
+                className="px-3 py-2 flex flex-nowrap gap-1.5 flex-shrink-0 overflow-x-auto"
+                style={{ borderTop: "1px solid hsl(222 47% 11%)", background: "hsl(222 47% 5%)", scrollbarWidth: "none" }}
+              >
                 {activeButtons.map((btn) => (
                   <button
                     key={btn.label}
                     onClick={() => processInput(btn.message)}
-                    className="rounded-full px-2.5 py-1 text-[10px] font-display font-semibold transition-all active:scale-95 disabled:opacity-40"
+                    className="rounded-full px-2.5 py-1 text-[10px] font-display font-semibold transition-all active:scale-95 disabled:opacity-40 flex-shrink-0"
                     style={{ background: "hsl(222 47% 12%)", border: "1px solid hsl(222 47% 24%)", color: "rgba(255,255,255,0.72)" }}
                     data-testid={`jac-btn-${btn.label.toLowerCase().replace(/[\s']+/g, "-")}`}
                     disabled={typing}
