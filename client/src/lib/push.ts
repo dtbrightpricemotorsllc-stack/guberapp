@@ -87,8 +87,16 @@ async function subscribeNative(_userId: number, opts?: { promptIfNeeded?: boolea
     if (current.receive === "denied") return false;
     if (current.receive !== "granted") {
       if (opts?.promptIfNeeded === false) return false;
-      const { receive } = await PushNotifications.requestPermissions();
-      if (receive !== "granted") return false;
+      // Wrap the OS dialog in a timeout — on Samsung Android the permission
+      // dialog can hang indefinitely if dismissed via the back button, leaving
+      // the promise unresolved and the calling modal stuck on "ENABLING…".
+      const permResult = await Promise.race([
+        PushNotifications.requestPermissions(),
+        new Promise<{ receive: "denied" }>((resolve) =>
+          setTimeout(() => resolve({ receive: "denied" }), 12_000)
+        ),
+      ]);
+      if (permResult.receive !== "granted") return false;
     }
 
     // Android 8+: notification channels MUST exist before FCM messages that
