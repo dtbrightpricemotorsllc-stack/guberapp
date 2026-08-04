@@ -2742,7 +2742,12 @@ export default function AdminQa() {
         <h1 className="flex items-center gap-2 text-2xl font-bold">
           <Sparkles className="h-6 w-6" /> QA Dashboard
         </h1>
-        <Button asChild variant="outline"><Link href="/admin">← Back to admin</Link></Button>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/native-diagnostics">📱 Native Diagnostics</Link>
+          </Button>
+          <Button asChild variant="outline"><Link href="/admin">← Back to admin</Link></Button>
+        </div>
       </div>
 
       <Tabs defaultValue={(() => { try { return new URLSearchParams(window.location.search).get("tab") || "checklist"; } catch { return "checklist"; } })()}>

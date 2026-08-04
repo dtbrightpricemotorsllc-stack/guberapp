@@ -85,7 +85,12 @@ const StudioListingVideo = lazy(() => import("@/pages/studio-listing-video"));
 const StudioPromoClip = lazy(() => import("@/pages/studio-promo-clip"));
 const StudioQuickPic = lazy(() => import("@/pages/studio-quick-pic"));
 const StudioAiDirector = lazy(() => import("@/pages/studio-ai-director"));
+const StudioVideoAgent = lazy(() => import("@/pages/studio-video-agent"));
+const StudioPromoAgent = lazy(() => import("@/pages/studio-promo-agent"));
+const StudioPromoCode = lazy(() => import("@/pages/studio-promo-code"));
+const StudioPromoPreview = lazy(() => import("@/pages/studio-promo-preview"));
 const Investors = lazy(() => import("@/pages/investors"));
+const PitchDeck = lazy(() => import("@/pages/pitch-deck"));
 const MobileCheckout = lazy(() => import("@/pages/mobile-checkout"));
 const BuyerOrderPreview = lazy(() => import("@/pages/buyer-order-preview"));
 
@@ -106,6 +111,7 @@ const OSMissionControl = lazy(() => import("@/pages/os/os-mission-control"));
 // Feature pages — lazy loaded
 const Admin = lazy(() => import("@/pages/admin"));
 const AdminQa = lazy(() => import("@/pages/admin-qa"));
+const NativeDiagnostics = lazy(() => import("@/pages/native-diagnostics"));
 const AdminMissionControl = lazy(() => import("@/pages/admin-mission-control"));
 const AdminQaInspect = lazy(() => import("@/pages/admin-qa-inspect"));
 const AdminQaCashdropDebug = lazy(() => import("@/pages/admin-qa-cashdrop-debug"));
@@ -153,6 +159,10 @@ const OgAdvantage = lazy(() => import("@/pages/og-advantage"));
 const CreditsPage = lazy(() => import("@/pages/credits"));
 const EarningOpportunities = lazy(() => import("@/pages/earning-opportunities"));
 const CarrierProfilePage = lazy(() => import("@/pages/carrier-profile"));
+
+// Business Content Studios — private multi-tenant studios
+const NxtgenLawGroupStudio = lazy(() => import("@/pages/business-studio"));
+const AdminBusinessStudios = lazy(() => import("@/pages/admin-business-studios"));
 
 // Campaign Lab — admin-gated marketing workspace
 const CampaignLabHub = lazy(() => import("@/pages/campaign-lab"));
@@ -371,6 +381,7 @@ function Router() {
       <Route path="/os/events" component={() => <OSAdminRoute component={OSEvents} />} />
       <Route path="/admin" component={() => <AdminRoute component={Admin} />} />
       <Route path="/admin/qa" component={() => <AdminRoute component={AdminQa} />} />
+      <Route path="/admin/native-diagnostics" component={() => <AdminRoute component={NativeDiagnostics} />} />
       <Route path="/admin/mission-control" component={() => <AdminRoute component={AdminMissionControl} />} />
       <Route path="/admin/qa/flags" component={() => <AdminRoute component={AdminQaFlags} />} />
       <Route path="/admin/qa/push" component={() => <AdminRoute component={AdminQaPush} />} />
@@ -383,6 +394,8 @@ function Router() {
       <Route path="/admin/jac-training" component={() => <AdminRoute component={AdminJacTraining} />} />
       <Route path="/admin/asset-protection" component={() => <AdminRoute component={AdminAssetProtection} />} />
       <Route path="/admin/campaign-lab" component={() => <AdminRoute component={AdminCampaignLab} />} />
+      <Route path="/admin/business-studios" component={() => <AdminRoute component={AdminBusinessStudios} />} />
+      <Route path="/nxtgenlawgroup-studio" component={() => <Suspense fallback={<PageLoader />}><NxtgenLawGroupStudio /></Suspense>} />
       <Route path="/campaign-lab/campaigns/:id" component={() => <Suspense fallback={<PageLoader />}><CampaignLabCampaignDetail /></Suspense>} />
       <Route path="/campaign-lab/campaigns" component={() => <Suspense fallback={<PageLoader />}><CampaignLabCampaignsList /></Suspense>} />
       <Route path="/campaign-lab/brand" component={() => <Suspense fallback={<PageLoader />}><CampaignLabBrandCenter /></Suspense>} />
@@ -429,6 +442,10 @@ function Router() {
       <Route path="/studio/promo-clip" component={() => <ProtectedRoute component={StudioPromoClip} />} />
       <Route path="/studio/quick-pic" component={() => <ProtectedRoute component={StudioQuickPic} />} />
       <Route path="/studio/ai-director" component={() => <ProtectedRoute component={StudioAiDirector} />} />
+      <Route path="/studio/video-agent" component={() => <ProtectedRoute component={StudioVideoAgent} />} />
+      <Route path="/studio/promo" component={() => <ProtectedRoute component={StudioPromoCode} />} />
+      <Route path="/studio/promo-ai" component={() => <ProtectedRoute component={StudioPromoAgent} />} />
+      <Route path="/studio/promo/preview" component={StudioPromoPreview} />
       <Route path="/biz/login" component={() => <Redirect to="/login" />} />
       <Route path="/biz/dashboard" component={() => <BizRoute component={BizDashboard} />} />
       <Route path="/biz/post-job" component={() => <BizRoute component={BizPostJob} />} />
@@ -465,6 +482,7 @@ function Router() {
       <Route path="/delete-account" component={DeleteAccount} />
       <Route path="/investors" component={Investors} />
       <Route path="/guber-investor-deck" component={Investors} />
+      <Route path="/pitch-deck" component={() => <Suspense fallback={<PageLoader />}><PitchDeck /></Suspense>} />
       <Route path="/credits" component={() => <ProtectedRoute component={CreditsPage} />} />
       <Route path="/earning-opportunities" component={() => <Suspense fallback={<PageLoader />}><EarningOpportunities /></Suspense>} />
       <Route path="/mobile-checkout" component={() => <Suspense fallback={<PageLoader />}><MobileCheckout /></Suspense>} />
