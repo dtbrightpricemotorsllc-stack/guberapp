@@ -35,6 +35,9 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync ios
 
+      - name: Check iOS permission declarations and WKUIDelegate handler
+        run: bash scripts/check-ios-permissions.sh
+
       - name: Repair packageClassList after cap sync
         run: node scripts/post-cap-sync-ios.mjs
 
