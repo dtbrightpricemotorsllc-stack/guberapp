@@ -21,8 +21,8 @@ import java.io.StringWriter;
 public class MainActivity extends BridgeActivity {
 
     private static final String TAG            = "GuberNative";
-    private static final String PREFS_NAME     = "guber_crash_prefs";
-    static final         String PREF_CRASH_KEY = "last_crash";
+    static final String PREFS_NAME     = "guber_crash_prefs";
+    static final String PREF_CRASH_KEY = "last_crash";
 
     // Request codes — keep distinct so onRequestPermissionsResult can route correctly.
     private static final int REQUEST_CODE_RECORD_AUDIO  = 1001;
