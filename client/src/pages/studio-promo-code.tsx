@@ -1,7 +1,6 @@
 // GUBER Studio — Code-Based Promo Video Wizard (Quality v2)
 // Logo · Brand · Highlights · Product · Style · Images w/ focal points · Duration → Real MP4
 
-import { useRef, useState, useCallback } from "react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -16,6 +15,7 @@ import type { PromoData } from "./studio-promo-preview";
 import { FONT_OPTIONS } from "./studio-promo-preview";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+import { useRef, useState, useCallback, useEffect } from "react";
 
 const STYLE_PRESETS = [
   { id: "energetic",    label: "Energetic",    sub: "Fast-paced & bold",       icon: <Zap className="w-4 h-4" />,    accent: "#FFD600" },
@@ -31,8 +31,14 @@ const DURATION_OPTIONS = [5, 10, 15, 20, 30] as const;
 type Dur = typeof DURATION_OPTIONS[number];
 type Focus = "top" | "center" | "bottom";
 
-// ── Small components ──────────────────────────────────────────────────────────
-
+const MUSIC_TRACKS = [
+  { id: "drive",   file: "drive.mp3",   label: "Drive",   mood: "Energetic & forward",    color: "hsl(45 100% 58%)" },
+  { id: "inspire", file: "inspire.mp3", label: "Inspire", mood: "Motivational & uplifting", color: "hsl(152 100% 44%)" },
+  { id: "ambient", file: "ambient.mp3", label: "Ambient", mood: "Smooth & background",     color: "hsl(200 100% 55%)" },
+  { id: "surge",   file: "surge.mp3",   label: "Surge",   mood: "Bold & intense",          color: "hsl(25 100% 57%)" },
+  { id: "pulse",   file: "pulse.mp3",   label: "Pulse",   mood: "Upbeat & dynamic",        color: "hsl(280 80% 65%)" },
+  { id: "deep",    file: "deep.mp3",    label: "Deep",    mood: "Cinematic & dramatic",    color: "hsl(0 70% 55%)" },
+] as const;
 function SL({ children }: { children: React.ReactNode }) {
   return <p className="text-[11px] font-bold text-white/35 uppercase tracking-widest mb-2">{children}</p>;
 }
@@ -213,8 +219,69 @@ function ImageSlot({
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
-
+function TrackCard({
+  track, selected, playing, onSelect, onTogglePlay,
+}: {
+  track: typeof MUSIC_TRACKS[number];
+  selected: boolean;
+  playing: boolean;
+  onSelect: () => void;
+  onTogglePlay: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <button
+      onClick={onSelect}
+      className="w-full text-left rounded-xl p-3 transition-all"
+      style={{
+        background: selected ? "hsl(222 47% 11%)" : "hsl(222 47% 7%)",
+        border: `1px solid ${selected ? track.color + "55" : "hsl(222 47% 16%)"}`,
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onTogglePlay}
+          className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors"
+          style={{
+            background: playing ? track.color + "30" : "hsl(222 47% 14%)",
+            border: `1px solid ${playing ? track.color + "60" : "hsl(222 47% 22%)"}`,
+          }}
+          title={playing ? "Stop preview" : "Play preview"}
+        >
+          {playing
+            ? <Square className="w-2.5 h-2.5" style={{ color: track.color }} />
+            : <Play className="w-2.5 h-2.5" style={{ color: selected ? track.color : "hsl(0 0% 50%)" }} />}
+        </button>
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold" style={{ color: selected ? track.color : "hsl(0 0% 75%)" }}>
+              {track.label}
+            </span>
+            {selected && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                style={{ background: track.color + "25", color: track.color }}>
+                Selected
+              </span>
+            )}
+          </div>
+          <p className="text-[10px] truncate" style={{ color: selected ? "hsl(0 0% 55%)" : "hsl(222 47% 40%)" }}>
+            {track.mood}
+          </p>
+        </div>
+      </div>
+      {/* Mini waveform decoration */}
+      <div className="mt-2 flex items-end gap-0.5 h-4">
+        {[3,6,4,8,5,7,3,9,6,4,7,5,8,4,6,3,7,5,4,6].map((h, i) => (
+          <div key={i} className="flex-1 rounded-full transition-all"
+            style={{
+              height: `${(h / 9) * 100}%`,
+              background: selected ? `${track.color}${playing ? "cc" : "55"}` : "hsl(222 47% 22%)",
+            }}
+          />
+        ))}
+      </div>
+    </button>
+  );
+}
 export default function StudioPromoCodePage() {
   const { toast } = useToast();
 
@@ -234,6 +301,11 @@ export default function StudioPromoCodePage() {
   const [fontId, setFontId]     = useState("system");
   const [duration, setDuration] = useState<Dur>(15);
 
+  // Music
+  const [musicTrackId, setMusicTrackId]   = useState<string | null>(null); // null = no music
+  const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   // Logo
   const [logoUrl, setLogoUrl]           = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -251,6 +323,9 @@ export default function StudioPromoCodePage() {
   const [videoUrl, setVideoUrl]         = useState<string | null>(null);
   const [errorMsg, setErrorMsg]         = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+  useEffect(() => () => { audioRef.current?.pause(); }, []);
 
   // ── Upload helpers ─────────────────────────────────────────────────────────
 
@@ -287,6 +362,22 @@ export default function StudioPromoCodePage() {
   const setFeature = (i: number, v: string) =>
     setFeatures((prev) => { const n = [...prev]; n[i] = v; return n; });
 
+  const toggleTrackPreview = useCallback((trackId: string, file: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (playingTrackId === trackId) {
+      audioRef.current?.pause();
+      setPlayingTrackId(null);
+    } else {
+      audioRef.current?.pause();
+      const audio = new Audio(`/music/${file}`);
+      audio.volume = 0.5;
+      audio.addEventListener("ended", () => setPlayingTrackId(null));
+      audio.play().catch(() => {});
+      audioRef.current = audio;
+      setPlayingTrackId(trackId);
+    }
+  }, [playingTrackId]);
+
   // ── Build PromoData ────────────────────────────────────────────────────────
 
   const promoData: PromoData = {
@@ -318,11 +409,17 @@ export default function StudioPromoCodePage() {
     setVideoUrl(null);
     setErrorMsg(null);
 
+    // Stop any playing preview before render starts
+    audioRef.current?.pause();
+    setPlayingTrackId(null);
+
     try {
+      const selectedTrack = MUSIC_TRACKS.find((t) => t.id === musicTrackId);
       const res = await apiRequest("POST", "/api/studio/promo/render", {
         ...promoData,
         brandName: brandName.trim(),
         productDescription: productDesc.trim() || "Discover what we offer.",
+        musicTrack: selectedTrack?.file ?? null,
       });
       if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.message || "Render failed"); }
       const { renderId } = await res.json();
@@ -560,6 +657,58 @@ export default function StudioPromoCodePage() {
           <p className="text-[11px] text-white/22 mt-1.5">
             Render ≈ {Math.round(duration * 1.5)}–{Math.round(duration * 2.5)}s · 24fps · 1280×720 · libx264
             {features.filter(Boolean).length > 0 && duration >= 10 ? " · 4 scenes" : " · 3 scenes"}
+          </p>
+        </div>
+
+        {/* Music */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <SL>Background Music</SL>
+            <Music className="w-3 h-3 text-white/30 -mt-2" />
+          </div>
+
+          {/* No-music option */}
+          <button
+            onClick={() => setMusicTrackId(null)}
+            disabled={renderState === "rendering"}
+            className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 mb-2 transition-all disabled:opacity-40"
+            style={{
+              background: musicTrackId === null ? "hsl(222 47% 11%)" : "hsl(222 47% 7%)",
+              border: `1px solid ${musicTrackId === null ? "hsl(222 47% 32%)" : "hsl(222 47% 16%)"}`,
+            }}
+          >
+            <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: "hsl(222 47% 14%)", border: "1px solid hsl(222 47% 22%)" }}>
+              <VolumeX className="w-3.5 h-3.5 text-white/40" />
+            </div>
+            <div className="text-left">
+              <p className="text-xs font-bold" style={{ color: musicTrackId === null ? "hsl(0 0% 80%)" : "hsl(0 0% 50%)" }}>
+                No Music
+                {musicTrackId === null && (
+                  <span className="ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                    style={{ background: "hsl(222 47% 20%)", color: "hsl(222 47% 60%)" }}>Default</span>
+                )}
+              </p>
+              <p className="text-[10px]" style={{ color: "hsl(222 47% 40%)" }}>Silent export — voice-over or sound added later</p>
+            </div>
+          </button>
+
+          {/* Track grid */}
+          <div className="grid grid-cols-2 gap-2">
+            {MUSIC_TRACKS.map((track) => (
+              <TrackCard
+                key={track.id}
+                track={track}
+                selected={musicTrackId === track.id}
+                playing={playingTrackId === track.id}
+                onSelect={() => { if (renderState !== "rendering") setMusicTrackId(track.id); }}
+                onTogglePlay={(e) => toggleTrackPreview(track.id, track.file, e)}
+              />
+            ))}
+          </div>
+
+          <p className="text-[11px] text-white/22 mt-1.5">
+            Mixed at −18 dB so it never drowns a voice-over &nbsp;·&nbsp; Royalty-free
           </p>
         </div>
 

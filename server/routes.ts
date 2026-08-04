@@ -11855,7 +11855,6 @@ export async function registerRoutes(
   });
 
 
-
   app.post("/api/jobs/:id/cancel", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
       const jobId = parseInt(req.params.id);
@@ -14423,6 +14422,7 @@ export async function registerRoutes(
     total: number;
     videoUrl: string | null;
     error: string | null;
+    ownerUserId: number; // bound to the requesting user — prevents cross-user status reads
   };
   const renderJobs = new Map<string, RenderJob>();
 
@@ -14430,17 +14430,30 @@ export async function registerRoutes(
     try {
       const {
         brandName, tagline, productDescription, stylePreset,
-        callToAction, images, imageFocus, logoUrl, features, targetDuration, fontId,
+        callToAction, images, imageFocus, logoUrl, features, targetDuration, fontId, musicTrack,
       } = req.body as {
         brandName: string; tagline?: string; productDescription: string;
         stylePreset?: string; callToAction?: string;
         images: string[]; imageFocus?: string[]; logoUrl?: string;
-        features?: string[]; targetDuration?: number; fontId?: string;
+        features?: string[]; targetDuration?: number; fontId?: string; musicTrack?: string;
       };
       if (!brandName?.trim()) return res.status(400).json({ message: "Brand name is required." });
 
+      // Validate image sources up-front — only Cloudinary or data-URIs are allowed
+      // to prevent server-side fetch of internal/arbitrary URLs (SSRF).
+      const { isTrustedImageUrl } = await import("./studio/promo-renderer");
+      const badImages = (images ?? []).filter((u: string) => !isTrustedImageUrl(u));
+      if (badImages.length > 0) {
+        return res.status(400).json({
+          message: `Image source not allowed: ${badImages[0]}. Only previously-uploaded images are accepted.`,
+        });
+      }
+
       const renderId = crypto.randomUUID();
-      const job: RenderJob = { status: "rendering", frame: 0, total: (targetDuration ?? 15) * 24, videoUrl: null, error: null };
+      const job: RenderJob = {
+        status: "rendering", frame: 0, total: (targetDuration ?? 15) * 24,
+        videoUrl: null, error: null, ownerUserId: req.session.userId!,
+      };
       renderJobs.set(renderId, job);
 
       // Expire in-memory jobs after 10 minutes
@@ -14453,7 +14466,7 @@ export async function registerRoutes(
         try {
           const { renderPromoVideo } = await import("./studio/promo-renderer");
           const mp4 = await renderPromoVideo(
-            { brandName, tagline, productDescription: productDescription ?? "", stylePreset: stylePreset ?? "professional", callToAction, images: images ?? [], imageFocus: imageFocus as any, logoUrl, features, targetDuration: targetDuration ?? 15, fontId },
+            { brandName, tagline, productDescription: productDescription ?? "", stylePreset: stylePreset ?? "professional", callToAction, images: images ?? [], imageFocus: imageFocus as any, logoUrl, features, targetDuration: targetDuration ?? 15, fontId, musicTrack: musicTrack || undefined },
             (frame, total) => { job.frame = frame; job.total = total; },
           );
 
@@ -14481,8 +14494,13 @@ export async function registerRoutes(
   app.get("/api/studio/promo/render/:renderId/status", requireAuth, async (req: Request, res: Response) => {
     const job = renderJobs.get(String(req.params.renderId));
     if (!job) return res.status(404).json({ message: "Render job not found or expired." });
+    // Enforce ownership: a user may only poll their own render jobs
+    if (job.ownerUserId !== req.session.userId) {
+      return res.status(403).json({ message: "Access denied." });
+    }
     res.json({ status: job.status, frame: job.frame, total: job.total, videoUrl: job.videoUrl, error: job.error });
   });
+
 
   app.post("/api/stripe/trust-box-checkout", requireAuth, demoGuard, requireFullCommerce, async (req: Request, res: Response) => {
     try {
