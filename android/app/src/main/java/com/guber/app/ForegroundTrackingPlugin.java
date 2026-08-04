@@ -2,6 +2,7 @@ package com.guber.app;
 
 import android.Manifest;
 import android.content.Intent;
+import android.content.SharedPreferences;
 
 import androidx.core.content.ContextCompat;
 
@@ -114,5 +115,31 @@ public class ForegroundTrackingPlugin extends Plugin {
         PermissionState state = getPermissionState("backgroundLocation");
         result.put("status", state == PermissionState.GRANTED ? "granted" : "denied");
         call.resolve(result);
+    }
+
+    /**
+     * Returns the last native crash log written by MainActivity's
+     * UncaughtExceptionHandler.  The JS diagnostics page calls this on mount
+     * so the user can see exactly what crashed without needing adb/logcat.
+     *
+     * Result: { log: string | null }
+     */
+    @PluginMethod
+    public void getCrashLog(PluginCall call) {
+        SharedPreferences prefs = getContext().getSharedPreferences(
+                MainActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE);
+        String log = prefs.getString(MainActivity.PREF_CRASH_KEY, null);
+        JSObject result = new JSObject();
+        result.put("log", log != null ? log : JSObject.NULL);
+        call.resolve(result);
+    }
+
+    /** Clears the stored crash log after the user has read it. */
+    @PluginMethod
+    public void clearCrashLog(PluginCall call) {
+        SharedPreferences prefs = getContext().getSharedPreferences(
+                MainActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE);
+        prefs.edit().remove(MainActivity.PREF_CRASH_KEY).apply();
+        call.resolve();
     }
 }

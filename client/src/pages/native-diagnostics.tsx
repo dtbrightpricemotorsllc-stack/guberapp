@@ -11,7 +11,7 @@ import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import {
   MapPin, Mic, Wifi, WifiOff, CheckCircle, XCircle, AlertTriangle,
-  RefreshCw, Copy, ArrowLeft, Activity, Radio,
+  RefreshCw, Copy, ArrowLeft, Activity, Radio, Bug, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -130,10 +130,43 @@ export default function NativeDiagnostics() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [isMicLive, setIsMicLive] = useState(false);
 
+  // Crash log state
+  const [crashLog, setCrashLog] = useState<string | null>(null);
+  const [crashLogChecked, setCrashLogChecked] = useState(false);
+
   // Refs for cleanup
   const animFrameRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
+
+  // ── Read crash log from native on mount ─────────────────────────────────────
+  useEffect(() => {
+    if (!isNative) { setCrashLogChecked(true); return; }
+    (async () => {
+      try {
+        const { registerPlugin } = await import("@capacitor/core");
+        const ForegroundTracking = registerPlugin<any>("ForegroundTracking");
+        const result = await ForegroundTracking.getCrashLog();
+        setCrashLog(result?.log ?? null);
+      } catch {
+        // Plugin not available (web build) — ignore
+      } finally {
+        setCrashLogChecked(true);
+      }
+    })();
+  }, [isNative]);
+
+  const clearCrashLog = useCallback(async () => {
+    try {
+      const { registerPlugin } = await import("@capacitor/core");
+      const ForegroundTracking = registerPlugin<any>("ForegroundTracking");
+      await ForegroundTracking.clearCrashLog();
+      setCrashLog(null);
+      toast({ title: "Crash log cleared" });
+    } catch {
+      toast({ title: "Failed to clear crash log", variant: "destructive" });
+    }
+  }, [toast]);
 
   // Stop mic on unmount
   useEffect(() => {
@@ -688,6 +721,57 @@ export default function NativeDiagnostics() {
                   ? <span className="text-emerald-400 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Pass</span>
                   : <span className="text-zinc-500">{mic ? mic.rtcAddTrackStatus : "Not tested"}</span>}
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Last Crash Log ─────────────────────────────────────────────────── */}
+        {isNative && crashLogChecked && (
+          <Card className={`border ${crashLog ? "bg-red-950/40 border-red-700/40" : "bg-zinc-900 border-white/10"}`}>
+            <CardHeader className="pb-2 pt-4 px-4">
+              <CardTitle className="text-sm font-display text-white flex items-center gap-2">
+                <Bug className={`w-4 h-4 ${crashLog ? "text-red-400" : "text-zinc-500"}`} />
+                Last Native Crash
+                {crashLog
+                  ? <span className="ml-1 text-[11px] font-mono bg-red-900/60 text-red-300 px-1.5 py-0.5 rounded">CRASH DETECTED</span>
+                  : <span className="ml-1 text-[11px] font-mono bg-green-900/40 text-green-400 px-1.5 py-0.5 rounded">No crash recorded</span>}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              {crashLog ? (
+                <>
+                  <pre className="text-[10px] font-mono text-red-200 bg-black/40 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed max-h-64 overflow-y-auto">
+                    {crashLog}
+                  </pre>
+                  <div className="flex gap-2 mt-3">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs border-red-700/40 text-red-300 hover:bg-red-900/30 h-7"
+                      onClick={async () => {
+                        try { await navigator.clipboard.writeText(crashLog); toast({ title: "Crash log copied" }); }
+                        catch { toast({ title: "Copy failed", variant: "destructive" }); }
+                      }}
+                    >
+                      <Copy className="w-3 h-3 mr-1" /> Copy crash log
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs border-zinc-700 text-zinc-400 hover:bg-zinc-800 h-7"
+                      onClick={clearCrashLog}
+                    >
+                      <Trash2 className="w-3 h-3 mr-1" /> Clear
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-zinc-500">
+                  No crash has been recorded since the app was installed.
+                  If the app crashed before reaching this screen, a new crash log
+                  would appear here on the next launch.
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
