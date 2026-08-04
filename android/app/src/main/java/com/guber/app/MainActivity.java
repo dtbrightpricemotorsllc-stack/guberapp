@@ -1,6 +1,7 @@
 package com.guber.app;
 
 import android.Manifest;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.util.Log;
@@ -14,9 +15,14 @@ import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebChromeClient;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
+
 public class MainActivity extends BridgeActivity {
 
-    private static final String TAG = "GuberNative";
+    private static final String TAG            = "GuberNative";
+    private static final String PREFS_NAME     = "guber_crash_prefs";
+    static final         String PREF_CRASH_KEY = "last_crash";
 
     // Request codes — keep distinct so onRequestPermissionsResult can route correctly.
     private static final int REQUEST_CODE_RECORD_AUDIO  = 1001;
@@ -38,51 +44,91 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // ── 1. Install global crash logger FIRST, before anything else ────────
+        installCrashLogger();
+
+        // ── 2. Register custom plugins before super.onCreate() ────────────────
         registerPlugin(ForegroundTrackingPlugin.class);
+
+        // ── 3. Capacitor bridge init ──────────────────────────────────────────
         super.onCreate(savedInstanceState);
 
-        // Log initial permission state for debugging.
+        // ── 4. Log initial permission state for debugging ─────────────────────
         logPermissionStatus();
 
-        // Ask for mic + location up-front so the user sees the system dialog
-        // before they reach a feature that needs them.  If already granted the
-        // call is a no-op (Android skips already-granted permissions silently).
-        requestCriticalPermissionsIfNeeded();
+        // ── 5. Configure WebView once (NOT in onStart — that fires repeatedly) ─
+        setupWebView();
+
+        // ── 6. Only request permissions on first launch, not on config change ──
+        if (savedInstanceState == null) {
+            requestCriticalPermissionsIfNeeded();
+        }
     }
 
-    @Override
-    public void onStart() {
-        super.onStart();
+    // ─────────────────────────────────────────────────────────────────────────
+    // Crash logger
+    // ─────────────────────────────────────────────────────────────────────────
 
-        // ── WebView media settings ────────────────────────────────────────────
-        // Allow WebRTC / ElevenLabs audio to play without requiring an
-        // additional user gesture after the mic permission has been granted.
-        WebSettings settings = getBridge().getWebView().getSettings();
-        settings.setMediaPlaybackRequiresUserGesture(false);
+    /**
+     * Installs a Thread.UncaughtExceptionHandler that:
+     *   (a) Captures the full stack trace.
+     *   (b) Writes it to SharedPreferences so it survives the process restart.
+     *   (c) Forwards to the original handler (which triggers the OS crash dialog).
+     *
+     * The JS diagnostics page reads this via ForegroundTrackingPlugin.getCrashLog().
+     */
+    private void installCrashLogger() {
+        final Thread.UncaughtExceptionHandler defaultHandler =
+                Thread.getDefaultUncaughtExceptionHandler();
+        final SharedPreferences prefs =
+                getApplicationContext().getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
 
-        // ── Custom WebChromeClient ────────────────────────────────────────────
-        // Must extend BridgeWebChromeClient (not override the whole bridge) so
-        // Capacitor's own callbacks (file picker, console.log, etc.) still work.
-        getBridge().getWebView().setWebChromeClient(
-            new BridgeWebChromeClient(getBridge()) {
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
+            try {
+                StringWriter sw = new StringWriter();
+                PrintWriter  pw = new PrintWriter(sw);
+                throwable.printStackTrace(pw);
+                String trace = "Thread: " + thread.getName() + "\n" + sw.toString();
+
+                Log.e(TAG, "[CRASH] " + trace);
+
+                prefs.edit()
+                     .putString(PREF_CRASH_KEY,
+                             java.text.DateFormat.getDateTimeInstance().format(new java.util.Date())
+                             + "\n" + trace)
+                     .apply();
+            } catch (Exception ignored) {
+                // Never throw inside a crash handler.
+            }
+            if (defaultHandler != null) {
+                defaultHandler.uncaughtException(thread, throwable);
+            }
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // WebView setup — runs ONCE in onCreate, never again
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void setupWebView() {
+        try {
+            android.webkit.WebView webView = getBridge().getWebView();
+
+            // Allow WebRTC / ElevenLabs audio to play without requiring a
+            // separate user gesture after mic permission has been granted.
+            WebSettings settings = webView.getSettings();
+            settings.setMediaPlaybackRequiresUserGesture(false);
+
+            // Replace Capacitor's default BridgeWebChromeClient with our
+            // subclass that adds geolocation + mic grant forwarding.
+            // Must extend BridgeWebChromeClient so Capacitor's own callbacks
+            // (file picker, console.log forwarding, etc.) still work.
+            webView.setWebChromeClient(new BridgeWebChromeClient(getBridge()) {
 
                 // ── getUserMedia / WebRTC microphone ─────────────────────────
-                /**
-                 * Called by the WebView when page JS calls getUserMedia() for
-                 * RESOURCE_AUDIO_CAPTURE (and/or RESOURCE_VIDEO_CAPTURE).
-                 *
-                 * Flow:
-                 *   1. If Android RECORD_AUDIO is already granted → grant WebView immediately.
-                 *   2. Otherwise  → ask Android OS; stash `request` and grant/deny
-                 *      once the OS dialog resolves (see onRequestPermissionsResult).
-                 *
-                 * Without this override Capacitor's default BridgeWebChromeClient
-                 * denies all getUserMedia calls silently.
-                 */
                 @Override
                 public void onPermissionRequest(final PermissionRequest request) {
                     runOnUiThread(() -> {
-                        // Log every resource being requested.
                         StringBuilder resLog = new StringBuilder();
                         boolean needsAudio = false;
                         for (String resource : request.getResources()) {
@@ -91,13 +137,10 @@ public class MainActivity extends BridgeActivity {
                                 needsAudio = true;
                             }
                         }
-                        Log.i(TAG, "[MIC] WebView.onPermissionRequest"
-                                + " origin=" + request.getOrigin()
+                        Log.i(TAG, "[MIC] onPermissionRequest origin=" + request.getOrigin()
                                 + " resources=" + resLog.toString().trim());
 
                         if (!needsAudio) {
-                            // Video-only or other resource — grant directly (no native perm needed).
-                            Log.i(TAG, "[MIC] granting non-audio WebView resources directly");
                             request.grant(request.getResources());
                             return;
                         }
@@ -108,10 +151,8 @@ public class MainActivity extends BridgeActivity {
                         Log.i(TAG, "[MIC] RECORD_AUDIO native=" + (nativeGranted ? "GRANTED" : "DENIED"));
 
                         if (nativeGranted) {
-                            Log.i(TAG, "[MIC] granting RESOURCE_AUDIO_CAPTURE to WebView");
                             request.grant(request.getResources());
                         } else {
-                            Log.i(TAG, "[MIC] requesting RECORD_AUDIO from Android OS");
                             pendingWebViewPermission = request;
                             ActivityCompat.requestPermissions(
                                     MainActivity.this,
@@ -122,40 +163,21 @@ public class MainActivity extends BridgeActivity {
                 }
 
                 // ── navigator.geolocation inside the WebView ─────────────────
-                /**
-                 * Called by the WebView when page JS calls navigator.geolocation
-                 * APIs (getCurrentPosition / watchPosition).
-                 *
-                 * Without this override the WebView silently denies geolocation
-                 * requests, forcing the app to fall back to the saved profile ZIP
-                 * (Alabama) instead of the user's real GPS position.
-                 *
-                 * Flow:
-                 *   1. If ACCESS_FINE_LOCATION is already granted → allow immediately.
-                 *   2. Otherwise → ask Android OS; stash callback and invoke once
-                 *      the OS dialog resolves (see onRequestPermissionsResult).
-                 *
-                 * `retain=false` means the WebView will ask again next session
-                 * rather than caching the decision forever, which keeps behaviour
-                 * consistent with the native Android permission model.
-                 */
                 @Override
                 public void onGeolocationPermissionsShowPrompt(
                         String origin, GeolocationPermissions.Callback callback) {
-                    Log.i(TAG, "[GPS] WebView.onGeolocationPermissionsShowPrompt origin=" + origin);
+                    Log.i(TAG, "[GPS] onGeolocationPermissionsShowPrompt origin=" + origin);
 
                     boolean nativeGranted = ContextCompat.checkSelfPermission(
                             MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION)
                             == PackageManager.PERMISSION_GRANTED;
-                    Log.i(TAG, "[GPS] ACCESS_FINE_LOCATION native=" + (nativeGranted ? "GRANTED" : "DENIED"));
+                    Log.i(TAG, "[GPS] ACCESS_FINE_LOCATION=" + (nativeGranted ? "GRANTED" : "DENIED"));
 
                     if (nativeGranted) {
-                        Log.i(TAG, "[GPS] invoking WebView geolocation callback allow=true");
                         callback.invoke(origin, true, false);
                     } else {
                         pendingGeoCallback = callback;
                         pendingGeoOrigin   = origin;
-                        Log.i(TAG, "[GPS] requesting location permission from Android OS");
                         ActivityCompat.requestPermissions(
                                 MainActivity.this,
                                 new String[]{
@@ -168,11 +190,15 @@ public class MainActivity extends BridgeActivity {
 
                 @Override
                 public void onGeolocationPermissionsHidePrompt() {
-                    Log.i(TAG, "[GPS] WebView.onGeolocationPermissionsHidePrompt — prompt hidden");
+                    Log.i(TAG, "[GPS] onGeolocationPermissionsHidePrompt");
                     super.onGeolocationPermissionsHidePrompt();
                 }
-            }
-        );
+            });
+
+            Log.i(TAG, "[SETUP] WebView configured successfully");
+        } catch (Exception e) {
+            Log.e(TAG, "[SETUP] WebView setup failed: " + e.getMessage(), e);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -184,18 +210,18 @@ public class MainActivity extends BridgeActivity {
             int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
-        // Log every result for adb logcat diagnostics.
         for (int i = 0; i < permissions.length; i++) {
-            Log.i(TAG, "[PERM] requestCode=" + requestCode
-                    + " permission=" + permissions[i]
-                    + " result=" + (grantResults.length > i && grantResults[i] == PackageManager.PERMISSION_GRANTED
+            Log.i(TAG, "[PERM] code=" + requestCode
+                    + " perm=" + permissions[i]
+                    + " result=" + (grantResults.length > i
+                            && grantResults[i] == PackageManager.PERMISSION_GRANTED
                             ? "GRANTED" : "DENIED"));
         }
 
         // ── Microphone (from WebView getUserMedia flow) ───────────────────────
         if (requestCode == REQUEST_CODE_RECORD_AUDIO && pendingWebViewPermission != null) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Log.i(TAG, "[MIC] RECORD_AUDIO granted — forwarding RESOURCE_AUDIO_CAPTURE to WebView");
+                Log.i(TAG, "[MIC] RECORD_AUDIO granted — forwarding to WebView");
                 pendingWebViewPermission.grant(pendingWebViewPermission.getResources());
             } else {
                 Log.w(TAG, "[MIC] RECORD_AUDIO denied — denying WebView audio capture");
@@ -216,22 +242,17 @@ public class MainActivity extends BridgeActivity {
                     break;
                 }
             }
-            Log.i(TAG, "[GPS] location permission result=" + (locGranted ? "GRANTED" : "DENIED")
-                    + " — invoking WebView geolocation callback");
+            Log.i(TAG, "[GPS] location result=" + (locGranted ? "GRANTED" : "DENIED"));
             pendingGeoCallback.invoke(pendingGeoOrigin, locGranted, false);
             pendingGeoCallback = null;
             pendingGeoOrigin   = null;
         }
-
-        // REQUEST_CODE_STARTUP_PERMS: proactive startup request — just log,
-        // no pending callbacks to resolve.
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
-    /** Log current native permission state to adb logcat. */
     private void logPermissionStatus() {
         String mic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
                 == PackageManager.PERMISSION_GRANTED ? "GRANTED" : "DENIED";
@@ -240,13 +261,12 @@ public class MainActivity extends BridgeActivity {
         String coarseLoc = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED ? "GRANTED" : "DENIED";
         Log.i(TAG, "[STARTUP] RECORD_AUDIO=" + mic
-                + " ACCESS_FINE_LOCATION=" + fineLoc
-                + " ACCESS_COARSE_LOCATION=" + coarseLoc);
+                + " FINE_LOCATION=" + fineLoc
+                + " COARSE_LOCATION=" + coarseLoc);
     }
 
     /**
-     * Proactively request mic + location on first launch so the user sees
-     * both permission dialogs before reaching a feature that needs them.
+     * Proactively request mic + location on fresh launches only.
      * Android skips permissions that are already granted.
      */
     private void requestCriticalPermissionsIfNeeded() {
@@ -267,6 +287,8 @@ public class MainActivity extends BridgeActivity {
                     this,
                     needed.toArray(new String[0]),
                     REQUEST_CODE_STARTUP_PERMS);
+        } else {
+            Log.i(TAG, "[STARTUP] all critical permissions already granted");
         }
     }
 }
