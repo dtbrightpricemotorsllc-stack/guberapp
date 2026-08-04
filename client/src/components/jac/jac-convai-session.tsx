@@ -72,11 +72,142 @@ if (typeof window !== "undefined") {
   window.addEventListener("error", _jacElevenLabsGuard, true);
 }
 
+// ── Mic + WebRTC diagnostic patches ──────────────────────────────────────────
+//
+// These patches intercept EVERY getUserMedia call (including ElevenLabs SDK
+// internal ones) and EVERY RTCPeerConnection.addTrack call, so we can trace
+// the complete microphone flow end-to-end in adb logcat / browser console.
+//
+// Idempotent — guarded by __guberMicDiagInstalled so hot-reloads don't
+// double-wrap.  Only installed in a browser context.
+//
+// Test 1: permission-check stream (our getUserMedia call in boot())
+// Test 2: ElevenLabs internal stream (SDK's own getUserMedia + addTrack)
+if (typeof window !== "undefined" && !(window as any).__guberMicDiagInstalled) {
+  (window as any).__guberMicDiagInstalled = true;
+
+  // Patch navigator.mediaDevices.getUserMedia ──────────────────────────────
+  if (navigator?.mediaDevices?.getUserMedia) {
+    const _origGUM = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = async function (constraints: MediaStreamConstraints) {
+      console.log("[JAC MIC DIAG] getUserMedia called — constraints:", JSON.stringify(constraints));
+      try {
+        const stream = await _origGUM(constraints);
+        const audioTracks = stream.getAudioTracks();
+        console.log(`[JAC MIC DIAG] getUserMedia SUCCESS — ${audioTracks.length} audio track(s), ${stream.getVideoTracks().length} video track(s)`);
+        audioTracks.forEach((t, i) => {
+          console.log(
+            `[JAC MIC DIAG] audio track[${i}]: label="${t.label}" ` +
+            `enabled=${t.enabled} muted=${t.muted} readyState="${t.readyState}"`
+          );
+        });
+        return stream;
+      } catch (err: any) {
+        console.error(`[JAC MIC DIAG] getUserMedia FAILED: ${err?.name} — ${err?.message}`);
+        throw err;
+      }
+    };
+  }
+
+  // Patch RTCPeerConnection.addTrack ───────────────────────────────────────
+  // Fires when ElevenLabs SDK feeds the mic stream into the WebRTC peer.
+  if (typeof RTCPeerConnection !== "undefined") {
+    const _origAddTrack = RTCPeerConnection.prototype.addTrack;
+    RTCPeerConnection.prototype.addTrack = function (
+      track: MediaStreamTrack,
+      ...streams: MediaStream[]
+    ) {
+      if (track.kind === "audio") {
+        console.log(
+          `[JAC MIC DIAG] RTCPeerConnection.addTrack — kind=audio ` +
+          `label="${track.label}" enabled=${track.enabled} muted=${track.muted} readyState="${track.readyState}"`
+        );
+      }
+      return _origAddTrack.call(this, track, ...streams);
+    };
+  }
+}
+
 import { Component, forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import type { ReactNode } from "react";
 import { useConversation } from "@elevenlabs/react";
 import { apiRequest } from "@/lib/queryClient";
 import { unlockAudioContext, setJacConvaiActive, cancelAllJacAudio } from "@/lib/jac-tts";
+
+// ── Test 1: Mic input diagnostic helper ──────────────────────────────────────
+//
+// Logs track metadata + measures audio levels via AnalyserNode for 600 ms.
+// Treated as a separate test from Test 2 (JAC audio output / ElevenLabs TTS).
+//
+// Does NOT stop the stream — caller is responsible for .stop().
+// Non-blocking: resolves after the sampling window or 1 s hard timeout.
+async function diagnoseMicStream(stream: MediaStream, platform: string): Promise<void> {
+  const tracks = stream.getAudioTracks();
+  console.log(`[JAC MIC TEST 1] platform=${platform} — permission-check stream open`);
+
+  if (tracks.length === 0) {
+    console.warn("[JAC MIC TEST 1] ⚠️  getUserMedia returned 0 audio tracks — mic may not be accessible");
+    return;
+  }
+
+  tracks.forEach((t, i) => {
+    console.log(
+      `[JAC MIC TEST 1] track[${i}]:` +
+      ` label="${t.label || "(empty)"}` +
+      ` enabled=${t.enabled}` +
+      ` muted=${t.muted}` +
+      ` readyState="${t.readyState}"`
+    );
+  });
+
+  if (tracks[0].readyState !== "live") {
+    console.warn(`[JAC MIC TEST 1] ⚠️  track readyState="${tracks[0].readyState}" — expected "live"`);
+    return;
+  }
+
+  // Measure audio levels for 600 ms to confirm non-zero microphone capture.
+  // A maxRMS of 0 means the mic is open but no sound is reaching the app.
+  await new Promise<void>((resolve) => {
+    const hardTimeout = setTimeout(resolve, 1000);
+    try {
+      const ctx = new AudioContext();
+      const src = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      src.connect(analyser);
+      const buf = new Uint8Array(analyser.frequencyBinCount);
+      let maxRMS = 0;
+      const deadline = Date.now() + 600;
+
+      const tick = () => {
+        analyser.getByteTimeDomainData(buf);
+        let sum = 0;
+        for (let j = 0; j < buf.length; j++) sum += (buf[j] - 128) ** 2;
+        const rms = Math.sqrt(sum / buf.length);
+        if (rms > maxRMS) maxRMS = rms;
+
+        if (Date.now() < deadline) { requestAnimationFrame(tick); return; }
+
+        const detected = maxRMS > 0.5;
+        console.log(
+          `[JAC MIC TEST 1] Audio level: maxRMS=${maxRMS.toFixed(2)}` +
+          (detected
+            ? " ✅ NON-ZERO AUDIO DETECTED — mic is capturing sound"
+            : " ⚠️  SILENT — mic open but no audio captured; check if muted or speak closer")
+        );
+        clearTimeout(hardTimeout);
+        try { ctx.close(); } catch { /* ignore */ }
+        resolve();
+      };
+
+      requestAnimationFrame(tick);
+    } catch (levelErr) {
+      console.warn("[JAC MIC TEST 1] Level check skipped (AnalyserNode error):", levelErr);
+      clearTimeout(hardTimeout);
+      resolve();
+    }
+  });
+}
 
 // ── Platform detection ────────────────────────────────────────────────────────
 // Detects the runtime environment so we can tailor error messages and
@@ -260,14 +391,32 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           if (cancelRef.current) return;
 
           if (micResult.status === "rejected") {
+            const micErr = micResult.reason as any;
+            // Log the full error name + message so adb logcat / browser console
+            // shows exactly why getUserMedia failed (NotAllowedError, etc.).
+            console.error(
+              `[JAC MIC TEST 1] getUserMedia FAILED: ${micErr?.name ?? "unknown"} — ${micErr?.message ?? "(no message)"}`
+            );
             cbRef.current.onError(
               isIAB
                 ? "Open this page in Chrome or Safari to use JAC voice — in-app browsers block the mic."
+                : platform === "android_native"
+                ? `Microphone blocked on Android (${micErr?.name ?? "unknown error"}). Grant mic permission in App Settings.`
                 : "Mic access denied — allow mic in your browser settings."
             );
             return;
           }
+
+          // ── Test 1: Mic input (permission-check stream) ─────────────────────
+          // diagnoseMicStream logs track details + measures audio levels for 600 ms.
+          // This is a separate test from Test 2 (ElevenLabs audio output below).
+          await diagnoseMicStream(micResult.value as MediaStream, platform);
           (micResult.value as MediaStream).getTracks().forEach(t => t.stop());
+          console.log(
+            "[JAC MIC TEST 1] Permission-check stream stopped. " +
+            "[JAC MIC TEST 2] ElevenLabs will now open its own getUserMedia stream + " +
+            "RTCPeerConnection.addTrack — watch for [JAC MIC DIAG] log lines above."
+          );
 
           if (sessionResult.status === "rejected") {
             const err = sessionResult.reason as any;
