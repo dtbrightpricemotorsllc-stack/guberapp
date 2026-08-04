@@ -31,4 +31,5 @@ attached_assets/logo.*
 attached_assets/logoHref*
 
 # GitHub Actions — not pushed (PAT lacks workflow scope)
-.github/
+# .github/ workflows are tracked so CI guards stay in version control
+# .github/

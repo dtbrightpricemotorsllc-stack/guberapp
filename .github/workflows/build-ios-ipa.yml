@@ -1,0 +1,328 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  BUNDLE_ID: com.guber.app
+  TEAM_ID: 7MC93QFW6Q
+  MARKETING_VERSION: 1.0.0
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web app
+        run: npm run build
+        env:
+          NODE_ENV: production
+          VITE_GOOGLE_WEB_CLIENT_ID: ${{ secrets.VITE_GOOGLE_WEB_CLIENT_ID }}
+
+      - name: Sync Capacitor
+        run: npx cap sync ios
+
+      - name: Repair packageClassList after cap sync
+        run: node scripts/post-cap-sync-ios.mjs
+
+      - name: Restore BiometricAuthNative Swift source
+        run: |
+          # cap sync does NOT wipe Swift files in ios/App/App/ — only packageClassList
+          # changes. This step guards against any future case where the file is missing.
+          SRC="node_modules/@aparajita/capacitor-biometric-auth/ios/Plugin/Plugin.swift"
+          DST="ios/App/App/BiometricAuthNativePlugin.swift"
+          if [ ! -f "$DST" ]; then
+            echo "Restoring BiometricAuthNativePlugin.swift from npm package..."
+            cp "$SRC" "$DST"
+          else
+            echo "BiometricAuthNativePlugin.swift already present."
+          fi
+
+      - name: Compute build number
+        id: buildnum
+        run: |
+          BUILD_NUMBER=$(( ${{ github.run_number }} + 100 ))
+          echo "Using CURRENT_PROJECT_VERSION=$BUILD_NUMBER"
+          echo "number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Select Xcode
+        run: |
+          # Must use Xcode 26 (iOS 26 SDK required by App Store since July 2026).
+          # Xcode 16.x fails on headless CI: ibtool needs iOS 18 platform files
+          # that can't be downloaded without a display session (exit 70).
+          if [ -d /Applications/Xcode_26.0.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.0.app/Contents/Developer
+          elif [ -d /Applications/Xcode_26.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.app/Contents/Developer
+          else
+            # Fallback: pick the highest available non-16.x Xcode
+            XCODE=$(ls -d /Applications/Xcode_*.app 2>/dev/null | grep -v 'Xcode_16' | sort -V | tail -1)
+            if [ -n "$XCODE" ]; then
+              sudo xcode-select -s "$XCODE/Contents/Developer"
+            fi
+          fi
+          xcodebuild -version
+
+      - name: Write ASC API key
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          mkdir -p /tmp/asc ~/.appstoreconnect/private_keys
+          python3 - <<'PYEOF'
+          import os, re, sys, base64, textwrap
+          key = os.environ['ASC_PRIVATE_KEY']
+          key = key.replace('\r', '').replace('\\n', '\n').strip()
+          m = re.search(r'-----BEGIN PRIVATE KEY-----(.+?)-----END PRIVATE KEY-----', key, re.DOTALL)
+          if not m:
+              print('ERROR: cannot locate PEM markers')
+              sys.exit(1)
+          b64_raw = m.group(1).strip().replace(' ', '').replace('\n', '').replace('\r', '')
+          b64_wrapped = '\n'.join(textwrap.wrap(b64_raw, 64))
+          key = '-----BEGIN PRIVATE KEY-----\n' + b64_wrapped + '\n-----END PRIVATE KEY-----\n'
+          kid = os.environ['ASC_KEY_ID']
+          path = '/tmp/asc/AuthKey_' + kid + '.p8'
+          with open(path, 'w') as f:
+              f.write(key)
+          lines = key.splitlines()
+          decoded = base64.b64decode(b64_raw + '==')
+          print('Key lines: ' + str(len(lines)))
+          print('Body chars: ' + str(len(b64_raw)) + ' / Decoded bytes: ' + str(len(decoded)))
+          print('First 4 bytes hex: ' + decoded[:4].hex())
+          PYEOF
+          cp /tmp/asc/AuthKey_${ASC_KEY_ID}.p8 \
+             ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          echo "--- OpenSSL key check ---"
+          openssl pkey -in /tmp/asc/AuthKey_${ASC_KEY_ID}.p8 -noout -text 2>&1 | head -5
+
+      - name: Resolve Swift Package Manager dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App
+
+      - name: Archive
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          BUILD_NUMBER: ${{ steps.buildnum.outputs.number }}
+        run: |
+          xcodebuild archive \
+            -workspace       ios/App/App.xcworkspace \
+            -scheme          App \
+            -configuration   Release \
+            -archivePath     /tmp/App.xcarchive \
+            -sdk             iphoneos \
+            -derivedDataPath /tmp/dd \
+            -allowProvisioningUpdates \
+            -authenticationKeyID       "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            -authenticationKeyPath     /tmp/asc/AuthKey_${ASC_KEY_ID}.p8 \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            MARKETING_VERSION="${{ env.MARKETING_VERSION }}" \
+            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=${{ env.TEAM_ID }} \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            COMPILER_INDEX_STORE_ENABLE=NO
+
+      - name: Export IPA and upload to App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          # destination=upload → xcodebuild exports AND uploads to ASC in one step
+          cat > /tmp/ExportOptions.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+            "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>${{ env.TEAM_ID }}</string>
+            <key>signingStyle</key><string>automatic</string>
+          </dict></plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath        /tmp/App.xcarchive \
+            -exportOptionsPlist /tmp/ExportOptions.plist \
+            -exportPath         /tmp/ipa \
+            -allowProvisioningUpdates \
+            -authenticationKeyID       "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            -authenticationKeyPath     /tmp/asc/AuthKey_${ASC_KEY_ID}.p8
+
+          echo "Upload complete — build is now processing in App Store Connect."
+
+      - name: Save IPA artifact (local copy from archive)
+        continue-on-error: true
+        run: |
+          # exportArchive with destination=upload may not write a local .ipa;
+          # extract one from the archive for the artifact store.
+          PAYLOAD_DIR=/tmp/ipa_artifact/Payload
+          mkdir -p "$PAYLOAD_DIR"
+          APP=$(find /tmp/App.xcarchive/Products -name '*.app' | head -1)
+          if [ -n "$APP" ]; then
+            cp -R "$APP" "$PAYLOAD_DIR/"
+            cd /tmp/ipa_artifact && zip -r /tmp/ipa/App.ipa Payload
+            echo "IPA created from archive."
+          else
+            echo "No .app found in archive, skipping artifact IPA."
+          fi
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: guber-ios-ipa
+          path: /tmp/ipa/*.ipa
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Attach build to App Store version
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          BUILD_NUMBER: ${{ steps.buildnum.outputs.number }}
+        run: |
+          python3 - <<'PYEOF'
+          # No pip needed — uses only stdlib + cryptography (pre-installed on macOS runners)
+          import os, sys, time, json, re, textwrap, base64, urllib.request, urllib.error
+          from cryptography.hazmat.primitives import hashes, serialization
+          from cryptography.hazmat.primitives.asymmetric import ec
+          from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+
+          KEY_ID    = os.environ['ASC_KEY_ID']
+          ISSUER_ID = os.environ['ASC_ISSUER_ID']
+          RAW_KEY   = os.environ['ASC_PRIVATE_KEY']
+          BUILD_NUM = os.environ['BUILD_NUMBER']
+          BUNDLE_ID = os.environ.get('BUNDLE_ID', 'com.guber.app')
+          MKTG_VER  = os.environ.get('MARKETING_VERSION', '1.0.0')
+
+          # ── normalise PEM ─────────────────────────────────────────────────────
+          RAW_KEY = RAW_KEY.replace('\r', '').replace('\\n', '\n').strip()
+          m = re.search(r'-----BEGIN PRIVATE KEY-----(.+?)-----END PRIVATE KEY-----',
+                        RAW_KEY, re.DOTALL)
+          if not m:
+              print('ERROR: cannot find PEM block in ASC_PRIVATE_KEY'); sys.exit(1)
+          b64 = m.group(1).strip().replace(' ', '').replace('\n', '')
+          pem = ('-----BEGIN PRIVATE KEY-----\n' +
+                 '\n'.join(textwrap.wrap(b64, 64)) +
+                 '\n-----END PRIVATE KEY-----\n')
+          private_key = serialization.load_pem_private_key(pem.encode(), password=None)
+
+          # ── ES256 JWT (stdlib only, no pyjwt) ────────────────────────────────
+          def b64url(data):
+              if isinstance(data, str): data = data.encode()
+              return base64.urlsafe_b64encode(data).rstrip(b'=').decode()
+
+          def make_token():
+              now = int(time.time())
+              hdr = b64url(json.dumps({'alg':'ES256','kid':KEY_ID}, separators=(',',':')))
+              pld = b64url(json.dumps({'iss':ISSUER_ID,'iat':now,'exp':now+1200,
+                                       'aud':'appstoreconnect-v1'}, separators=(',',':')))
+              msg = f'{hdr}.{pld}'.encode()
+              der = private_key.sign(msg, ec.ECDSA(hashes.SHA256()))
+              r, s = decode_dss_signature(der)
+              sig = r.to_bytes(32, 'big') + s.to_bytes(32, 'big')
+              return f'{hdr}.{pld}.{b64url(sig)}'
+
+          def asc(method, path, body=None):
+              url = 'https://api.appstoreconnect.apple.com/v1' + path
+              data = json.dumps(body).encode() if body else None
+              req  = urllib.request.Request(url, data=data, method=method)
+              req.add_header('Authorization', 'Bearer ' + make_token())
+              req.add_header('Content-Type', 'application/json')
+              try:
+                  with urllib.request.urlopen(req) as r:
+                      return json.loads(r.read())
+              except urllib.error.HTTPError as e:
+                  body = e.read().decode(errors='replace')
+                  print(f'HTTP {e.code} {method} {path}: {body}')
+                  return None
+
+          # ── 1. find app ───────────────────────────────────────────────────────
+          apps = asc('GET', f'/apps?filter[bundleId]={BUNDLE_ID}')
+          if not apps or not apps.get('data'):
+              print('ERROR: could not find app in ASC'); sys.exit(1)
+          app_id = apps['data'][0]['id']
+          print(f'App ID: {app_id}')
+
+          # ── 2. poll for processed build ───────────────────────────────────────
+          print(f'Waiting for build {BUILD_NUM} to finish processing …')
+          build_id = None
+          for attempt in range(40):          # up to ~20 min
+              builds = asc('GET',
+                  f'/builds?filter[app]={app_id}'
+                  f'&filter[version]={BUILD_NUM}'
+                  f'&filter[preReleaseVersion.version]={MKTG_VER}'
+                  f'&sort=-uploadedDate&limit=5')
+              if builds and builds.get('data'):
+                  for b in builds['data']:
+                      state = b['attributes'].get('processingState', '')
+                      print(f'  Build {b["id"]} state={state}')
+                      if state == 'VALID':
+                          build_id = b['id']
+                          break
+              if build_id:
+                  break
+              print(f'  Not ready yet (attempt {attempt+1}/40); sleeping 30 s …')
+              time.sleep(30)
+
+          if not build_id:
+              print('ERROR: build never reached VALID state after 20 min'); sys.exit(1)
+          print(f'Build ID ready: {build_id}')
+
+          # ── 3. find the App Store version (PREPARE_FOR_SUBMISSION or READY) ──
+          versions = asc('GET',
+              f'/apps/{app_id}/appStoreVersions'
+              f'?filter[platform]=IOS'
+              f'&filter[versionString]={MKTG_VER}')
+          version_id = None
+          if versions and versions.get('data'):
+              for v in versions['data']:
+                  state = v['attributes'].get('appStoreState', '')
+                  print(f'  Version {v["id"]} state={state}')
+                  # Prefer PREPARE_FOR_SUBMISSION, accept WAITING_FOR_REVIEW too
+                  if state in ('PREPARE_FOR_SUBMISSION', 'WAITING_FOR_REVIEW',
+                               'DEVELOPER_REJECTED', 'REJECTED',
+                               'METADATA_REJECTED', 'INVALID_BINARY'):
+                      version_id = v['id']
+                      break
+
+          if not version_id:
+              # Try creating a new patch version 1.0.1 as fallback
+              print(f'No editable version found for {MKTG_VER} — will try next patch.')
+              sys.exit(1)   # Surface clearly so operator can decide
+
+          print(f'App Store version ID: {version_id}')
+
+          # ── 4. attach build ───────────────────────────────────────────────────
+          result = asc('PATCH', f'/appStoreVersions/{version_id}/relationships/build',
+                       {'data': {'type': 'builds', 'id': build_id}})
+          if result is None:
+              print('PATCH returned None — checking current build relationship …')
+              current = asc('GET', f'/appStoreVersions/{version_id}/relationships/build')
+              print('Current build rel:', json.dumps(current, indent=2))
+              sys.exit(1)
+
+          print('SUCCESS — build attached to App Store version.')
+          print(f'  Version {MKTG_VER} (id={version_id}) → build {BUILD_NUM} (id={build_id})')
+          print()
+          print('Next step: go to App Store Connect → GUBER → iOS App → 1.0.0')
+          print('and click "Submit for Review" when ready.')
+          PYEOF
