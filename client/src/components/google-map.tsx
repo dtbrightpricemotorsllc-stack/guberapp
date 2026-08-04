@@ -6,6 +6,12 @@ import { useLocation } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MapPin as MapPinIcon, AlertTriangle, Navigation, LocateOff, RefreshCw } from "lucide-react";
 import { gpsStartWatchPosition, gpsClearWatch, gpsGetCurrentPosition } from "@/lib/gps";
+import { Capacitor } from "@capacitor/core";
+
+// On native Android/iOS the server-side IP-locate endpoint returns the
+// datacenter's IP, not the user's device location. Skip IP fallback on native
+// and show the visible error banner instead.
+const _isNativePlatform = (() => { try { return Capacitor.isNativePlatform(); } catch { return false; } })();
 
 export interface JobPin {
   id: number;
@@ -315,7 +321,19 @@ export function GoogleMap({ pins, workerPins, cashDrops, businessPins, onPinClic
           startWatchPosition(false);
           return;
         }
-        console.warn(`[GUBER] Geolocation error: ${labels[err.code] ?? "UNKNOWN"} (code ${err.code}) — ${err.message}. Trying IP fallback…`);
+        console.warn(`[GUBER] Geolocation error: ${labels[err.code] ?? "UNKNOWN"} (code ${err.code}) — ${err.message}.${_isNativePlatform ? " (native: skipping IP fallback — server IP ≠ device location)" : " Trying IP fallback…"}`);
+
+        // On native (Android/iOS) the IP-locate endpoint returns the server's
+        // datacenter IP, not the user's device location.  Using it would show
+        // the map at the datacenter city (often Alabama or Virginia) instead of
+        // the user's real location.  Skip it and show the visible retry banner.
+        if (_isNativePlatform) {
+          setLocationDenied(true);
+          setLocating(false);
+          return;
+        }
+
+        // Web/PWA path: try IP fallback.
         // Keep `locating` true until the IP fallback resolves — otherwise
         // the buildMap effect fires immediately with no userPos and the
         // map is built at US_CENTER before the fallback coordinates land.
@@ -368,7 +386,11 @@ export function GoogleMap({ pins, workerPins, cashDrops, businessPins, onPinClic
     watchIdRef.current = null;
     hasCenteredRef.current = false;
     lowAccuracyRetriedRef.current = false;
+    // Clear stale coordinates from both ref and React state so the map marker
+    // and any downstream consumers don't keep showing the old (Alabama) position.
     userPosRef.current = null;
+    setUserPos(null);
+    setLocationDenied(false);
     startWatchPosition(true);
   };
 
@@ -823,28 +845,29 @@ export function GoogleMap({ pins, workerPins, cashDrops, businessPins, onPinClic
         </div>
       )}
 
-      {/* "Location unavailable" pill hidden for now — was triggering even when
-          GPS eventually recovered. Re-enable once we have a confident
-          definitely-no-fix signal. */}
-      {false && mapReady && locationDenied && !showZipInput && (
+      {/* Location unavailable banner — shown when GPS fails and no fix has
+          been obtained. On native this fires instead of the silent IP-fallback
+          that was returning the server datacenter's city (Alabama / Virginia).
+          handleRetryLocation clears stale coordinates and restarts the watch. */}
+      {mapReady && locationDenied && !showZipInput && (
         <div
           className="absolute bottom-12 left-3 right-3 z-30 flex items-center gap-2 px-3 py-2 rounded-xl"
           style={{ background: "rgba(20,20,20,0.92)", border: "1px solid rgba(239,68,68,0.35)", backdropFilter: "blur(8px)" }}
           data-testid="banner-location-denied"
         >
           <LocateOff className="w-3.5 h-3.5 text-red-400 shrink-0" />
-          <span className="text-[10px] text-white/90 font-display flex-1">Location unavailable</span>
           <button
             onClick={handleRetryLocation}
-            className="text-[10px] font-display font-bold text-primary flex items-center gap-1"
+            className="text-[10px] text-white/90 font-display flex-1 text-left"
             data-testid="button-retry-location"
           >
-            <RefreshCw className="w-3 h-3" /> Retry
+            Current location unavailable. Tap to retry.
           </button>
+          <RefreshCw className="w-3 h-3 text-primary shrink-0" />
           <span className="text-white/85 text-[10px]">·</span>
           <button
             onClick={() => setShowZipInput(true)}
-            className="text-[10px] font-display font-bold text-white/85"
+            className="text-[10px] font-display font-bold text-white/85 shrink-0"
             data-testid="button-enter-zip-map"
           >
             Enter ZIP
