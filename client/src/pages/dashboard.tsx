@@ -786,13 +786,12 @@ export default function Dashboard() {
   const visibleJobPins = filteredPins.filter(p => inViewport(p.lat, p.lng));
   const visibleCashDropPins = activeCashDropPins.filter(d => inViewport(d.gpsLat, d.gpsLng));
   const visibleWorkerPins = (workerPins || []).filter(w => inViewport(w.lat, w.lng));
-  // Counts shown to the user reflect REAL distance, not whatever happens to
-  // be inside the current map viewport (which may be zoomed out across the
-  // whole country before the user pans).
-  const nearbyJobCount = filteredPins.filter(p => isTrulyNearby(p.lat, p.lng)).length;
-  const nearbyDropCount = activeCashDropPins.filter(d => isTrulyNearby(d.gpsLat, d.gpsLng)).length;
-  const nearbyCount = nearbyJobCount + nearbyDropCount;
-  const workerCount = (workerPins || []).filter(w => isTrulyNearby(w.lat, w.lng)).length;
+  // Counts shown to the user reflect only what is currently visible in the
+  // map viewport so the badge always matches what the user sees on screen.
+  // If the map has not yet reported bounds, inViewport() returns false and
+  // all counts are 0 (better than showing every pin in the country).
+  const nearbyCount = visibleJobPins.length + visibleCashDropPins.length;
+  const workerCount = visibleWorkerPins.length;
 
   const isSharingRef = useRef(false);
   const [isSharing, setIsSharing] = useState(false);
