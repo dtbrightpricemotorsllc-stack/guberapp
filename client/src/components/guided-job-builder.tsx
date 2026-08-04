@@ -283,16 +283,16 @@ export function GuidedJobBuilder({
         </div>
       </div>
 
-      {/* Universal: Notes (with contact-block) */}
+      {/* Universal: Description (with contact-block) */}
       <div className="space-y-2" data-testid="section-notes">
         <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">
-          Notes <span className="text-muted-foreground/60 text-[10px] ml-1">(optional)</span>
+          Description <span className="text-muted-foreground/60 text-[10px] ml-1">(optional)</span>
         </Label>
         <Textarea
           value={notes}
           onChange={(e) => onNotesChange(e.target.value.slice(0, 500))}
-          placeholder="Anything specific the helper should know? (Keep contact and payment on GUBER.)"
-          rows={2}
+          placeholder="Describe what you need in your own words — any details that will help the right person find this job."
+          rows={3}
           maxLength={500}
           className="premium-input rounded-md text-sm"
           data-testid="textarea-guided-notes"

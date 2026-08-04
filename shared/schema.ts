@@ -3152,3 +3152,121 @@ export const campaignLabGenerationLog = pgTable("campaign_lab_generation_log", {
 });
 export type CampaignLabGenerationLog       = typeof campaignLabGenerationLog.$inferSelect;
 export type InsertCampaignLabGenerationLog = typeof campaignLabGenerationLog.$inferInsert;
+
+// ── JAC Conversations (ElevenLabs webhook capture) ────────────────────────────
+export const jacConversations = pgTable("jac_conversations", {
+  id:               serial("id").primaryKey(),
+  conversationId:   text("conversation_id").unique().notNull(),
+  userId:           integer("user_id").references(() => users.id),
+  agentId:          text("agent_id"),
+  platform:         text("platform").default("web"),
+  durationSecs:     integer("duration_secs"),
+  turnCount:        integer("turn_count").default(0),
+  transcript:       jsonb("transcript").$type<Array<{ role: string; message: string; time_in_call_secs?: number }>>().default([]),
+  toolCallsMade:    jsonb("tool_calls_made").$type<string[]>().default([]),
+  navigatedTo:      text("navigated_to"),
+  userTookAction:   boolean("user_took_action").default(false),
+  autoScore:        integer("auto_score"),
+  autoScoreReason:  text("auto_score_reason"),
+  piiScrubbed:      boolean("pii_scrubbed").default(false),
+  rawPayload:       jsonb("raw_payload").$type<Record<string, unknown>>().default({}),
+  createdAt:        timestamp("created_at").defaultNow(),
+});
+export type JacConversation       = typeof jacConversations.$inferSelect;
+export type InsertJacConversation = typeof jacConversations.$inferInsert;
+
+// ── JAC Training Examples (admin-approved dataset for fine-tuning) ────────────
+export const jacTrainingExamples = pgTable("jac_training_examples", {
+  id:               serial("id").primaryKey(),
+  conversationId:   text("conversation_id").references(() => jacConversations.conversationId),
+  userMessage:      text("user_message").notNull(),
+  contextSummary:   text("context_summary"),
+  idealResponse:    text("ideal_response").notNull(),
+  toolCallsMade:    jsonb("tool_calls_made").$type<string[]>().default([]),
+  outcomeLabel:     text("outcome_label"),
+  source:           text("source").notNull().default("webhook"),
+  piiScrubbed:      boolean("pii_scrubbed").default(false),
+  adminApproved:    boolean("admin_approved").default(false),
+  adminRejected:    boolean("admin_rejected").default(false),
+  rejectReason:     text("reject_reason"),
+  exportedAt:       timestamp("exported_at"),
+  createdAt:        timestamp("created_at").defaultNow(),
+});
+export type JacTrainingExample       = typeof jacTrainingExamples.$inferSelect;
+export type InsertJacTrainingExample = typeof jacTrainingExamples.$inferInsert;
+
+// ── Business Content Studio — multi-tenant private studios ───────────────────
+
+export const businessStudios = pgTable("business_studios", {
+  id:                  serial("id").primaryKey(),
+  studioId:            text("studio_id").unique().notNull(),
+  name:                text("name").notNull(),
+  tagline:             text("tagline"),
+  logoUrl:             text("logo_url"),
+  primaryColor:        text("primary_color").default("#0f172a"),
+  accentColor:         text("accent_color").default("#c9a84c"),
+  welcomeMessage:      text("welcome_message"),
+  contactEmail:        text("contact_email"),
+  monthlyImageLimit:   integer("monthly_image_limit").default(100),
+  monthlyVideoLimit:   integer("monthly_video_limit").default(10),
+  isActive:            boolean("is_active").default(true),
+  createdAt:           timestamp("created_at").defaultNow(),
+  updatedAt:           timestamp("updated_at").defaultNow(),
+});
+export type BusinessStudio = typeof businessStudios.$inferSelect;
+
+export const studioApprovedEmails = pgTable("studio_approved_emails", {
+  id:        serial("id").primaryKey(),
+  studioId:  text("studio_id").notNull(),
+  email:     text("email").notNull(),
+  role:      text("role").notNull().default("client"),
+  fullName:  text("full_name"),
+  isActive:  boolean("is_active").default(true),
+  addedBy:   text("added_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const studioOtpCodes = pgTable("studio_otp_codes", {
+  id:        serial("id").primaryKey(),
+  studioId:  text("studio_id").notNull(),
+  email:     text("email").notNull(),
+  code:      text("code").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used:      boolean("used").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const studioContent = pgTable("studio_content", {
+  id:             serial("id").primaryKey(),
+  studioId:       text("studio_id").notNull(),
+  ownerEmail:     text("owner_email").notNull(),
+  createdBy:      text("created_by").notNull(),
+  contentType:    text("content_type").notNull(),
+  status:         text("status").default("draft"),
+  approvalStatus: text("approval_status").default("pending"),
+  sourceFile:     text("source_file"),
+  generatedFile:  text("generated_file"),
+  thumbnailUrl:   text("thumbnail_url"),
+  prompt:         text("prompt"),
+  caption:        text("caption"),
+  platformFormat: text("platform_format"),
+  title:          text("title"),
+  notes:          text("notes"),
+  approvedBy:     text("approved_by"),
+  approvedAt:     timestamp("approved_at"),
+  archivedAt:     timestamp("archived_at"),
+  metadata:       jsonb("metadata").$type<Record<string, any>>().default({}),
+  createdAt:      timestamp("created_at").defaultNow(),
+  updatedAt:      timestamp("updated_at").defaultNow(),
+});
+export type StudioContent = typeof studioContent.$inferSelect;
+
+export const studioAuditLog = pgTable("studio_audit_log", {
+  id:         serial("id").primaryKey(),
+  studioId:   text("studio_id").notNull(),
+  userEmail:  text("user_email"),
+  action:     text("action").notNull(),
+  details:    jsonb("details").$type<Record<string, any>>().default({}),
+  ipAddress:  text("ip_address"),
+  createdAt:  timestamp("created_at").defaultNow(),
+});

@@ -517,7 +517,11 @@ export default function PostJob() {
       }
       toast({ title: "Job Posted!", description: "Your job is now live. You'll pay when you confirm a worker." });
       try { localStorage.setItem("guber_first_post_done", "true"); clearJacPrefill(); } catch {}
-      setLocation("/my-jobs");
+      if (data.jobId) {
+        setLocation(`/jobs/${data.jobId}`);
+      } else {
+        setLocation("/my-jobs");
+      }
     },
     onError: (err: any) => {
       if (err.message?.includes("DISCLAIMER_REQUIRED") || err.status === 412) {

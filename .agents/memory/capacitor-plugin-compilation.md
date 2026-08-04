@@ -42,3 +42,26 @@ calling it from `AppDelegate` does nothing. The durable fix is a small script
 that re-injects the local class name(s) into `packageClassList` after every
 `cap sync`, wired in as a mandatory manual step (and ideally an Xcode Build
 Phase) documented right next to every `cap sync` invocation in setup docs.
+
+## Concrete case: @aparajita/capacitor-biometric-auth (July 2026)
+
+This plugin has a `.podspec` but NO `Package.swift` — cap sync never adds it to
+`CapApp-SPM/Package.swift` and also DROPS `BiometricAuthNative` from
+`packageClassList` every time cap sync runs (rebuilds from npm manifest only).
+
+**Symptoms:** Black screen crash on TestFlight launch — Capacitor tries to
+register `BiometricAuthNative`, the class doesn't exist in the binary → crash.
+
+**Fix pattern:**
+1. Copy `node_modules/@aparajita/capacitor-biometric-auth/ios/Plugin/Plugin.swift`
+   → `ios/App/App/BiometricAuthNativePlugin.swift` (Xcode auto-discovers all
+   `.swift` files in the App target directory)
+2. Do NOT copy the `.h` header — it's a framework umbrella header, not a
+   bridging header, and will break compilation
+3. Add `NSFaceIDUsageDescription` to Info.plist (plugin checks for it and
+   returns biometryNotAvailable if missing on Face ID devices)
+4. Run `node scripts/post-cap-sync-ios.mjs` after every `cap sync ios` to
+   re-inject `BiometricAuthNative` and `AppleSignInPlugin` back into
+   `packageClassList`
+5. CI workflow must include both the repair script step AND a "Restore Swift
+   source" step after cap sync

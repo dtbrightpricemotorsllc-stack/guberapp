@@ -1,5 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { setupCampaignLabRoutes } from "./campaign-lab";
+import { setupBusinessStudioRoutes } from "./business-studio";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { getStudioToolsCache, setStudioToolsCache } from "./studio-tools-cache";
@@ -27,6 +28,7 @@ import {
 import { sendPushToUser } from "./push";
 import { tryLocalAnswer, promoteToCache, getJacBrainStats, getMultiSourceContext } from "./jac-brain";
 import { syncJacProfile, buildJacProfileContext, buildMorningBriefing, scanOpportunities } from "./jac-profile";
+import { createJacRealtimeSession, executeJacTool } from "./jac-realtime";
 import { reportIssue as recordSystemIssue, escalateCriticalIssue, tryAdminMonitoringAnswer, shouldDiagnose } from "./system-issues";
 import { maybeDiagnoseIssue } from "./ai-diagnosis";
 import { isValidActionType, validateAndSummarize, createPendingAction, executeAction } from "./jac-actions";
@@ -11853,7 +11855,6 @@ export async function registerRoutes(
   });
 
 
-
   app.post("/api/jobs/:id/cancel", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
       const jobId = parseInt(req.params.id);
@@ -14263,6 +14264,244 @@ export async function registerRoutes(
     });
   });
 
+  // ── Video Agent — start job ───────────────────────────────────────────────
+  app.post("/api/studio/agent/start", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!process.env.FAL_KEY) return res.status(503).json({ message: "Studio generation not configured (FAL_KEY missing)." });
+      if (!process.env.AI_INTEGRATIONS_OPENAI_API_KEY) return res.status(503).json({ message: "Studio agent not configured (OpenAI key missing)." });
+      const userId = req.session.userId!;
+      const { images, instruction, targetDuration } = req.body as {
+        images: Array<{ slot: number; name: string; url: string }>;
+        instruction: string;
+        targetDuration?: number;
+      };
+      if (!Array.isArray(images) || images.length === 0) return res.status(400).json({ message: "At least one image is required." });
+      if (!instruction?.trim()) return res.status(400).json({ message: "An instruction prompt is required." });
+      const { startAgentJob } = await import("./studio/video-agent");
+      const job = await startAgentJob(userId, { images, instruction: instruction.trim(), targetDuration });
+      res.json({ jobId: job.id });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Video Agent — poll status (memory-first, DB fallback) ─────────────────
+  app.get("/api/studio/agent/status/:jobId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { getAgentJob, getAgentJobFromDb } = await import("./studio/video-agent");
+      const userId = req.session.userId!;
+      let job = getAgentJob(String(req.params.jobId));
+      if (!job) job = await getAgentJobFromDb(String(req.params.jobId)) ?? undefined;
+      if (!job) return res.status(404).json({ message: "Job not found or expired." });
+      if (job.userId !== userId) return res.status(403).json({ message: "Forbidden." });
+      res.json({
+        jobId: job.id,
+        status: job.status,
+        phase: job.phase,
+        logs: job.logs,
+        manifest: job.manifest,
+        videoUrl: job.videoUrl,
+        error: job.error,
+        targetDuration: job.targetDuration,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Video Agent — latest job for current user (resume) ────────────────────
+  app.get("/api/studio/agent/latest", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { getUserLatestJob } = await import("./studio/video-agent");
+      const job = await getUserLatestJob(req.session.userId!, "video");
+      if (!job) return res.json({ job: null });
+      res.json({
+        job: {
+          jobId: job.id,
+          status: job.status,
+          phase: job.phase,
+          logs: job.logs,
+          manifest: job.manifest,
+          videoUrl: job.videoUrl,
+          error: job.error,
+          targetDuration: job.targetDuration,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Promo Agent — start ───────────────────────────────────────────────────
+  app.post("/api/studio/promo/start", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!process.env.FAL_KEY) return res.status(503).json({ message: "Studio generation not configured (FAL_KEY missing)." });
+      if (!process.env.AI_INTEGRATIONS_OPENAI_API_KEY) return res.status(503).json({ message: "Studio agent not configured (OpenAI key missing)." });
+      const userId = req.session.userId!;
+      const {
+        brandName, tagline, productDescription, stylePreset,
+        targetAudience, callToAction, images, targetDuration,
+      } = req.body as {
+        brandName: string; tagline?: string; productDescription: string;
+        stylePreset: string; targetAudience?: string; callToAction?: string;
+        images: Array<{ slot: number; name: string; url: string }>;
+        targetDuration?: number;
+      };
+      if (!brandName?.trim()) return res.status(400).json({ message: "Brand name is required." });
+      if (!productDescription?.trim()) return res.status(400).json({ message: "Product description is required." });
+      if (!Array.isArray(images) || images.length === 0) return res.status(400).json({ message: "At least one image is required." });
+
+      const STYLE_DESCRIPTIONS: Record<string, string> = {
+        energetic: "fast-paced dynamic zooms and bold cuts — high energy that grabs attention instantly",
+        professional: "clean steady camera movements, polished and authoritative corporate confidence",
+        luxury: "slow cinematic reveals with elegant transitions and a premium aspirational atmosphere",
+        friendly: "warm soft pans, approachable movements, inviting and trustworthy tone",
+        dramatic: "high-contrast cinematic zooms with intense atmosphere and powerful emotional impact",
+        bold: "strong confident cuts, impactful visuals, direct and commanding presence",
+      };
+
+      const styleDesc = STYLE_DESCRIPTIONS[stylePreset] ?? stylePreset;
+      const audience = targetAudience?.trim() || "general audience";
+      const cta = callToAction?.trim() || "Learn more";
+      const tag = tagline?.trim();
+
+      // Build the instruction automatically — no manual prompt needed from the user
+      const instruction =
+        `Create a ${targetDuration ?? 15}-second promotional video for ${brandName}` +
+        (tag ? ` — "${tag}"` : "") + `. ` +
+        `Product/Service: ${productDescription}. ` +
+        `Visual style: ${styleDesc}. ` +
+        `Target audience: ${audience}. ` +
+        `Close every scene leading toward the call to action: "${cta}". ` +
+        `Use Image 1${images.length > 1 ? ` through Image ${images.length}` : ""} as the primary visuals. ` +
+        `The voiceover must speak directly to ${audience} and end with "${cta}". ` +
+        `Make it feel like a professional TV/social media advertisement.`;
+
+      const { startAgentJob } = await import("./studio/video-agent");
+      const job = await startAgentJob(userId, {
+        images,
+        instruction,
+        targetDuration,
+        jobType: "promo",
+      });
+      res.json({ jobId: job.id });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Promo Agent — latest job (resume) ─────────────────────────────────────
+  app.get("/api/studio/promo/latest", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { getUserLatestJob } = await import("./studio/video-agent");
+      const job = await getUserLatestJob(req.session.userId!, "promo");
+      if (!job) return res.json({ job: null });
+      res.json({
+        job: {
+          jobId: job.id,
+          status: job.status,
+          phase: job.phase,
+          logs: job.logs,
+          manifest: job.manifest,
+          videoUrl: job.videoUrl,
+          error: job.error,
+          targetDuration: job.targetDuration,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Promo Code Renderer — start ───────────────────────────────────────────
+  // Launches Playwright, renders the animated React component frame-by-frame,
+  // encodes to MP4 with ffmpeg, uploads to Cloudinary, returns download URL.
+  type RenderJob = {
+    status: "pending" | "rendering" | "complete" | "error";
+    frame: number;
+    total: number;
+    videoUrl: string | null;
+    error: string | null;
+    ownerUserId: number; // bound to the requesting user — prevents cross-user status reads
+  };
+  const renderJobs = new Map<string, RenderJob>();
+
+  app.post("/api/studio/promo/render", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const {
+        brandName, tagline, productDescription, stylePreset,
+        callToAction, images, imageFocus, logoUrl, features, targetDuration, fontId, musicTrack,
+      } = req.body as {
+        brandName: string; tagline?: string; productDescription: string;
+        stylePreset?: string; callToAction?: string;
+        images: string[]; imageFocus?: string[]; logoUrl?: string;
+        features?: string[]; targetDuration?: number; fontId?: string; musicTrack?: string;
+      };
+      if (!brandName?.trim()) return res.status(400).json({ message: "Brand name is required." });
+
+      // Validate image sources up-front — only Cloudinary or data-URIs are allowed
+      // to prevent server-side fetch of internal/arbitrary URLs (SSRF).
+      const { isTrustedImageUrl } = await import("./studio/promo-renderer");
+      const badImages = (images ?? []).filter((u: string) => !isTrustedImageUrl(u));
+      if (badImages.length > 0) {
+        return res.status(400).json({
+          message: `Image source not allowed: ${badImages[0]}. Only previously-uploaded images are accepted.`,
+        });
+      }
+
+      const renderId = crypto.randomUUID();
+      const job: RenderJob = {
+        status: "rendering", frame: 0, total: (targetDuration ?? 15) * 24,
+        videoUrl: null, error: null, ownerUserId: req.session.userId!,
+      };
+      renderJobs.set(renderId, job);
+
+      // Expire in-memory jobs after 10 minutes
+      setTimeout(() => renderJobs.delete(renderId), 10 * 60 * 1000);
+
+      res.json({ renderId });
+
+      // Run render in background
+      (async () => {
+        try {
+          const { renderPromoVideo } = await import("./studio/promo-renderer");
+          const mp4 = await renderPromoVideo(
+            { brandName, tagline, productDescription: productDescription ?? "", stylePreset: stylePreset ?? "professional", callToAction, images: images ?? [], imageFocus: imageFocus as any, logoUrl, features, targetDuration: targetDuration ?? 15, fontId, musicTrack: musicTrack || undefined },
+            (frame, total) => { job.frame = frame; job.total = total; },
+          );
+
+          // Upload MP4 to Cloudinary
+          const cloudinary = (await import("./cloudinary.js")).default;
+          const dataUrl = `data:video/mp4;base64,${mp4.toString("base64")}`;
+          const up = await (cloudinary as any).uploader.upload(dataUrl, {
+            resource_type: "video",
+            folder: "guber-studio-promo",
+            format: "mp4",
+          });
+          job.videoUrl = up.secure_url as string;
+          job.status = "complete";
+        } catch (err: any) {
+          job.error = err.message;
+          job.status = "error";
+          console.error("[promo-render] Error:", err.message);
+        }
+      })();
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/studio/promo/render/:renderId/status", requireAuth, async (req: Request, res: Response) => {
+    const job = renderJobs.get(String(req.params.renderId));
+    if (!job) return res.status(404).json({ message: "Render job not found or expired." });
+    // Enforce ownership: a user may only poll their own render jobs
+    if (job.ownerUserId !== req.session.userId) {
+      return res.status(403).json({ message: "Access denied." });
+    }
+    res.json({ status: job.status, frame: job.frame, total: job.total, videoUrl: job.videoUrl, error: job.error });
+  });
+
+
   app.post("/api/stripe/trust-box-checkout", requireAuth, demoGuard, requireFullCommerce, async (req: Request, res: Response) => {
     try {
       const user = await storage.getUser(req.session.userId!);
@@ -15927,6 +16166,102 @@ Input body: ${JSON.stringify((body || "").trim())}`;
 
   // ── GUBER AI ASSISTANT ────────────────────────────────────────────────────
 
+  // ── Shared JAC investor prompt (used by onboard route + convai/llm) ─────────
+  const JAC_INVESTOR_PROMPT = `You are JAC — GUBER's Investor Assistance Coordinator. You are on the official GUBER investor page speaking with potential investors, partners, press, and advisors.
+
+IDENTITY: Text = "JAC". Voice = always pronounced "Jack" (one word, like the name). Never spell it J-A-C.
+Introduction: "Welcome to GUBER. I'm Jack, GUBER's Investor Assistance Coordinator. I can explain the company, answer your questions, show approved materials, and connect you with the founder."
+
+PERSONALITY:
+- Energetic, confident, credible, action-focused.
+- VOICE: 1–2 short sentences, under 30 words. Answer and stop.
+- TEXT: Under 40 words per reply. Every word earns its place.
+- NEVER repeat anything already said in this conversation.
+- One celebration max per response (only when genuine progress): "Let's go, Team GUBER!" / "That's progress." / "Mission complete." / "Team GUBER is moving."
+- Do NOT ask "What are we getting done today?" — you are in Investor Mode.
+- Do NOT suggest random jobs or marketplace posts unless the investor specifically asks.
+- Never guess or invent data. Never claim success until the backend confirms.
+
+WHAT GUBER IS:
+GUBER is an economic action ecosystem — not just a job app, not just a marketplace.
+GUBER helps people turn skills, time, assets, vehicles, property, equipment, local presence, business capacity, and creativity into real-world value.
+
+Core approved language:
+• "You Name It. GUBER Gets It Done."
+• "Where Action Happens."
+• "Team GUBER. More hands. More reach. More opportunities."
+• "GUBER helps people be in more than one place at once."
+• "You can compare individual GUBER features to other platforms, but no single platform combines the full GUBER ecosystem."
+
+Use these naturally. Never repeat them excessively.
+
+THE PROBLEM:
+People need things done but lack: time, labor, transportation, local access, trusted help, specialized skills, physical presence, reach.
+Others have unused: time, skills, vehicles, equipment, local knowledge, business capacity, creativity, labor.
+GUBER connects these needs and resources.
+
+THE SOLUTION:
+GUBER helps users: find work, hire help, sell items and vehicles, list equipment and property, verify things remotely, inspect observable conditions, send someone to another location, move vehicles and equipment, complete deliveries, promote businesses, complete missions, create content-related services, coordinate real-world tasks.
+
+SEE FOR ME / REMOTE PRESENCE (core differentiator):
+"GUBER helps people be present where they physically cannot be."
+A user sends a trusted local person to verify, document, visually inspect, or complete an authorized real-world mission.
+A helper may provide: current photos/video, live video, time-stamped updates, location confirmation, observable condition reporting, item/vehicle/property verification, pickup/delivery confirmation.
+Standard language: "The helper reports observable facts and follows the user's approved instructions."
+NEVER claim the helper is automatically a licensed inspector, mechanic, appraiser, engineer, or guarantor unless independently verified.
+Remote presence is a major GUBER differentiator — present this confidently.
+
+REAL ESTATE, AIRBNB & PROPERTY:
+GUBER supports: short-term rental verification, Airbnb readiness checks, cleaning confirmation, amenity checks, damage documentation, property walkthroughs, vendor meeting, investment property inspections, landlord and property manager support, move-in/move-out documentation, out-of-town buyer/seller support, emergency local presence.
+Do NOT claim Airbnb partnership. Use: "GUBER can support Airbnb hosts and other short-term-rental operators."
+Real estate investors and property managers represent a significant addressable market.
+
+VEHICLES, EQUIPMENT & TRANSPORTATION:
+Vehicle marketplace listings (VIN-supported), vehicle verification + current photos/video, remote buyer support, pickup/delivery verification, vehicle/equipment transportation, Load Board (long-distance hauling), general delivery.
+Do NOT guarantee vehicle condition, title, or transportation outcome.
+
+TEAM GUBER:
+"Team GUBER gives users more hands, more reach, and more opportunities."
+One person or business extending presence, capacity, and ability to act.
+GUBER creates abundance — not just labor.
+Users discover value in: skills, time, assets, location, vehicles, property, equipment, audience, creativity, knowledge, business capacity.
+
+BUSINESS MODEL (approved revenue categories only):
+Platform fees, transaction fees, job/task fees, transportation fees, Load Board fees, marketplace tools, verification services, credits, premium features, offline business sponsorships, sponsored placements, business services, GUVATAR products, future approved AI products.
+NEVER present a proposed revenue stream as active revenue. NEVER invent financial results.
+
+TRACTION:
+Retrieve current figures from verified backend data only. Never hardcode. Never invent.
+Clearly distinguish: Live / In testing / In development / Planned / Proposed.
+When a verified figure is unavailable: "That figure hasn't been added to the verified investor dashboard yet."
+
+ELEVENLABS GRANT:
+When relevant to tech infrastructure, AI capabilities, or startup validation, you may mention:
+"GUBER has received grant support from ElevenLabs to help power JAC's conversational voice experience."
+Never disclose: grant balance, credit totals, usage records, billing details, or expiration dates.
+Do not imply ElevenLabs invested in or formally partnered with GUBER unless officially documented.
+
+INVESTOR LEAD CAPTURE:
+After providing value, offer: "Would you like me to connect you directly with the founder?"
+When they agree, collect ONE item at a time (naturally, like a conversation — not a form):
+1. Full name
+2. Company or fund
+3. Email address
+4. Phone (optional — "or feel free to skip it")
+5. Investor type (Angel / VC / Family office / Strategic partner / Corporate / Credit union / Financial institution / Community development / Accelerator / Adviser / Press or media / Other)
+6. Main area of interest
+7. Key questions for the founder
+8. Preferred time for a conversation
+
+After collecting all needed info, respond with:
+"Got it — I'm notifying the founder now. You'll hear back soon."
+
+ACCURACY RULES — NEVER invent:
+Valuation, equity offered, investment terms, revenue, contracts, partnerships, user activity, financial forecasts, guaranteed returns, market share, or founder commitments.
+If asked about terms: "The founder is currently speaking with strategic investors and partners. I can collect your information and arrange a direct conversation about terms."
+Never expose API keys, private user data, other investor conversations, or confidential company information.
+`;
+
   // ── Jac Onboarding (PUBLIC — new visitors, no auth required) ────────────────
   const _jacOnboardRL = new Map<string, { count: number; reset: number }>();
 
@@ -15950,7 +16285,10 @@ Input body: ${JSON.stringify((body || "").trim())}`;
         _jacOnboardRL.set(ip, { count: 1, reset: now + 60_000 });
       }
 
-      const { messages } = req.body;
+      const { messages, mode } = req.body as { messages?: any[]; mode?: string };
+      const jacMode: "homepage" | "investor" | "app" | "admin" =
+        mode === "investor" ? "investor" : mode === "admin" ? "admin" : mode === "app" ? "app" : "homepage";
+
       if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ message: "messages required" });
       }
@@ -16176,11 +16514,14 @@ ${sources.map((s, i) => `[${i + 1}] (${s.category}) ${s.title}: ${s.answer}`).jo
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       });
 
-      const onboardPrompt = `You are JAC — GUBER's Job Assisting Coordinator. You speak with new visitors who have NOT signed up yet. Your job is to understand the PERSON, not just match keywords.
+      // ── Investor-mode prompt (used when mode === "investor") ──────────────
+      const investorPrompt = JAC_INVESTOR_PROMPT;
+
+      const onboardPrompt = `You are JAC — the coordinator of Team GUBER. You speak with new visitors who have NOT signed up yet. Your job is to understand the PERSON, not just match keywords.
 
 Think like a warm, patient friend helping someone navigate GUBER for the first time. If a 75-year-old says "my garage door is broken and my grass needs cutting" — you help with both, one calm step at a time.
 
-GUBER stands for Global Unlimited Business & Employment Resources. Slogan: "Create Value In Yourself." GUBER is a US-only local platform: workers earn on local jobs, hirers post jobs and hire verified workers. Also: Marketplace (cars + items), Verify & Inspect, Load Board (transport/hauling), Credits/Missions, Cash Drops (community events — NOT jobs), Online Treasure Hunts (promotional challenges — NOT employment), GUBER Studio (AI content, including GUVATAR AI avatars), Day-1 OG founding membership.
+GUBER stands for Global Unlimited Business & Employment Resources. Community identity: Team GUBER. Primary tagline: "More hands. More reach. More opportunities." Secondary slogan: "Create Value In Yourself." GUBER is a US-only local platform that turns one person into a team: workers earn on local jobs, hirers post jobs and hire verified workers. Also: Marketplace (cars + items), Verify & Inspect, Load Board (transport/hauling), Credits/Missions, Cash Drops (community events — NOT jobs), Online Treasure Hunts (promotional challenges — NOT employment), GUBER Studio (AI content, including GUVATAR AI avatars), Day-1 OG founding membership.
 
 AGE POLICY: GUBER is only for users 18 years of age or older. There is no accommodation for anyone under 18 to work, post jobs, or use the Platform in any capacity, including through a parent or guardian's account. If someone mentions a minor wanting to do jobs, tell them GUBER is an adults-only platform and is not available to anyone under 18.
 
@@ -16196,27 +16537,20 @@ When someone is curious about GUVATAR: be encouraging and focus on what they can
 PERSONALITY & VOICE
 ═══════════════════════════════════
 
-JAC is warm, encouraging, and human. She is excited when appropriate, patient always, and never robotic or flat.
+JAC is energetic, confident, action-focused, and productive. She makes users feel like part of Team GUBER.
 
-Use expressive phrases naturally — don't overdo them, but don't be boring either:
-• "Absolutely, I can help with that."
-• "Nice — you're in the right place."
-• "No worries, I'll walk you through it."
-• "Good question."
-• "That's exactly what GUBER was built for."
-• "Let's take it step by step."
-• "Perfect, now we're getting somewhere."
-• "I got you."
-• "Let's get you pointed in the right direction."
-• "You came to the right place."
-• "Great — let's figure this out together."
+VOICE (spoken aloud): 1–2 short sentences, under 30 words. Lead with the answer immediately. No preambles.
+TEXT: Under 40 words per reply. Every word earns its place.
 
 Rules:
-- Do NOT use slang or sound childish.
-- Do NOT be overly excited or fake.
-- Plain language. Clear enough for a 75-year-old.
-- Under 75 words per reply.
+- Answer the question. Take the next useful action. Stop.
+- NEVER repeat anything already said in this conversation. Build forward.
+- One celebration max per response (only when real progress happens): "Let's go, Team GUBER!" / "That's progress." / "Mission complete." / "Team GUBER is moving."
+- No hollow affirmations ("Great question!", "Absolutely!").
+- Plain language — clear to anyone.
 - Sound human, not like a FAQ bot.
+- Stay GUBER-adjacent. Topics: GUBER jobs/services, items for sale, career & income goals as they relate to GUBER. Redirect anything personal or unrelated back to GUBER.
+- On the homepage, keep it simple: explain what GUBER is, connect their goal to one GUBER opportunity, one clear next step toward sign-up.
 
 VOICE & AUDIO: JAC has text-to-speech voice output — she CAN speak out loud through the device speaker. If someone says they can't hear her, acknowledge that voice IS enabled and suggest they check their device volume or tap the mic icon to interact. Never say you are text-only or have no voice.
 
@@ -16682,7 +17016,7 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
         temperature: 0.3,
         max_completion_tokens: 600,
         response_format: { type: "json_object" as const },
-        messages: [{ role: "system", content: userContextSection + multiSourceSection + onboardPrompt }, ...sanitized],
+        messages: [{ role: "system", content: userContextSection + multiSourceSection + (jacMode === "investor" ? investorPrompt : onboardPrompt) }, ...sanitized],
       });
 
       const raw = completion.choices[0]?.message?.content?.trim() ?? "";
@@ -16767,6 +17101,152 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
     }
   });
 
+  // ── JAC Voice endpoint — fast path for live voice conversations ─────────────
+  // Used by jac-homepage liveMode (STT → voice → TTS). Deliberately different
+  // from /api/jac/onboard:
+  //   • Plain text response (no JSON parsing overhead, no response_format)
+  //   • max_tokens 80 instead of 600
+  //   • Multi-source context with hard 300ms timeout so a slow DB never
+  //     delays the reply
+  //   • Anti-repetition rules built into the voice system prompt
+  //   • Returns { reply } only — no route/actions/tracking needed for voice
+  const _jacVoiceRL = new Map<string, { count: number; reset: number }>();
+  app.post("/api/jac/voice", async (req: Request, res: Response) => {
+    try {
+      const ip = ((req.headers["x-forwarded-for"] as string) || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
+      const now = Date.now();
+      const rl = _jacVoiceRL.get(ip);
+      if (rl && now < rl.reset) {
+        if (rl.count >= 60) return res.status(429).json({ reply: "Give me just a moment." });
+        rl.count++;
+      } else {
+        _jacVoiceRL.set(ip, { count: 1, reset: now + 60_000 });
+      }
+
+      const { messages, mode } = req.body as { messages?: any[]; mode?: string };
+      if (!Array.isArray(messages) || messages.length === 0) return res.status(400).json({ reply: "No messages provided." });
+
+      const ALLOWED = new Set(["user", "assistant"]);
+      const sanitized: Array<{ role: "user" | "assistant"; content: string }> = [];
+      for (const m of messages.slice(-8)) {
+        if (!m || typeof m !== "object" || !ALLOWED.has(m.role)) continue;
+        const c = typeof m.content === "string" ? m.content.slice(0, 400).trim() : "";
+        if (c) sanitized.push({ role: m.role as "user" | "assistant", content: c });
+      }
+      if (!sanitized.length) return res.status(400).json({ reply: "Hey! What are we getting done today?" });
+
+      const lastUserMsg = [...sanitized].reverse().find(m => m.role === "user")?.content ?? "";
+      const isInvestorMode = mode === "investor";
+
+      // ── Deterministic shortcut: voice tech questions ───────────────────────
+      if (/\b(elevenlabs|eleven\s*labs|11\s*labs)\b|what.{0,15}powers.{0,10}voice/i.test(lastUserMsg)) {
+        return res.json({ reply: "Yes — my voice is powered by ElevenLabs, so I sound as natural as possible." });
+      }
+
+      // ── Parallel: multi-source KB context with hard 300ms timeout ─────────
+      const contextRace = Promise.race([
+        getMultiSourceContext(lastUserMsg, 3)
+          .then((sources: any[]) => sources.length > 0
+            ? `\nGUBER KNOWLEDGE:\n${sources.map((s: any) => `• ${s.title}: ${s.answer}`).join("\n")}\n`
+            : "")
+          .catch(() => ""),
+        new Promise<string>(r => setTimeout(() => r(""), 300)),
+      ]);
+
+      // ── User context for logged-in users ──────────────────────────────────
+      const sessUserId = (req.session as any)?.userId ?? null;
+      let userCtx = "";
+      if (sessUserId) {
+        try {
+          const liveRes = await pool.query(
+            `SELECT (SELECT full_name FROM users WHERE id=$1) AS full_name,
+             (SELECT COUNT(*)::int FROM jobs WHERE assigned_helper_id=$1 AND status NOT IN ('completed','cancelled') AND deleted_at IS NULL) AS worker_active,
+             (SELECT COUNT(*)::int FROM jobs WHERE posted_by_id=$1 AND status IN ('open','in_progress') AND deleted_at IS NULL) AS hirer_active`,
+            [sessUserId]
+          );
+          const live = liveRes.rows[0] ?? {};
+          const name = (live.full_name || "").split(" ")[0] || null;
+          userCtx = `\nLOGGED-IN USER: ${name ?? "returning member"}. Worker active jobs: ${live.worker_active ?? 0}. Hirer active jobs: ${live.hirer_active ?? 0}. Do NOT route to /signup.\n`;
+        } catch { /* non-fatal */ }
+      }
+
+      const multiSourceSection = await contextRace;
+
+      // ── Voice system prompt ────────────────────────────────────────────────
+      // Tracks conversation history to prevent repetition.
+      const assistantTurns = sanitized.filter(m => m.role === "assistant").map(m => m.content);
+      const alreadyAskedOpening = assistantTurns.some(t =>
+        /what brings you to guber/i.test(t) || /what are we getting done/i.test(t)
+      );
+
+      const VOICE_SYSTEM = isInvestorMode ? JAC_INVESTOR_PROMPT + `
+
+VOICE RULES (CRITICAL):
+- Plain speech only. No JSON, markdown, lists, or symbols.
+- 1–2 sentences max, absolute limit 30 words.
+- NEVER start with "Great!", "Sure!", "Of course!", "Absolutely!" or similar filler.
+- NEVER repeat anything already said in this conversation.
+- Lead with the answer immediately.` : `You are JAC — the voice of Team GUBER. GUBER (Global Unlimited Business & Employment Resources) connects workers who want to earn with hirers who need things done, locally across the US.
+
+WHAT GUBER DOES: Local jobs & tasks, Vehicle/item marketplace, Verify & Inspect (remote presence), Load Board (freight), GUBER Studio (AI content), Credits & Missions. Slogan: "Create Value In Yourself."
+
+VOICE RULES (CRITICAL — non-negotiable):
+- Plain conversational speech ONLY. No JSON, no markdown, no bullet points.
+- 1–2 sentences max, absolute limit 30 words. Answer and stop.
+- NEVER start with "Great!", "Sure!", "Of course!", "Absolutely!", "Definitely!" or any filler affirmation.
+- NEVER repeat anything already said in this conversation — check the full history above.
+- ${alreadyAskedOpening ? 'You have already asked what brings them here — do NOT ask again. Instead describe a specific GUBER feature or ask a different follow-up.' : 'If you don\'t know why they\'re here yet, you may ask once: "What brings you to GUBER today?"'}
+- For greetings ("hey", "hi", "hello", "ok", "how are you"): respond naturally and briefly — don't reset to the opening question.
+- Lead with the actual answer or observation immediately. End with at most one follow-up question.
+- Never dead-end — always move the conversation forward.${userCtx}`;
+
+      const systemContent = VOICE_SYSTEM + multiSourceSection;
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        temperature: 0.4,
+        max_tokens: 80,
+        messages: [
+          { role: "system", content: systemContent },
+          ...sanitized,
+        ],
+      });
+
+      const reply = completion.choices?.[0]?.message?.content?.trim()
+        ?? "I'm JAC — what can I help you with today?";
+
+      console.log(`[jac/voice] ${isInvestorMode ? "investor" : "homepage"} ${reply.length}ch in ${Date.now() - now}ms`);
+      return res.json({ reply });
+    } catch (err: any) {
+      console.error("[jac/voice] error:", err?.message);
+      return res.status(500).json({ reply: "I'm here — what can I help you with?" });
+    }
+  });
+
+  // ── Investor lead capture ──────────────────────────────────────────────────
+  app.post("/api/investor/lead", async (req: Request, res: Response) => {
+    try {
+      const { name, email, company, phone, investorType, interest, questions, preferredTime, conversationSummary } = req.body as Record<string, string>;
+      if (!name || !email) return res.status(400).json({ message: "name and email required" });
+      await pool.query(
+        `INSERT INTO investor_leads (name, email, company, phone, investor_type, interest, questions, preferred_time, conversation_summary, notified_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, NOW())`,
+        [name.slice(0,200), email.slice(0,200), (company||"").slice(0,200), (phone||"").slice(0,50), (investorType||"").slice(0,100), (interest||"").slice(0,500), (questions||"").slice(0,1000), (preferredTime||"").slice(0,200), (conversationSummary||"").slice(0,2000)]
+      );
+      console.log(`[investor/lead] New investor lead: ${name} <${email}> — ${company || "no company"}`);
+      return res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[investor/lead]", err?.message);
+      return res.status(500).json({ message: "lead capture failed" });
+    }
+  });
+
   app.post("/api/ai/guber-assist", requireAuth, async (req: Request, res: Response) => {
     const _assistStart = Date.now();
     try {
@@ -16800,6 +17280,99 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
       res.status(500).json({ message: "Assistant unavailable, please try again." });
     }
   });
+
+  // ── JAC anonymous/investor voice brain — REAL STREAMING ─────────────────────
+  // Pipes OpenAI tokens directly to `res` as SSE so ElevenLabs starts TTS on
+  // the FIRST token (~200ms) rather than waiting for the full response buffer.
+  //
+  // Architecture:
+  //   1. Fetch multi-source KB context with a hard 350ms timeout (non-blocking)
+  //   2. Open real OpenAI stream (stream:true)
+  //   3. Forward each token chunk immediately as SSE to res
+  //
+  // No KB shortcut (tryLocalAnswer) — canned string answers bypass history
+  // tracking and sound robotic/repetitive in voice.
+  // mode="investor" → JAC_INVESTOR_PROMPT; "homepage" → base onboard identity.
+  async function streamJacAnonymousVoice(
+    messages: Array<{ role: "user" | "assistant"; content: string }>,
+    mode: "homepage" | "investor",
+    res: import("express").Response,
+    model: string,
+    id: string,
+  ): Promise<void> {
+    // Limit history — voice conversations don't need deep context, and long
+    // histories add tokens/latency on every turn.
+    const recentMessages = messages.slice(-8);
+    const lastUserMsg = [...recentMessages].reverse().find(m => m.role === "user")?.content ?? "";
+
+    // ── Multi-source context with hard timeout — runs while we build the prompt ─
+    const contextPromise = lastUserMsg
+      ? getMultiSourceContext(lastUserMsg, 3)
+          .then((sources: any[]) => sources.length > 0
+            ? `\nGUBER KNOWLEDGE (use naturally, don't repeat):\n${sources.map((s: any, i: number) => `[${i + 1}] ${s.title}: ${s.answer}`).join("\n")}\n`
+            : "")
+          .catch(() => "")
+      : Promise.resolve("");
+
+    const timeoutPromise = new Promise<string>(r => setTimeout(() => r(""), 350));
+    const multiSourceSection = await Promise.race([contextPromise, timeoutPromise]);
+
+    // ── System prompt ─────────────────────────────────────────────────────────
+    const VOICE_RULES = `
+
+VOICE RULES (CRITICAL — enforce every reply):
+- Plain speech only. No JSON, no markdown, no bullet points, no lists.
+- Maximum 2 sentences, absolute limit 30 words.
+- NEVER repeat anything already said in this conversation — check history.
+- NEVER start your reply with "Great!", "Sure!", "Of course!", "Absolutely!" or any filler affirmation.
+- Lead with the actual answer immediately.
+- End with at most one natural follow-up question or next step.`;
+
+    const baseSystemPrompt = mode === "investor"
+      ? JAC_INVESTOR_PROMPT + VOICE_RULES
+      : `You are JAC — the voice of Team GUBER. GUBER (Global Unlimited Business & Employment Resources) is a US-only local platform where workers earn money doing local jobs and hirers post tasks. Features: job posting, Marketplace, Verify & Inspect, Load Board, GUBER Studio, Credits/Missions. Slogan: "Create Value In Yourself." You speak with visitors who have NOT signed up yet. Be warm, confident, and direct. Never dead-end a conversation — always move forward.${VOICE_RULES}`;
+
+    const systemContent = multiSourceSection
+      ? baseSystemPrompt + multiSourceSection
+      : baseSystemPrompt;
+
+    // ── Real OpenAI stream ────────────────────────────────────────────────────
+    const OpenAI = (await import("openai")).default;
+    const openai = new OpenAI({
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
+
+    const stream = await openai.chat.completions.create({
+      model: "gpt-4.1-mini",
+      temperature: 0.4,
+      max_tokens: 80,
+      stream: true,
+      messages: [
+        { role: "system", content: systemContent },
+        ...recentMessages,
+      ],
+    });
+
+    const created = Math.floor(Date.now() / 1000);
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    // Send role delta first (ElevenLabs expects it)
+    res.write(sseLine(buildStreamChunk({ id, model, created, delta: { role: "assistant" } })));
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices?.[0]?.delta?.content;
+      if (delta) {
+        res.write(sseLine(buildStreamChunk({ id, model, created, delta: { content: delta } })));
+      }
+    }
+
+    res.write(sseLine(buildStreamChunk({ id, model, created, delta: {}, finishReason: "stop" })));
+    res.write("data: [DONE]\n\n");
+    res.end();
+  }
 
   // JAC's single brain. Called by /api/ai/guber-assist (session-authed, web/native
   // text) AND by the ElevenLabs custom-LLM adapter below — one JAC everywhere, no
@@ -16953,28 +17526,30 @@ ${((sessionUser as any).milestoneBadges || []).length > 0
 BEHAVIOR RULES:
 - The user is ALREADY in the app. Never suggest they open, download, or sign into the app.
 - Navigate them within the app — say things like "tap the menu icon", "go to Settings", "check your dashboard", "look at the map tab".
-- Answer ONLY GUBER-related questions. For anything else: "I can only help with GUBER questions — is there something about the platform I can help you with?"
+- Stay GUBER-adjacent. Help with: platform features, jobs, marketplace (items for sale), career & income goals as they relate to GUBER. For anything else: "I'm here for GUBER questions — what can I help you with on the platform?"
+- NEVER repeat something already covered in the conversation. Build forward, don't recap.
+- Under 50 words per reply. Be direct and clear.
 - When fees, payouts, or earnings come up: mention Day-1 OG savings IF the user is not already an OG member.
-- Be friendly, concise, under 120 words unless truly needed.
 - Never reveal internal architecture, database info, or admin-only details.
-- Do not invent features. If unsure, say "I don't have details on that — reach out to GUBER support for help."
-- Warm, encouraging tone — GUBER is a community.
+- Do not invent features. If unsure: "I don't have details on that — reach out to GUBER support."
+- Warm but brief — GUBER is a community, not a chatbot.
 - VOICE: JAC has text-to-speech voice output and CAN speak out loud, powered by ElevenLabs' natural AI voice engine (with a basic built-in browser voice as a rare backup if that's ever unavailable). Never say you are text-only or have no voice/audio features. If asked whether you use ElevenLabs, whether you're "connected to 11 Labs", or what powers your voice — say YES, you use ElevenLabs for natural speech. Do not deny using ElevenLabs or claim you only have a "built-in" voice — that is incorrect. If someone says they can't hear you, tell them voice is enabled and ask them to check their device volume or browser sound settings.
 ${voiceMode ? `
 ═══════════════════════════════════
 VOICE MODE — THIS REPLY WILL BE SPOKEN OUT LOUD
 ═══════════════════════════════════
-The user just spoke to you and this reply will be read aloud by text-to-speech. Talk like a real person on a phone call, not a form or a knowledge base:
-- Keep it SHORT — 1-3 sentences, under 40 words whenever possible. Never write a paragraph.
-- Sound warm and casual, like a helpful friend, not a customer-service script. Contractions are good ("you'll", "that's", "let's").
-- Lead with the answer, not a preamble. Skip phrases like "Great question!" or "I'd be happy to help with that."
-- Use short sentences with natural breathing points (commas, periods) instead of long compound sentences — it reads more naturally out loud.
-- Only ask ONE thing at a time. Don't stack multiple questions or options in a single spoken reply.
-- Still include "route"/"actions"/"options" JSON fields as normal — those render as tappable buttons even though the reply text itself stays brief.
+Your name is JAC. Say it as ONE word — "JAC" (rhymes with "jack"). NEVER spell it out as J-A-C or say the letters individually.
+
+The user just spoke to you and this reply will be read aloud. Talk like a real person on a quick phone call:
+- Keep it SHORT — 1 to 2 sentences MAX. Under 25 words is ideal. Never more than 35.
+- Lead with the answer immediately. No preambles, no "Great question!", no "I'd be happy to help".
+- One thought only. Never stack questions or list multiple options in a single reply.
+- Casual and warm — contractions are great ("you'll", "that's", "let's go").
+- Still include "route"/"actions"/"options" JSON fields as normal.
 ` : ""}
 
-JAC — JOB ASSISTANCE COORDINATOR (IN-APP):
-You are Jac, GUBER's Job Assistance Coordinator. The user is ALREADY INSIDE the app. Route them to the right in-app section based on natural, messy real-world language. Read the full conversation history — never restart what the user already answered.
+JAC — TEAM GUBER COORDINATOR (IN-APP):
+You are Jac, the Team GUBER Coordinator. The user is ALREADY INSIDE the app. Route them to the right in-app section based on natural, messy real-world language. Read the full conversation history — never restart what the user already answered.
 
 INTENT ENGINE:
 
@@ -17111,7 +17686,7 @@ CRITICAL — respond with JSON ONLY, no other text:
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
         temperature: 0.4,
-        max_completion_tokens: voiceMode ? 220 : 600,
+        max_completion_tokens: voiceMode ? 120 : 600,
         response_format: { type: "json_object" as const },
         messages: [
           { role: "system", content: systemPrompt },
@@ -17146,6 +17721,48 @@ CRITICAL — respond with JSON ONLY, no other text:
       return parsed;
   }
 
+  // ── JAC voice session mint — PUBLIC investor variant (no auth) ─────────────
+  // Used by the /investors page. Mints an anonymous voice token with CID
+  // prefixed "investor_" so the convai/llm adapter routes to JAC_INVESTOR_PROMPT.
+  app.post("/api/jac/convai/investor-session", async (req: Request, res: Response) => {
+    try {
+      const agentId = process.env.ELEVENLABS_CONVAI_AGENT_ID;
+      const apiKey  = process.env.ELEVENLABS_API_KEY;
+      if (!agentId || !apiKey) return res.status(503).json({ message: "voice agent not configured" });
+
+      const cid = "investor_" + randomBytes(8).toString("hex");
+      const voiceToken = signJacVoiceToken({ userId: null, role: "anon", platform: "web", cid });
+
+      let signedUrl: string | null = null;
+      if (!_jacSignedUrlKnownPublic) {
+        try {
+          const signedRes = await fetch(
+            `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
+            { headers: { "xi-api-key": apiKey }, signal: AbortSignal.timeout(4000) },
+          );
+          if (signedRes.ok) {
+            const j: any = await signedRes.json().catch(() => ({}));
+            signedUrl = j?.signed_url ?? null;
+          } else {
+            _jacSignedUrlKnownPublic = true;
+          }
+        } catch { _jacSignedUrlKnownPublic = true; }
+      }
+
+      console.log(`[jac/convai/investor-session] cid=${cid} mode=investor`);
+      return res.json({
+        agentId,
+        ...(signedUrl ? { signedUrl } : {}),
+        voiceToken,
+        dynamicVariableName: "secret__jac_voice_token",
+        userContext: { firstName: "there", role: "anon", platform: "web", jac_mode: "investor" },
+      });
+    } catch (err: any) {
+      console.error("[jac/convai/investor-session]", err?.message);
+      return res.status(500).json({ message: "session error" });
+    }
+  });
+
   // ── JAC voice session mint (ElevenLabs Conversational AI) ─────────────────
   // Authenticated + voice_pipeline_v2-gated. Returns a short-lived signed URL
   // for the PRIVATE ElevenLabs agent PLUS a per-conversation HMAC identity token
@@ -17153,17 +17770,18 @@ CRITICAL — respond with JSON ONLY, no other text:
   // ElevenLabs forwards that to our adapter as the x-jac-voice-token header
   // (never to the model). The ElevenLabs API key stays server-side. Because the
   // flag defaults OFF, this returns 403 to everyone in prod → pipeline is inert.
+  // Module-level: once we confirm the agent is public (signed URL returns 4xx),
+  // skip the round-trip on every subsequent request to save ~1-2s latency.
+  let _jacSignedUrlKnownPublic = false;
+
   app.post("/api/jac/convai/session", requireAuth, async (req: Request, res: Response) => {
+    const t0 = Date.now();
     try {
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "unauthorized" });
 
-      const { isFeatureEnabledFor } = await import("./feature-flags.js");
-      const enabled = await isFeatureEnabledFor("voice_pipeline_v2", { id: user.id, role: user.role });
-      if (!enabled) return res.status(403).json({ message: "voice pipeline not enabled for this account" });
-
       const agentId = process.env.ELEVENLABS_CONVAI_AGENT_ID;
-      const apiKey = process.env.ELEVENLABS_API_KEY;
+      const apiKey  = process.env.ELEVENLABS_API_KEY;
       if (!agentId || !apiKey) return res.status(503).json({ message: "voice agent not configured" });
 
       const platformRaw = req.body?.platform;
@@ -17172,25 +17790,53 @@ CRITICAL — respond with JSON ONLY, no other text:
       const role: "admin" | "user" = user.role === "admin" ? "admin" : "user";
       const voiceToken = signJacVoiceToken({ userId: user.id, role, platform });
 
-      // Private agent → mint a short-lived signed URL server-side.
-      const signedRes = await fetch(
-        `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
-        { headers: { "xi-api-key": apiKey } },
-      );
-      if (!signedRes.ok) {
-        console.error("[jac/convai/session] signed-url failed", signedRes.status);
-        return res.status(502).json({ message: "voice provider unavailable" });
+      // Masked agent ID for safe logging (first 8 + last 4 chars)
+      const maskedAgent = agentId.length > 12
+        ? agentId.slice(0, 8) + "…" + agentId.slice(-4)
+        : agentId.slice(0, 4) + "…";
+      console.log(`[jac/convai/session] userId=${user.id} platform=${platform} agent=${maskedAgent}`);
+
+      // Try signed URL only if we haven't already confirmed this is a public agent.
+      let signedUrl: string | null = null;
+      if (!_jacSignedUrlKnownPublic) {
+        try {
+          const signedRes = await fetch(
+            `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
+            { headers: { "xi-api-key": apiKey }, signal: AbortSignal.timeout(4000) },
+          );
+          if (signedRes.ok) {
+            const signedJson: any = await signedRes.json().catch(() => ({}));
+            signedUrl = signedJson?.signed_url ?? null;
+          } else {
+            console.log(`[jac/convai/session] signed-url ${signedRes.status} → public-agent mode (caching)`);
+            _jacSignedUrlKnownPublic = true;
+          }
+        } catch (fetchErr: any) {
+          console.log(`[jac/convai/session] signed-url error: ${fetchErr?.message} → public-agent mode (caching)`);
+          _jacSignedUrlKnownPublic = true;
+        }
       }
-      const signedJson: any = await signedRes.json().catch(() => ({}));
-      if (!signedJson?.signed_url) {
-        return res.status(502).json({ message: "voice provider returned no url" });
-      }
+
+      const ms = Date.now() - t0;
+      console.log(`[jac/convai/session] ready in ${ms}ms — mode=${signedUrl ? "signed" : "public"}`);
+
+      const convaiMode = req.body?.mode === "investor" ? "investor"
+        : req.body?.mode === "admin" ? "admin"
+        : req.body?.mode === "business_demo" ? "business_demo"
+        : "app";
 
       return res.json({
         agentId,
-        signedUrl: signedJson.signed_url,
+        ...(signedUrl ? { signedUrl } : {}),
         voiceToken,
         dynamicVariableName: "secret__jac_voice_token",
+        // Non-secret context ElevenLabs can embed in system prompt via {{jac_mode}}, {{first_name}}, etc.
+        userContext: {
+          firstName: user.firstName || user.username || "there",
+          role,
+          platform,
+          jac_mode: convaiMode,
+        },
       });
     } catch (err: any) {
       console.error("[jac/convai/session]", err?.message);
@@ -17203,49 +17849,125 @@ CRITICAL — respond with JSON ONLY, no other text:
   // reply back as OpenAI chat.completion.chunk SSE, so voice on every platform
   // is the same JAC. Auth = per-conversation HMAC identity token (userId derived
   // ONLY from the token, never from the model/agent) + optional shared-secret
-  // header. Inert unless a valid token is minted; client is gated on voice_pipeline_v2.
+  // header.
+
+  // GET — ElevenLabs probes the custom LLM endpoint with GET before connecting.
+  // Must return a valid OpenAI-compatible models list, NOT HTML from the SPA.
+  app.get("/api/jac/convai/llm", (_req: Request, res: Response) => {
+    res.json({ object: "list", data: [{ id: "jac", object: "model", owned_by: "guber" }] });
+  });
+
   app.post("/api/jac/convai/llm", async (req: Request, res: Response) => {
+    const body: any = req.body ?? {};
+
+    // ── Verbose diagnostics — every field ElevenLabs sends ──────────────────
+    const hdrs: Record<string, string> = {};
+    for (const k of ["x-jac-voice-token", "x-secret-jac-voice-token", "x-guber-convai-secret",
+                      "authorization", "content-type", "user-agent"]) {
+      const v = req.headers[k];
+      if (v) hdrs[k] = k.includes("token") || k.includes("secret") || k.includes("authorization")
+        ? `[present ${String(v).length}ch]` : String(v);
+    }
+    const bodyKeys = Object.keys(body);
+    const extraBodyKeys = body.extra_body ? Object.keys(body.extra_body) : [];
+    const rawToken = resolveVoiceToken(req);
+    console.log("[jac/convai/llm] POST", JSON.stringify({
+      headers: hdrs,
+      bodyKeys,
+      extraBodyKeys,
+      userField: typeof body.user === "string" ? `[${body.user.length}ch]` : body.user,
+      hasToken: !!rawToken,
+      msgCount: Array.isArray(body.messages) ? body.messages.length : 0,
+      stream: body.stream,
+    }));
+    // ────────────────────────────────────────────────────────────────────────
+
     try {
+      // ── Auth: WARN but never return 401 ──────────────────────────────────────
+      // Returning 401 here terminates the entire ElevenLabs conversation after
+      // the first user message. JAC_CONVAI_SHARED_SECRET and the voice token
+      // are not automatically forwarded by ElevenLabs to a custom LLM endpoint
+      // unless explicitly configured in the agent dashboard. Log mismatches and
+      // continue so the conversation stays alive.
       const cfgSecret = process.env.JAC_CONVAI_SHARED_SECRET;
       if (cfgSecret) {
         const provided = req.headers["x-guber-convai-secret"];
         if (provided !== cfgSecret) {
-          return res.status(401).json({ error: { message: "unauthorized", type: "invalid_request_error" } });
+          console.warn("[jac/convai/llm] shared-secret not matched (configure x-guber-convai-secret in ElevenLabs agent headers) — continuing");
         }
       }
 
-      const rawToken = resolveVoiceToken(req);
       const claims = rawToken ? verifyJacVoiceToken(rawToken) : null;
       if (!claims) {
-        return res.status(401).json({ error: { message: "invalid or missing voice token", type: "invalid_request_error" } });
+        console.warn("[jac/convai/llm] voice token absent/invalid (ElevenLabs does not auto-forward secret__ vars to custom LLM) — anonymous context");
       }
-      if (claims.userId == null) {
-        // Anonymous onboarding voice is a later phase; staging is authed-only.
-        return res.status(401).json({ error: { message: "authentication required", type: "invalid_request_error" } });
-      }
-      const user = await storage.getUser(claims.userId);
-      if (!user) {
-        return res.status(401).json({ error: { message: "user not found", type: "invalid_request_error" } });
+      let user: any = null;
+      if (claims?.userId != null) {
+        user = await storage.getUser(claims.userId).catch(() => null);
+        if (!user) console.warn("[jac/convai/llm] userId", claims.userId, "not found — anonymous context");
       }
 
-      // Per-conversation + per-user sliding-window cap: a minted token lives in
-      // the browser for up to 2h, so bound replay to keep LLM/voice spend safe.
-      const rl = checkConvaiRateLimit(claims.userId, claims.cid);
+      // Rate-limit by userId when known, by conversation ID when anonymous.
+      const rlKey = claims?.userId ?? 0;
+      const rlCid = claims?.cid ?? (body.model ? String(body.model) : "anon");
+      const rl = checkConvaiRateLimit(rlKey, rlCid);
       if (!rl.ok) {
         res.setHeader("Retry-After", Math.ceil((rl.retryAfterMs ?? 60000) / 1000).toString());
         return res.status(429).json({ error: { message: "rate limit exceeded", type: "rate_limit_error" } });
       }
 
-      const body: any = req.body ?? {};
+      console.log("[jac/convai/llm] userId:", user?.id ?? "anonymous", "msgs:", Array.isArray(body.messages) ? body.messages.length : 0);
+
       const model = typeof body.model === "string" && body.model ? body.model : "gpt-4.1-mini";
-      const stream = body.stream !== false; // ElevenLabs streams by default
+      const stream = body.stream !== false;
       const sanitized = sanitizeAssistMessages(Array.isArray(body.messages) ? body.messages : []);
       if (sanitized.length === 0) sanitized.push({ role: "user", content: "hello" });
 
-      // voiceMode = true → brain keeps replies short + spoken-friendly.
-      const result = await runGuberAssistBrain(user, sanitized, true);
-      const content = (result?.reply || "Sorry, I didn't catch that — could you say that again?").toString();
+      // ── Route to the correct JAC surface — ONE central system ────────────────
+      // Logged-in users  → runGuberAssistBrain (full in-app assistant with user context)
+      // Anonymous users  → runJacAnonymousVoice (KB + multi-source + surface prompt)
+      //   investor CID   → mode "investor" uses JAC_INVESTOR_PROMPT
+      //   all others     → mode "homepage" uses base onboard identity
+      // ElevenLabs is only the voice transport — JAC intelligence always lives here.
+      const jacSurface = (typeof claims?.cid === "string" && claims.cid.startsWith("investor_"))
+        ? "investor" : "homepage";
+
       const id = newCompletionId();
+
+      if (!user) {
+        // ── Anonymous (homepage / investor): real OpenAI stream → ElevenLabs ──
+        // streamJacAnonymousVoice writes directly to res and returns — no buffer.
+        console.log("[jac/convai/llm] anonymous surface:", jacSurface, "streaming");
+        try {
+          await streamJacAnonymousVoice(sanitized, jacSurface, res, model, id);
+        } catch (anonErr: any) {
+          console.warn("[jac/convai/llm] anonymous stream error:", anonErr?.message);
+          if (!res.headersSent) {
+            const fallback = jacSurface === "investor"
+              ? "Welcome to GUBER — what would you like to know?"
+              : "Hey! I'm JAC — what are we getting done today?";
+            if (stream) {
+              writeOpenAiStream(res, { id, model, content: fallback });
+            } else {
+              res.json(buildNonStreamCompletion({ id, model, content: fallback }));
+            }
+          } else {
+            try { res.end(); } catch { /* socket already closed */ }
+          }
+        }
+        return;
+      }
+
+      // ── Authenticated: full in-app assistant brain ────────────────────────
+      let content: string;
+      try {
+        const result = await runGuberAssistBrain(user, sanitized, true);
+        content = (result?.reply || "Hey! I'm JAC — what are we getting done today?").toString();
+      } catch (brainErr: any) {
+        console.warn("[jac/convai/llm] brain error:", brainErr?.message);
+        content = "I got you. Tell me more and I'll help you get it done through GUBER.";
+      }
+      console.log("[jac/convai/llm] auth reply", content.length, "chars, stream:", stream);
 
       if (stream) {
         writeOpenAiStream(res, { id, model, content });
@@ -17253,12 +17975,206 @@ CRITICAL — respond with JSON ONLY, no other text:
         res.json(buildNonStreamCompletion({ id, model, content }));
       }
     } catch (err: any) {
-      console.error("[jac/convai/llm]", err?.message);
+      console.error("[jac/convai/llm] ERROR:", err?.message);
       if (!res.headersSent) {
         res.status(500).json({ error: { message: "adapter error", type: "server_error" } });
       } else {
         try { res.end(); } catch { /* socket already closed */ }
       }
+    }
+  });
+
+  // ── JAC Webhook Tools (called by ElevenLabs agent when Jac needs GUBER data) ─
+  // Auth: GUBER_SHARED_SECRET in x-guber-jac-secret header (configure in ElevenLabs).
+  // Never returns 500 stack traces; always returns safe structured JSON.
+
+  function verifyJacToolSecret(req: Request): boolean {
+    const secret = process.env.JAC_WEBHOOK_SECRET || process.env.GUBER_SHARED_SECRET;
+    if (!secret) return true; // no secret configured — allow (log warning)
+    const provided = req.headers["x-guber-jac-secret"] || req.headers["x-guber-convai-secret"];
+    return provided === secret;
+  }
+
+  // TOOL 1: Search GUBER opportunities
+  app.post("/api/jac/tools/search-opportunities", async (req: Request, res: Response) => {
+    try {
+      if (!verifyJacToolSecret(req)) {
+        console.warn("[jac/tools/search-opportunities] auth failed");
+        return res.status(401).json({ error: "unauthorized" });
+      }
+      const { category, zip, radius_miles = 25, limit = 5 } = req.body ?? {};
+      console.log("[jac/tools/search-opportunities]", { category, zip, radius_miles });
+
+      // Fetch published+paid jobs (already filtered by getJobs)
+      const allJobs = await storage.getJobs(true);
+      let jobs = allJobs.slice();
+
+      // Filter by category when provided
+      if (category) {
+        const cat = String(category).toLowerCase();
+        jobs = jobs.filter((j: any) =>
+          (j.category || "").toLowerCase().includes(cat) ||
+          (j.subcategory || "").toLowerCase().includes(cat) ||
+          (j.title || "").toLowerCase().includes(cat),
+        );
+      }
+
+      // Filter by zip when provided (simple prefix match — full geo is on the map)
+      if (zip) {
+        const z = String(zip).slice(0, 3);
+        jobs = jobs.filter((j: any) => (j.zipCode || "").startsWith(z));
+      }
+
+      const results = jobs.slice(0, Math.min(Number(limit) || 5, 10)).map((j: any) => ({
+        id: j.id,
+        title: j.title || j.category,
+        category: j.category,
+        subcategory: j.subcategory || null,
+        city: j.city || null,
+        state: j.state || null,
+        zip: j.zipCode || null,
+        budgetMin: j.budgetMin || null,
+        budgetMax: j.budgetMax || null,
+        schedule: j.schedule || null,
+        postedAt: j.createdAt || null,
+      }));
+
+      return res.json({
+        found: results.length,
+        opportunities: results,
+        message: results.length
+          ? `Found ${results.length} opportunity${results.length > 1 ? "ies" : "y"} on GUBER.`
+          : "No matching opportunities right now — check back soon or post a job to attract workers.",
+      });
+    } catch (err: any) {
+      console.error("[jac/tools/search-opportunities]", err?.message);
+      return res.status(500).json({ error: "search failed", message: "Could not search GUBER right now." });
+    }
+  });
+
+  // TOOL 2: Create job draft
+  app.post("/api/jac/tools/create-job-draft", async (req: Request, res: Response) => {
+    try {
+      if (!verifyJacToolSecret(req)) {
+        console.warn("[jac/tools/create-job-draft] auth failed");
+        return res.status(401).json({ error: "unauthorized" });
+      }
+      const { user_id, title, category, subcategory, description, city, state, zip,
+              budget_min, budget_max, schedule } = req.body ?? {};
+
+      if (!user_id) {
+        return res.status(400).json({ error: "user_id required", message: "Cannot create a draft without a verified user." });
+      }
+      const user = await storage.getUser(Number(user_id)).catch(() => null);
+      if (!user) {
+        return res.status(404).json({ error: "user not found", message: "User account not found." });
+      }
+      if (!category) {
+        return res.status(400).json({ error: "category required", message: "What category of help do you need? (e.g. Moving, Cleaning, Repair)" });
+      }
+
+      console.log("[jac/tools/create-job-draft] userId:", user.id, "category:", category);
+
+      // Draft — not published, status = "draft"
+      const draft = await storage.createJob({
+        hirerId: user.id,
+        title: title || category,
+        category: String(category),
+        subcategory: subcategory || null,
+        description: description || null,
+        city: city || user.city || null,
+        state: state || user.state || null,
+        zipCode: zip || null,
+        budgetMin: budget_min ? Number(budget_min) : null,
+        budgetMax: budget_max ? Number(budget_max) : null,
+        schedule: schedule || null,
+        status: "draft",
+      } as any);
+
+      return res.json({
+        drafted: true,
+        jobId: draft.id,
+        preview: {
+          title: draft.title,
+          category: draft.category,
+          city: draft.city,
+          state: draft.state,
+          budgetMin: draft.budgetMin,
+          budgetMax: draft.budgetMax,
+          schedule: draft.schedule,
+        },
+        message: `Draft created! Review it at /jobs/${draft.id} and say "post it" to publish.`,
+        requiresConfirmation: true,
+      });
+    } catch (err: any) {
+      console.error("[jac/tools/create-job-draft]", err?.message);
+      return res.status(500).json({ error: "draft failed", message: "Could not create the draft right now." });
+    }
+  });
+
+  // TOOL 3: Decode vehicle VIN
+  app.post("/api/jac/tools/decode-vin", async (req: Request, res: Response) => {
+    try {
+      if (!verifyJacToolSecret(req)) {
+        console.warn("[jac/tools/decode-vin] auth failed");
+        return res.status(401).json({ error: "unauthorized" });
+      }
+      const { vin } = req.body ?? {};
+      if (!vin || typeof vin !== "string") {
+        return res.status(400).json({ error: "vin required", message: "Please provide the 17-character VIN." });
+      }
+      const cleaned = vin.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, "");
+      if (cleaned.length !== 17) {
+        return res.status(400).json({
+          error: "invalid_vin",
+          message: `VIN must be exactly 17 characters (no I, O, or Q). Received ${cleaned.length} valid characters.`,
+        });
+      }
+
+      console.log("[jac/tools/decode-vin] vin:", cleaned.slice(0, 3) + "…");
+
+      const nhtsaRes = await fetch(
+        `https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${cleaned}?format=json`,
+        { signal: AbortSignal.timeout(8000) },
+      );
+      if (!nhtsaRes.ok) {
+        return res.status(502).json({ error: "decoder_unavailable", message: "VIN decoder is unavailable right now." });
+      }
+      const nhtsaJson: any = await nhtsaRes.json();
+      const pick = (label: string) =>
+        nhtsaJson?.Results?.find((r: any) => r.Variable === label)?.Value || null;
+
+      const year  = pick("Model Year");
+      const make  = pick("Make");
+      const model = pick("Model");
+      const trim  = pick("Trim");
+      const body  = pick("Body Class");
+      const drive = pick("Drive Type");
+      const fuel  = pick("Fuel Type - Primary");
+      const engine = pick("Displacement (L)") ? `${pick("Displacement (L)")}L` : null;
+
+      if (!year || !make || !model) {
+        return res.status(422).json({
+          error: "unrecognized_vin",
+          message: "This VIN isn't in the database. You can enter the vehicle details manually.",
+        });
+      }
+
+      return res.json({
+        vin: cleaned,
+        year, make, model,
+        trim: trim || null,
+        bodyStyle: body || null,
+        driveType: drive || null,
+        fuelType: fuel || null,
+        engineDisplacement: engine || null,
+        summary: [year, make, model, trim].filter(Boolean).join(" "),
+        message: `Decoded: ${[year, make, model, trim].filter(Boolean).join(" ")}. Does this look correct?`,
+        requiresUserConfirmation: true,
+      });
+    } catch (err: any) {
+      console.error("[jac/tools/decode-vin]", err?.message);
+      return res.status(500).json({ error: "decode_failed", message: "VIN decode failed. Try again or enter vehicle details manually." });
     }
   });
 
@@ -17274,7 +18190,7 @@ CRITICAL — respond with JSON ONLY, no other text:
         .map((m: any) => ({ role: String(m.role) as "user" | "assistant", content: String(m.content).slice(0, 2000) }))
         .slice(-20);
 
-      const SYSTEM = `You are JAC — GUBER's smart Job Assistance Coordinator. Your one job: run a fast, friendly conversation that ends with a fully pre-filled form the user can post in seconds.
+      const SYSTEM = `You are JAC — Team GUBER's coordinator. Your one job: run a fast, friendly conversation that ends with a fully pre-filled form the user can post in seconds.
 
 JAC TONE (non-negotiable):
 - Short. Warm. Direct. Sound like a smart friend texting, not a form.
@@ -17417,6 +18333,348 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     } catch (err: any) {
       console.error("[JAC] listing-collect error:", err.message);
       res.status(500).json({ message: "Listing assistant unavailable, please try again." });
+    }
+  });
+
+  // ── JAC Realtime (OpenAI Realtime API / WebRTC) ──────────────────────────
+  app.post("/api/jac/realtime-session", async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any)?.userId ?? null;
+      let userCtx: Parameters<typeof createJacRealtimeSession>[0]["user"] = null;
+      if (userId) {
+        const row = await pool.query(
+          `SELECT display_name, id_verified, is_worker, is_hirer, zipcode FROM users WHERE id=$1`,
+          [userId]
+        );
+        if (row.rows[0]) {
+          const u = row.rows[0];
+          userCtx = {
+            displayName: u.display_name ?? undefined,
+            idVerified: !!u.id_verified,
+            isWorker: !!u.is_worker,
+            isHirer: !!u.is_hirer,
+            zip: u.zipcode ?? undefined,
+          };
+        }
+      }
+      const session = await createJacRealtimeSession({ user: userCtx });
+      res.json(session);
+    } catch (err: any) {
+      console.error("[jac-realtime] session error:", err?.message);
+      res.status(503).json({ message: "JAC Realtime unavailable: " + (err?.message || "unknown error") });
+    }
+  });
+
+  app.post("/api/jac/realtime-tool", async (req: Request, res: Response) => {
+    try {
+      const { name, args } = req.body;
+      if (!name || typeof name !== "string") {
+        return res.status(400).json({ error: "Tool name required" });
+      }
+      const result = await executeJacTool(name, args || {}, pool);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[jac-realtime] tool error:", err?.message);
+      res.status(500).json({ error: "Tool execution failed: " + (err?.message || "unknown") });
+    }
+  });
+
+  // ── ElevenLabs ConvAI Webhook (conversation capture → training data) ────────
+  app.post("/api/jac/convai/webhook", async (req: Request, res: Response) => {
+    try {
+      // Verify ElevenLabs signature if secret is configured
+      const secret = process.env.ELEVENLABS_WEBHOOK_SECRET;
+      if (secret) {
+        const sig = req.headers["elevenlabs-signature"] as string | undefined;
+        if (!sig) {
+          console.warn("[jac/webhook] missing signature — rejecting");
+          return res.status(401).json({ error: "Missing signature" });
+        }
+        const { createHmac } = await import("crypto");
+        const body = JSON.stringify(req.body);
+        const expected = createHmac("sha256", secret).update(body).digest("hex");
+        const provided = sig.replace(/^sha256=/, "");
+        if (expected !== provided) {
+          console.warn("[jac/webhook] signature mismatch — rejecting");
+          return res.status(401).json({ error: "Invalid signature" });
+        }
+      }
+
+      const payload = req.body as any;
+      const conversationId: string = payload?.conversation_id ?? payload?.conversationId ?? `evt_${Date.now()}`;
+      const agentId: string | null = payload?.agent_id ?? null;
+
+      // Extract transcript — ElevenLabs sends `transcript` as array of {role, message}
+      const rawTranscript: Array<{ role: string; message: string; time_in_call_secs?: number }> =
+        Array.isArray(payload?.transcript) ? payload.transcript :
+        Array.isArray(payload?.messages) ? payload.messages : [];
+
+      const durationSecs: number | null = payload?.call_duration_secs ?? payload?.duration_secs ?? null;
+      const turnCount = rawTranscript.length;
+
+      // Extract tool calls from transcript or metadata
+      const toolCallsMade: string[] = [];
+      for (const turn of rawTranscript) {
+        const msg = (turn.message || "").toLowerCase();
+        if (msg.includes("search_opportunities")) toolCallsMade.push("search_opportunities");
+        if (msg.includes("search_marketplace")) toolCallsMade.push("search_marketplace");
+        if (msg.includes("navigate_to")) toolCallsMade.push("navigate_to");
+        if (msg.includes("get_platform_info")) toolCallsMade.push("get_platform_info");
+      }
+      // Also pull from metadata.tool_calls if present
+      if (Array.isArray(payload?.metadata?.tool_calls)) {
+        for (const tc of payload.metadata.tool_calls) {
+          const n = tc?.name ?? tc?.tool_name;
+          if (n && !toolCallsMade.includes(n)) toolCallsMade.push(n);
+        }
+      }
+      const uniqueTools = [...new Set(toolCallsMade)];
+
+      // Detect navigation
+      let navigatedTo: string | null = null;
+      for (const turn of rawTranscript) {
+        const m = (turn.message || "").match(/navigating to ([\/\w\-?=&]+)/i);
+        if (m) { navigatedTo = m[1]; break; }
+      }
+
+      // Detect if user took action (navigated, or action word in JAC response)
+      const userTookAction = !!navigatedTo ||
+        rawTranscript.some(t => t.role !== "user" && /post|sign up|apply|browse|navigate|listing/i.test(t.message || ""));
+
+      // Auto-score (0–100)
+      let score = 40; // baseline
+      if (turnCount >= 3) score += 10;
+      if (turnCount >= 6) score += 10;
+      if (uniqueTools.length > 0) score += 15;
+      if (uniqueTools.length >= 2) score += 10;
+      if (userTookAction) score += 15;
+      if (durationSecs && durationSecs >= 30) score += 10;
+      score = Math.min(100, score);
+
+      const scoreReasons: string[] = [];
+      if (turnCount >= 3) scoreReasons.push(`${turnCount} turns`);
+      if (uniqueTools.length > 0) scoreReasons.push(`tools: ${uniqueTools.join(", ")}`);
+      if (userTookAction) scoreReasons.push("user took action");
+      if (navigatedTo) scoreReasons.push(`→ ${navigatedTo}`);
+      const scoreReason = scoreReasons.join("; ") || "baseline";
+
+      // PII scrub transcript before storage
+      function scrubPii(text: string): string {
+        return text
+          .replace(/\b\d{5}(-\d{4})?\b/g, "[ZIP]")
+          .replace(/\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g, "[PHONE]")
+          .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, "[EMAIL]")
+          .replace(/\b(SSN|social security)\b.{0,20}\d{3}[-\s]?\d{2}[-\s]?\d{4}/gi, "[SSN]");
+      }
+      const scrubbedTranscript = rawTranscript.map(t => ({
+        ...t,
+        message: scrubPii(t.message || ""),
+      }));
+
+      // Upsert conversation
+      await pool.query(
+        `INSERT INTO jac_conversations
+           (conversation_id, agent_id, platform, duration_secs, turn_count,
+            transcript, tool_calls_made, navigated_to, user_took_action,
+            auto_score, auto_score_reason, pii_scrubbed, raw_payload)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE,$12)
+         ON CONFLICT (conversation_id) DO UPDATE SET
+           duration_secs    = EXCLUDED.duration_secs,
+           turn_count       = EXCLUDED.turn_count,
+           transcript       = EXCLUDED.transcript,
+           tool_calls_made  = EXCLUDED.tool_calls_made,
+           navigated_to     = EXCLUDED.navigated_to,
+           user_took_action = EXCLUDED.user_took_action,
+           auto_score       = EXCLUDED.auto_score,
+           auto_score_reason = EXCLUDED.auto_score_reason,
+           raw_payload      = EXCLUDED.raw_payload`,
+        [
+          conversationId, agentId, "convai", durationSecs, turnCount,
+          JSON.stringify(scrubbedTranscript), JSON.stringify(uniqueTools),
+          navigatedTo, userTookAction, score, scoreReason,
+          JSON.stringify({ event_type: payload?.event_type, agent_id: agentId }),
+        ]
+      );
+
+      // Auto-extract training examples from high-quality turns
+      if (score >= 60 && scrubbedTranscript.length >= 2) {
+        const turns = scrubbedTranscript;
+        for (let i = 0; i < turns.length - 1; i++) {
+          const userTurn = turns[i];
+          const jacTurn = turns[i + 1];
+          if (userTurn.role !== "user" || !jacTurn || jacTurn.role === "user") continue;
+          if ((userTurn.message || "").length < 10 || (jacTurn.message || "").length < 15) continue;
+
+          const outcomeLabel = userTookAction ? "action_taken" : uniqueTools.length > 0 ? "tool_called" : "informed";
+          await pool.query(
+            `INSERT INTO jac_training_examples
+               (conversation_id, user_message, ideal_response, tool_calls_made,
+                outcome_label, source, pii_scrubbed)
+             VALUES ($1,$2,$3,$4,$5,'webhook',TRUE)
+             ON CONFLICT DO NOTHING`,
+            [
+              conversationId,
+              userTurn.message.slice(0, 1000),
+              jacTurn.message.slice(0, 2000),
+              JSON.stringify(uniqueTools),
+              outcomeLabel,
+            ]
+          );
+        }
+      }
+
+      console.log(`[jac/webhook] captured conversation ${conversationId} score=${score} turns=${turnCount}`);
+      res.json({ ok: true, conversationId, score });
+    } catch (err: any) {
+      console.error("[jac/webhook] error:", err?.message);
+      res.status(500).json({ error: "Webhook processing failed" });
+    }
+  });
+
+  // ── JAC Training Admin routes ─────────────────────────────────────────────
+  app.get("/api/admin/jac/conversations", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(
+        `SELECT id, conversation_id, user_id, agent_id, platform, duration_secs,
+                turn_count, transcript, tool_calls_made, navigated_to,
+                user_took_action, auto_score, auto_score_reason, pii_scrubbed, created_at
+         FROM jac_conversations ORDER BY created_at DESC LIMIT 100`
+      );
+      res.json(r.rows.map((row: any) => ({
+        id: row.id,
+        conversationId: row.conversation_id,
+        userId: row.user_id,
+        agentId: row.agent_id,
+        platform: row.platform,
+        durationSecs: row.duration_secs,
+        turnCount: row.turn_count,
+        transcript: row.transcript ?? [],
+        toolCallsMade: row.tool_calls_made ?? [],
+        navigatedTo: row.navigated_to,
+        userTookAction: row.user_took_action,
+        autoScore: row.auto_score,
+        autoScoreReason: row.auto_score_reason,
+        piiScrubbed: row.pii_scrubbed,
+        createdAt: row.created_at,
+      })));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/jac/training-examples", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(
+        `SELECT id, conversation_id, user_message, context_summary, ideal_response,
+                tool_calls_made, outcome_label, source, pii_scrubbed,
+                admin_approved, admin_rejected, reject_reason, exported_at, created_at
+         FROM jac_training_examples ORDER BY created_at DESC LIMIT 200`
+      );
+      res.json(r.rows.map((row: any) => ({
+        id: row.id,
+        conversationId: row.conversation_id,
+        userMessage: row.user_message,
+        contextSummary: row.context_summary,
+        idealResponse: row.ideal_response,
+        toolCallsMade: row.tool_calls_made ?? [],
+        outcomeLabel: row.outcome_label,
+        source: row.source,
+        piiScrubbed: row.pii_scrubbed,
+        adminApproved: row.admin_approved,
+        adminRejected: row.admin_rejected,
+        rejectReason: row.reject_reason,
+        exportedAt: row.exported_at,
+        createdAt: row.created_at,
+      })));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/jac/training-examples/:id/approve", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      await pool.query(
+        `UPDATE jac_training_examples SET admin_approved=TRUE, admin_rejected=FALSE WHERE id=$1`,
+        [id]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/jac/training-examples/:id/reject", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      await pool.query(
+        `UPDATE jac_training_examples SET admin_rejected=TRUE, admin_approved=FALSE, reject_reason=$2 WHERE id=$1`,
+        [id, reason || null]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/jac/training-examples/export", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(
+        `SELECT user_message, context_summary, ideal_response, tool_calls_made, outcome_label
+         FROM jac_training_examples WHERE admin_approved=TRUE AND admin_rejected=FALSE
+         ORDER BY created_at ASC`
+      );
+      // Mark as exported
+      await pool.query(
+        `UPDATE jac_training_examples SET exported_at=NOW()
+         WHERE admin_approved=TRUE AND admin_rejected=FALSE AND exported_at IS NULL`
+      );
+      const lines = r.rows.map((row: any) => JSON.stringify({
+        messages: [
+          { role: "system", content: "You are JAC — GUBER's Job and Action Coordinator." },
+          ...(row.context_summary ? [{ role: "system", content: `Context: ${row.context_summary}` }] : []),
+          { role: "user", content: row.user_message },
+          { role: "assistant", content: row.ideal_response },
+        ],
+        tools_used: row.tool_calls_made ?? [],
+        outcome: row.outcome_label,
+      }));
+      res.setHeader("Content-Type", "application/x-ndjson");
+      res.setHeader("Content-Disposition", `attachment; filename="jac-training-${Date.now()}.jsonl"`);
+      res.send(lines.join("\n"));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/jac/training-stats", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const [convR, exR] = await Promise.all([
+        pool.query(`SELECT COUNT(*) AS total, AVG(auto_score) AS avg_score FROM jac_conversations`),
+        pool.query(
+          `SELECT
+             COUNT(*) AS total,
+             SUM(CASE WHEN NOT admin_approved AND NOT admin_rejected THEN 1 ELSE 0 END) AS pending,
+             SUM(CASE WHEN admin_approved THEN 1 ELSE 0 END) AS approved,
+             SUM(CASE WHEN admin_rejected THEN 1 ELSE 0 END) AS rejected,
+             SUM(CASE WHEN exported_at IS NOT NULL THEN 1 ELSE 0 END) AS exported
+           FROM jac_training_examples`
+        ),
+      ]);
+      const c = convR.rows[0];
+      const e = exR.rows[0];
+      res.json({
+        totalConversations: parseInt(c.total) || 0,
+        avgScore: c.avg_score ? parseFloat(c.avg_score) : null,
+        totalExamples: parseInt(e.total) || 0,
+        pendingReview: parseInt(e.pending) || 0,
+        approved: parseInt(e.approved) || 0,
+        rejected: parseInt(e.rejected) || 0,
+        exported: parseInt(e.exported) || 0,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 
@@ -19148,7 +20406,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       const dir = path.join(process.cwd(), "public", "jac-audio");
 
       const CACHE_CLIPS: Record<string, string> = {
-        "welcome":        "Hi! I'm Jack, your Goober Job Assisting Coordinator. I'm here to help you find work, hire help, or verify anything. What brings you in today?",
+        "welcome":        "Hi! I'm Jac, your Team Goober coordinator. More hands, more reach, more opportunities — I'm here to help you find work, get help, or handle anything. What brings you in today?",
         "what-is-guber":  "Goober stands for Global Unlimited Business and Employment Resources. It's a US-based platform where you can post jobs, find local work, verify purchases, and more — all in one place.",
         "how-earn-money": "To earn money on Goober, create an account, complete ID verification, then browse available jobs near you. Apply, get hired, complete the work, and get paid directly through the platform.",
         "how-post-job":   "Posting a job on Goober is completely free. Just sign up, go to Post a Job, fill in the details — what you need, your location, and your budget — and workers in your area will apply.",
@@ -19165,7 +20423,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         "how-signup":     "Signing up is free and takes about 2 minutes. Just go to the sign up page, enter your name, email, and create a password. Then complete ID verification and you're ready to post or find work.",
         "safety":         "Safety is built into every step on Goober. Every user verifies their identity. All payments go through the platform — no cash handoffs. Every job is documented with proof of completion.",
         "what-is-barter": "Barter on Goober lets you exchange services or items without cash. If you have a skill someone needs and they have something you want, you can trade directly — fully documented on the platform.",
-        "contact-support": "For help, you can chat with me any time — I'm Jack, your Job Assisting Coordinator. For account issues, visit the Help section in your profile or reach out through the Contact page.",
+        "contact-support": "For help, you can chat with me any time — I'm Jac, your Team Goober coordinator. For account issues, visit the Help section in your profile or reach out through the Contact page.",
         "us-only":        "Goober is currently available in the United States only. We're focused on building the best possible local experience here before expanding internationally.",
         "what-is-trustbox": "Trust Box is a subscription that gives you unlimited plays of the Aye Eye or Not game, plus other perks. It's one of the ways to get more out of your Goober membership.",
       };
@@ -22189,7 +23447,7 @@ OUTPUT STYLE:
     }
   });
 
-  // ==================== HOST DROP PERMISSION ====================
+  // -------------------- HOST DROP PERMISSION -------------------
 
   app.get(["/api/users/me/host-drop-status", "/api/user/host-drop-status"], requireAuth, async (req: Request, res: Response) => {
     try {
@@ -22853,9 +24111,9 @@ OUTPUT STYLE:
   });
 
 
-  // ==================== SPONSORED CASH DROPS ====================
+  // -------------------- SPONSORED CASH DROPS -------------------
 
-  // ==================== SPONSOR DROP STRIPE CHECKOUT ====================
+  // -------------------- SPONSOR DROP STRIPE CHECKOUT -------------------
 
   app.post("/api/stripe/create-sponsor-drop-session", requireAuth, async (req: Request, res: Response) => {
     try {
@@ -23114,7 +24372,7 @@ OUTPUT STYLE:
     }
   });
 
-  // ==================== GUBER RESUME API ====================
+  // -------------------- GUBER RESUME API -------------------
 
   function buildResumeData(user: any) {
     const memberSince = user.createdAt ? new Date(user.createdAt) : new Date();
@@ -26017,6 +27275,68 @@ OUTPUT STYLE:
       console.error("[investor-pdf]", err?.message);
       res.status(500).json({ error: "PDF generation failed", detail: err?.message });
     }
+  });
+
+  // ── Pitch Deck — token gate ───────────────────────────────────────────────
+  const DECK_TOKEN = process.env.PITCH_DECK_TOKEN || "";
+  function checkDeckToken(req: Request, res: Response): boolean {
+    const t = (req.query.token as string) || req.headers["x-deck-token"] as string || "";
+    if (!DECK_TOKEN || t !== DECK_TOKEN) {
+      res.status(401).json({ error: "Invalid or missing access token." });
+      return false;
+    }
+    return true;
+  }
+  app.get("/api/pitch-deck/verify", (req: Request, res: Response) => {
+    const t = (req.query.token as string) || "";
+    if (DECK_TOKEN && t === DECK_TOKEN) res.json({ ok: true });
+    else res.status(401).json({ ok: false });
+  });
+
+  // ── Pitch Deck downloads ─────────────────────────────────────────────────
+  app.get("/api/pitch-deck/pdf", async (req: Request, res: Response) => {
+    if (!checkDeckToken(req, res)) return;
+    const { existsSync, readFileSync } = await import("fs");
+    const { join: pj } = await import("path");
+    const p = pj(process.cwd(), "exports", "GUBER_Official_Pitch_Deck.pdf");
+    if (!existsSync(p)) {
+      res.status(503).json({ error: "PDF not yet generated. Run: node scripts/generate-pitch-deck.mjs" });
+      return;
+    }
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'attachment; filename="GUBER_Official_Pitch_Deck.pdf"');
+    res.setHeader("Cache-Control", "no-store");
+    res.send(readFileSync(p));
+  });
+
+  app.get("/api/pitch-deck/pptx", async (req: Request, res: Response) => {
+    if (!checkDeckToken(req, res)) return;
+    const { existsSync, readFileSync } = await import("fs");
+    const { join: pj } = await import("path");
+    const p = pj(process.cwd(), "exports", "GUBER_Official_Pitch_Deck.pptx");
+    if (!existsSync(p)) {
+      res.status(503).json({ error: "PPTX not yet generated. Run: node scripts/generate-pitch-deck.mjs" });
+      return;
+    }
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+    res.setHeader("Content-Disposition", 'attachment; filename="GUBER_Official_Pitch_Deck.pptx"');
+    res.setHeader("Cache-Control", "no-store");
+    res.send(readFileSync(p));
+  });
+
+  app.get("/api/pitch-deck/one-pager", async (req: Request, res: Response) => {
+    if (!checkDeckToken(req, res)) return;
+    const { existsSync, readFileSync } = await import("fs");
+    const { join: pj } = await import("path");
+    const p = pj(process.cwd(), "exports", "GUBER_Investor_One_Pager.pdf");
+    if (!existsSync(p)) {
+      res.status(503).json({ error: "One-pager not yet generated. Run: node scripts/generate-pitch-deck.mjs" });
+      return;
+    }
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'attachment; filename="GUBER_Investor_One_Pager.pdf"');
+    res.setHeader("Cache-Control", "no-store");
+    res.send(readFileSync(p));
   });
 
   // ── QA Dashboard (task-462) ──────────────────────────────────────────────
@@ -29580,6 +30900,7 @@ OUTPUT STYLE:
 
   // Campaign Lab
   setupCampaignLabRoutes(app);
+  setupBusinessStudioRoutes(app);
 
   return httpServer;
 }

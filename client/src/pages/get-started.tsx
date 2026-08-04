@@ -28,7 +28,7 @@ const QUICK_OPTIONS = [
 
 const JAC_GREETING: OnboardingMessage = {
   role: "assistant",
-  content: "Hi, I'm JAC — your Job Assisting Coordinator. Tell me what you need and I'll guide you exactly where to go.",
+  content: "Welcome to Team GUBER. I'm JAC — tell me what you need, what you can do, or what you have available. I'll help you find your next move.",
 };
 
 export default function GetStarted() {
@@ -153,7 +153,7 @@ export default function GetStarted() {
           <div>
             <p className="text-[11px] font-display font-black tracking-widest text-white uppercase leading-none">Jac</p>
             <p className="text-[9px] text-muted-foreground font-display tracking-wider leading-none mt-0.5">
-              Job Assistance Coordinator
+              Team GUBER Coordinator
             </p>
           </div>
         </div>
@@ -178,9 +178,9 @@ export default function GetStarted() {
       <div className="relative z-10 px-5 pt-4 pb-0 flex items-end justify-between overflow-hidden">
         <div className="pb-2">
           <h1 className="font-display font-black text-2xl text-white tracking-tight leading-tight">
-            Welcome to GUBER
+            Welcome to Team GUBER
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">I'm JAC. Ask me anything.</p>
+          <p className="text-sm text-muted-foreground mt-1">More hands. More reach. More opportunities.</p>
         </div>
         <img
           src={jacFull}

@@ -252,7 +252,7 @@ function JacSettingsSection() {
           <Bot className="w-5 h-5 text-primary shrink-0" />
           <div>
             <p className="font-display font-semibold text-sm">Enable JAC</p>
-            <p className="text-xs text-muted-foreground">Your Job Assisting Coordinator</p>
+            <p className="text-xs text-muted-foreground">Your Team GUBER Coordinator</p>
           </div>
         </div>
         <Switch

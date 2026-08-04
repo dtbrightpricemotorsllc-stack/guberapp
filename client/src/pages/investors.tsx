@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState, type ReactNode } from "react";
-import { Mail, Phone, Globe, ChevronRight, Check, ArrowDown, Printer } from "lucide-react";
+import { Mail, Phone, Globe, ChevronRight, Check, ArrowDown, Printer, MessageCircle } from "lucide-react";
+import { JacInvestorPanel } from "@/components/jac/jac-investor";
 import { INVESTOR_CONFIG as C } from "@/lib/investor-config";
 import { SocialLinks } from "@/components/social-links";
 import logoImg from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
@@ -221,6 +222,24 @@ export default function InvestorsPage() {
           <Reveal delay={120} className="grid grid-cols-2 gap-3">
             <PhoneFrame src={screenHome} alt="GUBER home screen" label="Find help near you" testId="img-hero-home" />
             <PhoneFrame src={screenMap} alt="GUBER job map" label="8 jobs nearby" testId="img-hero-map" />
+          </Reveal>
+        </div>
+      </section>
+
+      {/* JAC — INVESTOR ASSISTANCE COORDINATOR */}
+      <section className="relative px-5" id="section-jac" style={{ paddingTop: "clamp(40px, 6vw, 70px)", paddingBottom: "clamp(40px, 6vw, 70px)" }}>
+        <div className="max-w-4xl mx-auto">
+          <Reveal>
+            <div className="num-font text-[11px] uppercase tracking-[0.18em] mb-4" style={{ color: "#555570" }}>
+              02 · Meet JAC
+            </div>
+            <h2 className="text-white mb-2 font-bold" style={{ fontSize: "clamp(1.6rem, 3vw, 2.4rem)" }}>
+              Ask JAC Anything About GUBER
+            </h2>
+            <p className="text-sm mb-6 leading-relaxed" style={{ color: "#a8a8b3", maxWidth: 520 }}>
+              JAC is GUBER's Investor Assistance Coordinator. She knows the company, the mission, the numbers, and the opportunity — and she can connect you directly with the founder.
+            </p>
+            <JacInvestorPanel />
           </Reveal>
         </div>
       </section>

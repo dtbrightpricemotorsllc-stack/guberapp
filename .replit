@@ -17,7 +17,6 @@ PORT = "5000"
 deploymentTarget = "autoscale"
 run = ["npm", "run", "start"]
 build = ["bash", "-c", "npm run build && rm -rf attached_assets ios android screenshots winners test-results"]
-publicDir = "dist/public"
 
 [workflows]
 runButton = "Project"
@@ -34,6 +33,14 @@ args = "Start application"
 [[workflows.workflow.tasks]]
 task = "workflow.run"
 args = "statebleed"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "smoke-promo-render"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "android-permissions-guard"
 
 [[workflows.workflow]]
 name = "Start application"
@@ -58,6 +65,28 @@ args = "node scripts/audit-statebleed.mjs"
 [workflows.workflow.metadata]
 isValidation = true
 
+[[workflows.workflow]]
+name = "smoke-promo-render"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "node scripts/smoke-promo-render.mjs"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "android-permissions-guard"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "node scripts/check-android-permissions.test.mjs"
+
+[workflows.workflow.metadata]
+isValidation = true
+
 [userenv]
 
 [userenv.shared]
@@ -65,7 +94,8 @@ VAPID_PUBLIC_KEY = "BIDPBGWY1Ar0cylNhaYThfgDHkIGXVf-z_ZeOQF6IkGysIAsB-k9NqFE7ET8
 VAPID_EMAIL = "mailto:noreply@guberapp.app"
 APPLE_TEAM_ID = "7MC93QFW6Q"
 JAC_CONVAI_SHARED_SECRET = "01e2e3e72e32312f3b3f05ba782655463048b79c651dfa9ccb5a1099a8b810af"
-ELEVENLABS_CONVAI_AGENT_ID = "agent_5301kwstphvnf5ktbkwmy5rqrj1f"
+ELEVENLABS_CONVAI_AGENT_ID = "agent_4901kwjhd1q2egmvcs3n49a158ma"
+PITCH_DECK_TOKEN = "Uj_-dYIhsL5xL6T4"
 
 [userenv.production]
 APP_BASE_URL = "https://guberapp.app"

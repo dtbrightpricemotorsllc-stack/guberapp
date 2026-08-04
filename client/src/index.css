@@ -849,3 +849,22 @@
 html, body, #root {
   height: 100%;
 }
+
+/* ── JAC CRT power-on animation ─────────────────────────────────────── */
+@keyframes jac-crt-fadein {
+  0%   { filter: blur(14px) brightness(0.08); }
+  45%  { filter: blur(5px)  brightness(0.55); }
+  72%  { filter: blur(0px)  brightness(2.6);  }
+  100% { filter: blur(0px)  brightness(1);    }
+}
+@keyframes jac-crt-line {
+  0%   { transform: scaleX(0) scaleY(1);     opacity: 1; }
+  25%  { transform: scaleX(1) scaleY(1);     opacity: 1; }
+  55%  { transform: scaleX(1) scaleY(0.003); opacity: 1; }
+  85%  { transform: scaleX(1) scaleY(0.003); opacity: 0.4; }
+  100% { transform: scaleX(1) scaleY(0.003); opacity: 0; }
+}
+@keyframes jac-crt-scanlines {
+  0%, 100% { opacity: 0.08; }
+  50%       { opacity: 0.03; }
+}

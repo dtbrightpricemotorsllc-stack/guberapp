@@ -12,7 +12,7 @@ import {
 import { useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
 import { ConversationProvider } from "@elevenlabs/react";
-import { JacConvaiSession, type ConvaiPhase, type JacConvaiSessionHandle } from "@/components/jac/jac-convai-session";
+import { JacConvaiSession, prewarmJacSession, type ConvaiPhase, type JacConvaiSessionHandle } from "@/components/jac/jac-convai-session";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { saveListingPrefill, clearListingPrefill } from "@/lib/jac-listing-prefill";
@@ -76,10 +76,11 @@ interface Message {
 }
 
 const DD_GREETING =
-  "Welcome to GUBER — the land of opportunities. I'm JAC, your Job Assisting Coordinator. What brings you to GUBER?";
+  "To talk to me, tap the mic button! 🎤";
 const SESSION_KEY = "jac_v1_messages";
 const SEEN_KEY = "jac_v1_seen";
 const FAB_HINT_KEY = "jac_fab_hint_shown";
+const MIC_HINT_KEY_DD = "jac_dd_mic_hint_done";
 
 const LISTING_PATTERNS = [
   /\bstart a listing\b/i,
@@ -385,6 +386,13 @@ export function GUBERAssistant() {
   const [convaiKey, setConvaiKey] = useState(0);
   useEffect(() => { convaiActiveRef.current = convaiActive; }, [convaiActive]);
 
+  // Mic guidance — pulse animation + "Tap to talk" label until first mic use
+  const [micHintDone, setMicHintDone] = useState(() => {
+    try { return localStorage.getItem(MIC_HINT_KEY_DD) === "1"; } catch { return false; }
+  });
+  const micHintDoneRef = useRef(micHintDone);
+  useEffect(() => { micHintDoneRef.current = micHintDone; }, [micHintDone]);
+
   const [jacVolume, setJacVolumeState] = useState(() => getJacVolume());
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
@@ -393,10 +401,20 @@ export function GUBERAssistant() {
     cancelSpeech();
     cancelAllJacAudio();
     setConvaiError(null);
+    // Set ref synchronously so the 300ms text-TTS greeting no-ops if it hasn't
+    // fired yet — useEffect-based ref update (below) is async and too slow.
+    convaiActiveRef.current = true;
     setConvaiActive(true);
+    // Mark mic hint done on first use
+    if (!micHintDoneRef.current) {
+      micHintDoneRef.current = true;
+      setMicHintDone(true);
+      try { localStorage.setItem(MIC_HINT_KEY_DD, "1"); } catch {}
+    }
   }
 
   function stopConvai() {
+    convaiActiveRef.current = false;  // sync guard — mirror of startConvai
     setConvaiActive(false);
     setConvaiPhase("idle");
     setConvaiError(null);
@@ -414,6 +432,12 @@ export function GUBERAssistant() {
     if (muted || convaiActiveRef.current) return;
     jacSpeak(text, { muted });
   }
+
+  // Pre-warm the ConvAI session token on mount so it's ready when the sheet
+  // opens — eliminates the biggest startup latency (~500-1500 ms).
+  useEffect(() => {
+    prewarmJacSession("/api/jac/convai/session");
+  }, []);
 
   // Tear down the ConvAI session whenever JAC closes, the app is backgrounded,
   // or the tab goes hidden — never leave an open mic stream running unattended.
@@ -462,11 +486,13 @@ export function GUBERAssistant() {
     setTimeout(() => { el.scrollTop = el.scrollHeight; }, 80);
   }, [messages, s.open]);
 
-  // Speak greeting + personalise for returning users on first open
+  // Personalise greeting for returning users on first open.
+  // NOTE: We no longer auto-speak any greeting here — ElevenLabs ConvAI is the
+  // sole voice source and speaks its own configured first message when the session
+  // connects. Text is always shown in the chat regardless.
   useEffect(() => {
     if (!s.open) return;
     if (messages.length !== 1) return; // already has a thread
-    unlockAudioContext();
 
     // ── Resume pending pre-login draft for newly logged-in users ──────────
     if (userRef.current) {
@@ -483,17 +509,14 @@ export function GUBERAssistant() {
           actions: [{ label: "Continue where I left off", message: "__resume__" }],
         };
         setMessages(prev => [...prev, resumeMsg]);
-        speak(resumeContent);
+        // No speak() — ConvAI will voice this once it connects
         return;
       }
     }
 
     const returning = localStorage.getItem("jac_returning") === "1";
     if (!returning) {
-      if (!greetingSpokenRef.current) {
-        greetingSpokenRef.current = true;
-        setTimeout(() => speak(DD_GREETING), 300);
-      }
+      // Greeting text is shown in chat; ConvAI voices it on connection
       return;
     }
     fetch("/api/jac/updates")
@@ -505,12 +528,9 @@ export function GUBERAssistant() {
         if ((data.hirerOpen ?? 0) > 0) parts.push(`${data.hirerOpen} open job${data.hirerOpen! > 1 ? "s" : ""} you posted`);
         if ((data.unreadNotifs ?? 0) > 0) parts.push(`${data.unreadNotifs} new notification${data.unreadNotifs! > 1 ? "s" : ""}`);
         if ((data.walletBalance ?? 0) > 0) parts.push(`$${(data.walletBalance!).toFixed(2)} in your wallet`);
-        let content: string;
-        if (parts.length === 0) content = `Welcome back${name}! Good to see you. What can I help you with?`;
-        else if (parts.length === 1) content = `Welcome back${name}! Quick update — ${parts[0]}. What else can I help you with?`;
-        else { const last = parts.pop(); content = `Welcome back${name}! Quick update — ${parts.join(", ")} and ${last}. What can I help you with?`; }
-        // Don't overwrite if briefing already injected (briefingInjectedRef set synchronously before its fetch)
-        if (!briefingInjectedRef.current) setMessages([{ role: "assistant", content }]);
+        // ConvAI now voices the personalised greeting — don't overwrite the
+        // static bubble here; it will be replaced by ConvAI's first transcript.
+        void name; void parts; // context still useful for JAC backend
       })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -852,7 +872,14 @@ export function GUBERAssistant() {
     setMessages(prev => [...prev, { role: "user" as const, content: text }]);
   }, []);
   const handleConvaiJacResponse = useCallback((text: string) => {
-    setMessages(prev => [...prev, { role: "assistant" as const, content: text }]);
+    setMessages(prev => {
+      // Replace the initial static greeting with the first ConvAI transcript
+      // so only one greeting bubble is ever shown (ConvAI's own words).
+      if (prev.length === 1 && prev[0].role === "assistant") {
+        return [{ role: "assistant" as const, content: text }];
+      }
+      return [...prev, { role: "assistant" as const, content: text }];
+    });
   }, []);
   const handleConvaiError = useCallback((msg: string) => {
     setConvaiError(msg);
@@ -870,7 +897,15 @@ export function GUBERAssistant() {
       open={s.open}
       onOpenChange={(v) => {
         patchStore({ open: v });
-        if (!v) cancelSpeech();
+        if (v) {
+          // User gesture — unlock audio and immediately start ElevenLabs ConvAI.
+          // ConvAI is the sole voice; it will play its configured greeting once ready.
+          unlockAudioContext();
+          if (!convaiActive) startConvai();
+        } else {
+          cancelSpeech();
+          stopConvai();
+        }
       }}
     >
       <SheetContent
@@ -902,7 +937,7 @@ export function GUBERAssistant() {
                   JAC
                 </SheetTitle>
                 <p className="text-[10px] text-muted-foreground font-display tracking-wider">
-                  Job Assisting Coordinator
+                  Team GUBER Coordinator
                 </p>
               </div>
             </div>
@@ -1395,32 +1430,62 @@ export function GUBERAssistant() {
             </button>
 
             {/* Mic button — ElevenLabs ConvAI voice session */}
-            <button
-              onClick={convaiActive ? stopConvai : startConvai}
-              className="relative w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95"
-              style={{
-                background: convaiActive
-                  ? "linear-gradient(135deg, hsl(270 100% 55%), hsl(152 100% 38%))"
-                  : "hsl(222 47% 14%)",
-                border: convaiActive ? "none" : "1px solid hsl(270 100% 65% / 0.22)",
-                color: convaiActive ? "black" : "hsl(270 100% 72%)",
-                boxShadow: convaiActive ? "0 0 14px hsl(270 100% 65% / 0.45)" : "none",
-              }}
-              data-testid="button-dd-mic"
-              aria-label={convaiActive ? "End voice" : "Start voice"}
-            >
-              {(convaiPhase === "connecting" || convaiPhase === "thinking") ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (convaiPhase === "listening" || convaiPhase === "speaking") ? (
-                <span className="relative flex h-3.5 w-3.5 items-center justify-center">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-40"
-                    style={{ background: "currentColor" }} />
-                  <Mic className="w-3.5 h-3.5 relative" />
+            <div className="relative flex flex-col items-center">
+              {/* "Tap to talk" guidance label — shows until first mic use */}
+              {!convaiActive && !micHintDone && (
+                <span
+                  className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-display font-semibold tracking-wide pointer-events-none select-none"
+                  style={{
+                    color: "hsl(270 100% 75%)",
+                    textShadow: "0 0 6px hsl(270 100% 65% / 0.5)",
+                    animation: "pulse 2s ease-in-out infinite",
+                  }}
+                >
+                  Tap to talk
                 </span>
-              ) : (
-                <Mic className="w-3.5 h-3.5" />
               )}
-            </button>
+              <button
+                onClick={convaiActive ? stopConvai : startConvai}
+                className="relative w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95"
+                style={{
+                  background: convaiActive
+                    ? "linear-gradient(135deg, hsl(270 100% 55%), hsl(152 100% 38%))"
+                    : "hsl(222 47% 14%)",
+                  border: convaiActive
+                    ? "none"
+                    : !micHintDone
+                      ? "1px solid hsl(270 100% 65% / 0.55)"
+                      : "1px solid hsl(270 100% 65% / 0.22)",
+                  color: convaiActive ? "black" : "hsl(270 100% 72%)",
+                  boxShadow: convaiActive
+                    ? "0 0 14px hsl(270 100% 65% / 0.45)"
+                    : !micHintDone
+                      ? "0 0 10px hsl(270 100% 65% / 0.35)"
+                      : "none",
+                }}
+                data-testid="button-dd-mic"
+                aria-label={convaiActive ? "End voice" : "Start voice"}
+              >
+                {/* Ping ring — hint pulse until first use */}
+                {!convaiActive && !micHintDone && (
+                  <span
+                    className="absolute inset-0 rounded-xl animate-ping opacity-30"
+                    style={{ background: "hsl(270 100% 65%)" }}
+                  />
+                )}
+                {(convaiPhase === "connecting" || convaiPhase === "thinking") ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin relative" />
+                ) : (convaiPhase === "listening" || convaiPhase === "speaking") ? (
+                  <span className="relative flex h-3.5 w-3.5 items-center justify-center">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-40"
+                      style={{ background: "currentColor" }} />
+                    <Mic className="w-3.5 h-3.5 relative" />
+                  </span>
+                ) : (
+                  <Mic className="w-3.5 h-3.5 relative" />
+                )}
+              </button>
+            </div>
 
             {/* Send button */}
             <Button
@@ -1441,7 +1506,7 @@ export function GUBERAssistant() {
             </Button>
           </div>
           <p className="text-center text-[10px] text-muted-foreground/40 mt-2 font-display tracking-wider">
-            Jac · Job Assistance Coordinator
+            Jac · Team GUBER Coordinator
           </p>
         </div>
       </SheetContent>

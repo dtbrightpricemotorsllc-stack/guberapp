@@ -41,6 +41,50 @@ export type FalSubmitResult<T = any> = {
 };
 
 /**
+ * Submit a job to fal.ai queue but return immediately — caller polls via checkFalJob.
+ * Use for long-running generation (videos) to avoid HTTP proxy timeouts.
+ */
+export async function submitFalJob(endpoint: string, input: Record<string, any>): Promise<{ requestId: string; statusUrl: string; responseUrl: string }> {
+  const key = process.env.FAL_KEY;
+  if (!key) throw new FalNotConfiguredError();
+
+  const submitRes = await fetch(`${FAL_API_BASE}/${endpoint}`, {
+    method: "POST",
+    headers: { "Authorization": `Key ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!submitRes.ok) {
+    const text = await submitRes.text().catch(() => "");
+    throw new FalGenerationError(`Fal.ai submit failed (${submitRes.status}): ${text.slice(0, 300)}`, String(submitRes.status));
+  }
+  const json = (await submitRes.json()) as { request_id?: string; status_url?: string; response_url?: string };
+  if (!json.request_id || !json.status_url || !json.response_url) {
+    throw new FalGenerationError("Fal.ai response missing request_id/status_url/response_url");
+  }
+  return { requestId: json.request_id, statusUrl: json.status_url, responseUrl: json.response_url };
+}
+
+/**
+ * Check a previously submitted fal.ai job. Returns status + output when done.
+ * Call this from a polling endpoint — avoids holding an HTTP connection open.
+ */
+export async function checkFalJob<T = any>(statusUrl: string, responseUrl: string): Promise<{ status: "pending" | "completed" | "failed"; output?: T }> {
+  const key = process.env.FAL_KEY;
+  if (!key) throw new FalNotConfiguredError();
+
+  const stRes = await fetch(statusUrl, { headers: { "Authorization": `Key ${key}` } });
+  if (!stRes.ok) return { status: "pending" };
+  const stJson = (await stRes.json()) as { status?: string };
+  if (stJson.status === "FAILED") return { status: "failed" };
+  if (stJson.status !== "COMPLETED") return { status: "pending" };
+
+  const finalRes = await fetch(responseUrl, { headers: { "Authorization": `Key ${key}` } });
+  if (!finalRes.ok) return { status: "pending" };
+  const output = (await finalRes.json()) as T;
+  return { status: "completed", output };
+}
+
+/**
  * Submit a payload to a Fal.ai queue endpoint, poll until completed, return
  * the final response JSON. Generic — every per-tool helper wraps this.
  */

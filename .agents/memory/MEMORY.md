@@ -22,6 +22,7 @@
 - [Android CI pipeline setup](android-ci-pipeline.md) — .github/ gitignored; push workflows via Git Trees API + workflow-scoped PAT; untracked assets break Vite build; decode keystore secret pre-Gradle.
 - [iOS CI Xcode version strategy](ios-ci-xcode-strategy.md) — Apple mandated iOS 26 SDK (July 2026); must use Xcode 26 on macos-15; Xcode 16.x fails (ibtool needs separate platform download, simulator daemon won't start on headless CI); Xcode 15.x archive succeeds but upload rejected.
 - [JAC voice on ElevenLabs (custom LLM)](jac-voice-elevenlabs.md) — one shared brain fn for text + voice (never fork); identity only from HMAC voice token; execution stays client-confirm; gated on voice_pipeline_v2.
+- [ElevenLabs ConvAI custom-LLM auth trap](elevenlabs-convai-auth-trap.md) — ElevenLabs does NOT forward shared-secret headers or secret__ dynamic vars to custom LLM endpoint; returning 401 terminates the conversation; must warn+continue.
 - [JAC Brain system](jac-brain-system.md) — local KB + intent + cache bypass; confidence ≥0.85 skips OpenAI; admin UI at /admin/jac-brain. (Both-surface rule → jac-system-guardian.md.)
 - [JAC Deep Profile system](jac-deep-profile.md) — syncJacProfile() auto-syncs DB→jac_memory on every context fetch; buildJacProfileContext() reads back for prompt enrichment; briefing+opportunities are separate auth-gated endpoints.
 - [Cross-platform voice STT](voice-stt-cross-platform.md) — silent failures from swallowed sentinels + 5/min rate limit + MediaRecorder MIME fallback required for iOS.
@@ -33,6 +34,9 @@
 - [JAC voice latency optimization](jac-voice-latency-optimization.md) — eleven_flash_v2_5 streaming model + MediaSource progressive playback + voiceMode-gated short/warm prompt + admin-visible fallback logging.
 - [Wallet status enum consistency](wallet-status-enum-consistency.md) — wallet_transactions.status must exactly match wallet.tsx's filter strings ("available"/"pending") or balances silently show $0.
 - [JAC System Guardian + both surfaces](jac-system-guardian.md) — every JAC change hits BOTH onboard+guber-assist; adding a KB topic = 4 touch points w/ a seed-guard trap; system_issues deduped & monotonic.
+- [JAC mode system](jac-mode-system.md) — /api/jac/onboard accepts mode:"homepage"|"investor"|"app"|"admin"; investor mode routes to investorPrompt; jac_mode passed to ElevenLabs ConvAI as {{jac_mode}} dynamic variable; ELEVENLABS_CONVAI_AGENT_ID must be re-added to Replit secrets.
 - [App Store 3.1.1 wording review](app-store-3-1-1-wording.md) — grep `isStoreBuild` conditionals hiding cost text, and CTA verbs like "claim/get" next to a fee, as the two recurring 3.1.1-flaggable patterns.
 - [Native camera capture coverage](native-camera-capture-coverage.md) — `capture="environment"` alone silently fails in Capacitor WKWebView; must call @capacitor/camera; a fix on one screen doesn't cover others using the same raw pattern.
 - [createAuditLog schema mismatch](createaudit-log-schema.md) — only pass userId/action/details/ipAddress; wrong field names (actorId/entityType/metadata) crash inserts with a misleading unrelated-looking error.
+- [Capacitor WKWebView black screen](capacitor-wkwebview-black-screen.md) — three bugs in ViewController.swift cause instant black screen; fix: dark bg in capacitorDidLoad(), deferred retry for NSURLErrorCancelled, anchor overlay to self.view.
+- [iPad black screen diagnosis](ipad-black-screen.md) — LoadingSplash (#000 fixed overlay) + no auth fetch timeout = permanent black on Autoscale cold starts; fix: timeout + skip splash on native.

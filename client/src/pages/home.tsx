@@ -25,6 +25,7 @@ import heroHireImg      from "@assets/file_000000001b68722fa9b9a139b8832496_1781
 import heroVerifyImg    from "@assets/file_00000000563471f5a72bc4c3624229c7_1781794028404.png";
 import heroLoadImg      from "@assets/file_0000000048c471f5be4d6d0fbf5eb94c_1781794028448.png";
 import heroExploreImg   from "@assets/file_000000009960720ca77a90e111b70876_1781794028463.png";
+import jacPortrait      from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
 import proofImg1 from "@assets/Screenshot_20260331_102503_Facebook_1778199034115.jpg";
 import proofImg2 from "@assets/Screenshot_20260426_064718_Facebook_1778199034048.jpg";
@@ -63,8 +64,8 @@ const SLIDES = [
 const FIVE_DOORS = [
   {
     id: "earn",      color: "#00E576", icon: DollarSign, label: "EARN",
-    headline: "Your neighborhood is hiring.",
-    tagline: "Turn free time into real cash.",
+    headline: "What are we getting done today?",
+    tagline: "Your Team GUBER network is ready.",
     features: ["Real jobs posted near you", "GPS-verified check-ins", "Get paid same day"],
     cta: "BROWSE JOBS", href: "/browse-jobs",
     number: "1",
@@ -282,25 +283,41 @@ function timeAgo(iso: string) {
 function GateModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" data-testid="modal-gate">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-2xl p-7 w-full max-w-sm shadow-2xl z-10">
-        <button onClick={onClose} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors" data-testid="button-gate-close">
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={onClose} />
+      <div className="relative rounded-2xl w-full max-w-sm shadow-2xl z-10 overflow-hidden"
+        style={{
+          background: "linear-gradient(160deg, hsl(222 47% 8%), hsl(270 60% 5%))",
+          border: "1px solid hsl(270 100% 65% / 0.22)",
+          boxShadow: "0 0 60px hsl(270 100% 65% / 0.12), 0 20px 60px rgba(0,0,0,0.7)",
+        }}>
+        <button onClick={onClose} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors z-10" data-testid="button-gate-close">
           <X className="w-5 h-5" />
         </button>
-        <div className="flex justify-center mb-5">
-          <img src={logoImg} alt="GUBER" className="h-14 object-contain" style={{ mixBlendMode: "screen" }} />
+        {/* JAC intro strip */}
+        <div className="flex items-center gap-3 px-5 pt-5 pb-4" style={{ borderBottom: "1px solid hsl(270 100% 65% / 0.1)" }}>
+          <div className="w-11 h-11 rounded-xl overflow-hidden flex-shrink-0" style={{ border: "2px solid hsl(270 100% 65% / 0.5)", boxShadow: "0 0 14px hsl(270 100% 65% / 0.3)" }}>
+            <img src={jacPortrait} alt="JAC" className="w-full h-full object-cover object-top" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-display font-black text-white leading-none">JAC says hi 👋</p>
+            </div>
+            <p className="text-[11px] mt-0.5" style={{ color: "hsl(270 100% 72%)" }}>Create an account to unlock full access</p>
+          </div>
         </div>
-        <h2 className="text-xl font-display font-black tracking-wider text-center mb-1">READY TO EARN?</h2>
-        <p className="text-center text-muted-foreground text-sm mb-6">Create a free account or sign in to accept jobs on the GUBER app.</p>
-        <div className="space-y-3">
-          <Link href="/signup" className="flex items-center justify-center gap-2 w-full h-12 rounded-xl font-display tracking-[0.15em] text-sm premium-btn" data-testid="link-gate-signup">
-            GET STARTED FREE <ChevronRight className="w-4 h-4" />
-          </Link>
-          <Link href="/login" className="flex items-center justify-center gap-2 w-full h-12 rounded-xl font-display tracking-[0.15em] text-sm btn-glass-premium" data-testid="link-gate-login">
-            SIGN IN
-          </Link>
+        <div className="px-5 pt-5 pb-6">
+          <h2 className="text-xl font-display font-black tracking-wider text-white mb-1">JOIN TEAM GUBER</h2>
+          <p className="text-muted-foreground text-sm mb-5">Find work. Hire help. Make things happen.<br className="hidden sm:block" />Free to join — no card required.</p>
+          <div className="space-y-3">
+            <Link href="/signup" className="flex items-center justify-center gap-2 w-full h-12 rounded-xl font-display tracking-[0.15em] text-sm premium-btn" data-testid="link-gate-signup">
+              GET STARTED FREE <ChevronRight className="w-4 h-4" />
+            </Link>
+            <Link href="/login" className="flex items-center justify-center gap-2 w-full h-12 rounded-xl font-display tracking-[0.15em] text-sm btn-glass-premium" data-testid="link-gate-login">
+              SIGN IN
+            </Link>
+          </div>
+          <p className="text-center text-muted-foreground text-[10px] font-display tracking-wider mt-5">FREE TO JOIN · TEAM GUBER · GUBER GLOBAL LLC</p>
         </div>
-        <p className="text-center text-muted-foreground text-[10px] font-display tracking-wider mt-5">FREE TO JOIN · GUBER GLOBAL LLC</p>
       </div>
     </div>
   );
@@ -943,9 +960,6 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* ── JAC Homepage Assistant — first thing users see ── */}
-      <JacHomepage />
-
       {/* ── Hero Slideshow ── */}
       <HeroSlideshow onSlideChange={setCurrentSlide} />
 
@@ -960,6 +974,9 @@ export default function Home() {
           {currentSlide.cta} <ArrowRight className="w-4 h-4" />
         </Link>
       </div>
+
+      {/* ── JAC Homepage Assistant ── */}
+      <JacHomepage />
 
       {/* ── Platform availability strip ── */}
       <div className="relative z-10 flex items-center justify-center gap-4 sm:gap-6 flex-wrap px-5 py-4 text-[11px] font-display tracking-wider border-b border-border/30">
@@ -987,8 +1004,6 @@ export default function Home() {
           &nbsp;· No card · No resume
         </span>
       </div>
-
-      {/* JAC moved above hero — removed from here */}
 
       {/* ── Opportunity Map ── */}
       <section className="relative z-10 px-5 pt-14 pb-14 max-w-6xl mx-auto w-full" data-testid="section-opportunity-map">
@@ -1086,11 +1101,11 @@ export default function Home() {
             style={{ background: "rgba(0,229,118,0.1)", border: "1px solid rgba(0,229,118,0.2)", color: "#00e576" }}>
             <span className="online-dot" aria-hidden />ACTIVATING CITY BY CITY
           </div>
-          <h2 className="text-2xl sm:text-3xl font-display font-black tracking-wider mb-3">Your city is going live.</h2>
+          <h2 className="text-2xl sm:text-3xl font-display font-black tracking-wider mb-3">Team GUBER is growing city by city.</h2>
           <p className="text-muted-foreground text-sm leading-relaxed max-w-lg mx-auto mb-8">
-            GUBER grows neighborhood by neighborhood. The more people who join your area,
+            More people means more hands, more reach, and more opportunities. The more team members who join your area,
             the more jobs, cash drops, and opportunities appear on your local grid.
-            Be a founding member — claim your spot before your city fills up.
+            Be a founding team member — claim your spot before your city fills up.
           </p>
           <div className="flex items-center justify-center gap-2 sm:gap-4 mb-8 flex-wrap">
             {["Sign Up Free", "Verify ID", "City Goes Live", "Start Earning"].map((step, i) => (
@@ -1168,7 +1183,7 @@ export default function Home() {
                 Earn <span className="text-amber-400">GUBER Credits</span>
               </h2>
               <p className="text-muted-foreground text-sm leading-relaxed mb-5 max-w-md">
-                Invite friends and earn GUBER Credits when they become active members on GUBER.
+                Invite someone who can help, earn, sell, move, inspect, or solve. Build your Team GUBER network and earn GUBER Credits when they become active members.
                 Credits may be used for platform perks, visibility boosts, premium features, and future rewards.
               </p>
               <div className="flex flex-col sm:flex-row items-center gap-3">
@@ -1243,9 +1258,9 @@ export default function Home() {
       <section className="relative z-10 px-5 pb-20 max-w-3xl mx-auto w-full text-center">
         <div className="rounded-2xl p-10 sm:p-14"
           style={{ background: "linear-gradient(135deg,rgba(0,229,229,0.05) 0%,rgba(152,255,152,0.04) 100%)", border: "1px solid rgba(0,229,229,0.12)" }}>
-          <h2 className="text-3xl font-display font-black tracking-wider mb-4">READY TO START EARNING?</h2>
+          <h2 className="text-3xl font-display font-black tracking-wider mb-4">JOIN TEAM GUBER</h2>
           <p className="text-muted-foreground text-sm leading-relaxed mb-8 max-w-md mx-auto">
-            Join thousands of people who are turning their neighborhood into a paycheck. No experience required — just show up.
+            More hands. More reach. More opportunities. Join Team GUBER — where one person becomes a team. No experience required. Just show up.
           </p>
           <div className="flex flex-col sm:flex-row items-center gap-3 justify-center">
             <Link href="/signup" className="w-full sm:w-auto h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm premium-btn flex items-center justify-center gap-2" data-testid="link-cta-signup">

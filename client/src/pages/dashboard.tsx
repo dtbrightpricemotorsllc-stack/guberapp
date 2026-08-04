@@ -30,6 +30,7 @@ import {
 } from "@/components/alert-prompt-modal";
 import { gpsGetCurrentPosition, isGpsDisclaimerAccepted, isGpsDisclaimerPending } from "@/lib/gps";
 import { JacDashboardCard } from "@/components/jac-dashboard-card";
+import { inViewport } from "@/lib/viewport-utils";
 
 // ─── Promo Modal System ───────────────────────────────────────────────────────
 
@@ -774,25 +775,20 @@ export default function Dashboard() {
   //     the user's actual GPS / fallback center, capped at NEARBY_RADIUS_MI.
   //     If we don't yet have a center, the count is 0 (better than lying).
   const NEARBY_RADIUS_MI = 50;
-  const inViewport = (lat: number, lng: number) => {
-    if (!mapBounds) return false;
-    return lat >= mapBounds.south && lat <= mapBounds.north && lng >= mapBounds.west && lng <= mapBounds.east;
-  };
   const isTrulyNearby = (lat: number, lng: number) => {
     if (!mapCenter) return false;
     return haversineDistance(mapCenter.lat, mapCenter.lng, lat, lng) <= NEARBY_RADIUS_MI;
   };
 
-  const visibleJobPins = filteredPins.filter(p => inViewport(p.lat, p.lng));
-  const visibleCashDropPins = activeCashDropPins.filter(d => inViewport(d.gpsLat, d.gpsLng));
-  const visibleWorkerPins = (workerPins || []).filter(w => inViewport(w.lat, w.lng));
-  // Counts shown to the user reflect REAL distance, not whatever happens to
-  // be inside the current map viewport (which may be zoomed out across the
-  // whole country before the user pans).
-  const nearbyJobCount = filteredPins.filter(p => isTrulyNearby(p.lat, p.lng)).length;
-  const nearbyDropCount = activeCashDropPins.filter(d => isTrulyNearby(d.gpsLat, d.gpsLng)).length;
-  const nearbyCount = nearbyJobCount + nearbyDropCount;
-  const workerCount = (workerPins || []).filter(w => isTrulyNearby(w.lat, w.lng)).length;
+  const visibleJobPins = filteredPins.filter(p => inViewport(p.lat, p.lng, mapBounds));
+  const visibleCashDropPins = activeCashDropPins.filter(d => inViewport(d.gpsLat, d.gpsLng, mapBounds));
+  const visibleWorkerPins = (workerPins || []).filter(w => inViewport(w.lat, w.lng, mapBounds));
+  // Counts shown to the user reflect only what is currently visible in the
+  // map viewport so the badge always matches what the user sees on screen.
+  // If the map has not yet reported bounds, inViewport() returns false and
+  // all counts are 0 (better than showing every pin in the country).
+  const nearbyCount = visibleJobPins.length + visibleCashDropPins.length;
+  const workerCount = visibleWorkerPins.length;
 
   const isSharingRef = useRef(false);
   const [isSharing, setIsSharing] = useState(false);

@@ -43,17 +43,38 @@ export function sanitizeAssistMessages(messages: any[]): ConvaiMessage[] {
  * because some ElevenLabs config surfaces only allow body fields, inside the
  * request body. We never trust it for identity until verifyJacVoiceToken()
  * validates the HMAC — this only *locates* the candidate string.
+ *
+ * ElevenLabs forwards SECRET dynamic variables with their full name (including
+ * the `secret__` prefix). We check both `secret__jac_voice_token` and the
+ * shorter `jac_voice_token` form to handle all ElevenLabs forwarding modes.
  */
 export function resolveVoiceToken(req: Request): string | null {
-  const h = req.headers["x-jac-voice-token"];
-  if (typeof h === "string" && h) return h;
-  const body: any = req.body ?? {};
-  if (typeof body.jac_voice_token === "string" && body.jac_voice_token) return body.jac_voice_token;
-  if (body.extra_body && typeof body.extra_body.jac_voice_token === "string" && body.extra_body.jac_voice_token) {
-    return body.extra_body.jac_voice_token;
+  // Header forms
+  for (const hName of ["x-jac-voice-token", "x-secret-jac-voice-token"]) {
+    const h = req.headers[hName];
+    if (typeof h === "string" && h) return h;
   }
-  // OpenAI's `user` field is a convenient passthrough ElevenLabs can populate.
+
+  const body: any = req.body ?? {};
+
+  // Direct body fields — both name variants
+  for (const key of ["jac_voice_token", "secret__jac_voice_token"]) {
+    if (typeof body[key] === "string" && body[key]) return body[key];
+  }
+
+  // extra_body passthrough (some ElevenLabs custom-LLM configs)
+  if (body.extra_body && typeof body.extra_body === "object") {
+    for (const key of ["jac_voice_token", "secret__jac_voice_token"]) {
+      if (typeof body.extra_body[key] === "string" && body.extra_body[key]) {
+        return body.extra_body[key];
+      }
+    }
+  }
+
+  // OpenAI's `user` field — ElevenLabs can populate this with dynamic vars.
+  // Our token is base64url.base64url so it always contains ".".
   if (typeof body.user === "string" && body.user.includes(".")) return body.user;
+
   return null;
 }
 

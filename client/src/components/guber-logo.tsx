@@ -1,4 +1,5 @@
-import logoImg from "@assets/Picsart_25-10-20_07-54-34-468_1772465286475.png";
+// Logo served from /public so it's a stable static URL, not a bundled asset import
+const LOGO_URL = "/guber-wordmark.png";
 
 export function GuberLogo({ size = "md", variant = "text" }: { size?: "sm" | "md" | "lg" | "xl"; variant?: "text" | "full" | "splash" }) {
   const imgSizes = {
@@ -22,7 +23,7 @@ export function GuberLogo({ size = "md", variant = "text" }: { size?: "sm" | "md
   return (
     <div className="inline-flex items-start" data-testid="guber-logo">
       <img
-        src={logoImg}
+        src={LOGO_URL}
         alt="GUBER"
         className={`${imgSizes[size]} w-auto object-contain`}
         style={{ imageRendering: "crisp-edges" }}

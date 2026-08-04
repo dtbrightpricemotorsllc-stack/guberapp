@@ -1111,6 +1111,48 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_jac_feedback_status ON jac_feedback_reports(status, created_at DESC);
   `).catch(e => console.error("[migration] jac_feedback_reports error:", e));
 
+  // ── JAC Conversations + Training Examples ─────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_conversations (
+      id               SERIAL PRIMARY KEY,
+      conversation_id  TEXT UNIQUE NOT NULL,
+      user_id          INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      agent_id         TEXT,
+      platform         TEXT DEFAULT 'web',
+      duration_secs    INTEGER,
+      turn_count       INTEGER DEFAULT 0,
+      transcript       JSONB DEFAULT '[]',
+      tool_calls_made  JSONB DEFAULT '[]',
+      navigated_to     TEXT,
+      user_took_action BOOLEAN DEFAULT FALSE,
+      auto_score       INTEGER,
+      auto_score_reason TEXT,
+      pii_scrubbed     BOOLEAN DEFAULT FALSE,
+      raw_payload      JSONB DEFAULT '{}',
+      created_at       TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_conversations_user ON jac_conversations(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_jac_conversations_score ON jac_conversations(auto_score DESC NULLS LAST);
+
+    CREATE TABLE IF NOT EXISTS jac_training_examples (
+      id               SERIAL PRIMARY KEY,
+      conversation_id  TEXT REFERENCES jac_conversations(conversation_id) ON DELETE SET NULL,
+      user_message     TEXT NOT NULL,
+      context_summary  TEXT,
+      ideal_response   TEXT NOT NULL,
+      tool_calls_made  JSONB DEFAULT '[]',
+      outcome_label    TEXT,
+      source           TEXT NOT NULL DEFAULT 'webhook',
+      pii_scrubbed     BOOLEAN DEFAULT FALSE,
+      admin_approved   BOOLEAN DEFAULT FALSE,
+      admin_rejected   BOOLEAN DEFAULT FALSE,
+      reject_reason    TEXT,
+      exported_at      TIMESTAMP,
+      created_at       TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_training_review ON jac_training_examples(admin_approved, admin_rejected, created_at DESC);
+  `).catch(e => console.error("[migration] jac_conversations/training error:", e));
+
   // ── GUBER Campaign Lab ─────────────────────────────────────────────────────
   await pool.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS campaign_lab_role TEXT;
@@ -1750,6 +1792,137 @@ app.use((req, res, next) => {
   seedBarterChecklists().catch(e => console.error("[seed] Barter checklists seed error:", e));
   reseedOnlineItemsSituations().catch(e => console.error("[seed] Online Items reseed error:", e));
   seedPlatformSettings().catch(e => console.error("[seed] Platform settings seed error:", e));
+
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS investor_leads (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      company TEXT,
+      email TEXT NOT NULL,
+      phone TEXT,
+      investor_type TEXT,
+      interest TEXT,
+      questions TEXT,
+      preferred_time TEXT,
+      conversation_summary TEXT,
+      notified_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(e => console.error("[seed] investor_leads table error:", e));
+
+  // ── Business Content Studios (multi-tenant) ──────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS business_studios (
+      id SERIAL PRIMARY KEY,
+      studio_id TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      tagline TEXT,
+      logo_url TEXT,
+      primary_color TEXT DEFAULT '#0f172a',
+      accent_color TEXT DEFAULT '#c9a84c',
+      welcome_message TEXT,
+      contact_email TEXT,
+      monthly_image_limit INTEGER DEFAULT 100,
+      monthly_video_limit INTEGER DEFAULT 10,
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(e => console.error("[seed] business_studios table error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS studio_approved_emails (
+      id SERIAL PRIMARY KEY,
+      studio_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'client',
+      full_name TEXT,
+      is_active BOOLEAN DEFAULT true,
+      added_by TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(studio_id, email)
+    )
+  `).catch(e => console.error("[seed] studio_approved_emails table error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS studio_otp_codes (
+      id SERIAL PRIMARY KEY,
+      studio_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      code TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      used BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(e => console.error("[seed] studio_otp_codes table error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS studio_content (
+      id SERIAL PRIMARY KEY,
+      studio_id TEXT NOT NULL,
+      owner_email TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      status TEXT DEFAULT 'draft',
+      approval_status TEXT DEFAULT 'pending',
+      source_file TEXT,
+      generated_file TEXT,
+      thumbnail_url TEXT,
+      prompt TEXT,
+      caption TEXT,
+      platform_format TEXT,
+      title TEXT,
+      notes TEXT,
+      approved_by TEXT,
+      approved_at TIMESTAMPTZ,
+      archived_at TIMESTAMPTZ,
+      metadata JSONB DEFAULT '{}',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(e => console.error("[seed] studio_content table error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS studio_audit_log (
+      id SERIAL PRIMARY KEY,
+      studio_id TEXT NOT NULL,
+      user_email TEXT,
+      action TEXT NOT NULL,
+      details JSONB DEFAULT '{}',
+      ip_address TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(e => console.error("[seed] studio_audit_log table error:", e));
+
+  // Studio Video Agent jobs — persisted for 24 hours
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS studio_video_jobs (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'running',
+      phase INTEGER NOT NULL DEFAULT 0,
+      logs JSONB NOT NULL DEFAULT '[]',
+      manifest JSONB,
+      video_url TEXT,
+      error TEXT,
+      target_duration INTEGER NOT NULL DEFAULT 15,
+      job_type TEXT NOT NULL DEFAULT 'video',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '24 hours')
+    )
+  `).catch(e => console.error("[seed] studio_video_jobs table error:", e));
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS studio_video_jobs_user_idx
+      ON studio_video_jobs(user_id, created_at DESC)
+  `).catch(e => console.error("[seed] studio_video_jobs index error:", e));
+  // Migrate existing rows that predate job_type column
+  await pool.query(`
+    ALTER TABLE studio_video_jobs ADD COLUMN IF NOT EXISTS job_type TEXT NOT NULL DEFAULT 'video'
+  `).catch(e => console.error("[seed] studio_video_jobs job_type migration error:", e));
+
+  // Seed NXTGEN Law Group studio
+  const { seedNxtgenStudio } = await import("./business-studio");
+  await seedNxtgenStudio();
 
   pool.query(`
     INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoint, credits_cost, active) VALUES

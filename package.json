@@ -11,7 +11,8 @@
     "db:push": "drizzle-kit push",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
-    "audit:statebleed": "node scripts/audit-statebleed.mjs"
+    "audit:statebleed": "node scripts/audit-statebleed.mjs",
+    "smoke:promo-render": "node scripts/smoke-promo-render.mjs"
   },
   "dependencies": {
     "@aparajita/capacitor-biometric-auth": "^7.2.0",
@@ -99,6 +100,7 @@
     "passport-local": "^1.0.0",
     "pdfkit": "^0.18.0",
     "pg": "^8.16.3",
+    "pptxgenjs": "^4.0.1",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
