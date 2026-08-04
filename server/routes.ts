@@ -14430,12 +14430,12 @@ export async function registerRoutes(
     try {
       const {
         brandName, tagline, productDescription, stylePreset,
-        callToAction, images, imageFocus, logoUrl, features, targetDuration,
+        callToAction, images, imageFocus, logoUrl, features, targetDuration, fontId,
       } = req.body as {
         brandName: string; tagline?: string; productDescription: string;
         stylePreset?: string; callToAction?: string;
         images: string[]; imageFocus?: string[]; logoUrl?: string;
-        features?: string[]; targetDuration?: number;
+        features?: string[]; targetDuration?: number; fontId?: string;
       };
       if (!brandName?.trim()) return res.status(400).json({ message: "Brand name is required." });
 
@@ -14453,7 +14453,7 @@ export async function registerRoutes(
         try {
           const { renderPromoVideo } = await import("./studio/promo-renderer");
           const mp4 = await renderPromoVideo(
-            { brandName, tagline, productDescription: productDescription ?? "", stylePreset: stylePreset ?? "professional", callToAction, images: images ?? [], imageFocus: imageFocus as any, logoUrl, features, targetDuration: targetDuration ?? 15 },
+            { brandName, tagline, productDescription: productDescription ?? "", stylePreset: stylePreset ?? "professional", callToAction, images: images ?? [], imageFocus: imageFocus as any, logoUrl, features, targetDuration: targetDuration ?? 15, fontId },
             (frame, total) => { job.frame = frame; job.total = total; },
           );
 
@@ -23429,7 +23429,7 @@ OUTPUT STYLE:
     }
   });
 
-  // ==================== HOST DROP PERMISSION ====================
+  // -------------------- HOST DROP PERMISSION -------------------
 
   app.get(["/api/users/me/host-drop-status", "/api/user/host-drop-status"], requireAuth, async (req: Request, res: Response) => {
     try {
@@ -24093,9 +24093,9 @@ OUTPUT STYLE:
   });
 
 
-  // ==================== SPONSORED CASH DROPS ====================
+  // -------------------- SPONSORED CASH DROPS -------------------
 
-  // ==================== SPONSOR DROP STRIPE CHECKOUT ====================
+  // -------------------- SPONSOR DROP STRIPE CHECKOUT -------------------
 
   app.post("/api/stripe/create-sponsor-drop-session", requireAuth, async (req: Request, res: Response) => {
     try {
@@ -24354,7 +24354,7 @@ OUTPUT STYLE:
     }
   });
 
-  // ==================== GUBER RESUME API ====================
+  // -------------------- GUBER RESUME API -------------------
 
   function buildResumeData(user: any) {
     const memberSince = user.createdAt ? new Date(user.createdAt) : new Date();

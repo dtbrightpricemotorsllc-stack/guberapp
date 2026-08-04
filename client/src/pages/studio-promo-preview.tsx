@@ -10,17 +10,40 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export interface PromoData {
   brandName: string;
+
   tagline?: string;
+
   productDescription: string;
+
   stylePreset: string;
+
   callToAction?: string;
+
   images: string[];
+
   imageFocus?: ("top" | "center" | "bottom")[];
+
   logoUrl?: string;
+
   features?: string[];
-  targetDuration: number;
+
+  targetDuration: number; // seconds
+  /** Font id from FONT_OPTIONS — undefined means use the style preset's default system font */
+
+  fontId?: string;
 }
 
+export interface FontOption {
+  id: string;
+  label: string;
+  hint: string;
+  /** woff2 filename under /fonts/. null = system font, no injection needed. */
+  file: string | null;
+  /** CSS font-family name to use in @font-face + font-family declarations */
+  family: string | null;
+  /** Preview sample string shown in the selector */
+  preview: string;
+}
 interface StyleTheme {
   bg: string;
   bg2: string;
@@ -638,8 +661,12 @@ function buildTimeline(data: PromoData): {
 
 // ── Player ────────────────────────────────────────────────────────────────────
 
-function PromoPlayer({ data }: { data: PromoData }) {
-  const theme = THEMES[data.stylePreset] ?? THEMES.professional;
+function PromoPlayer({ data, titleFont }: { data: PromoData; titleFont?: string }) {
+  const baseTheme = THEMES[data.stylePreset] ?? THEMES.professional;
+  // Override titleFont if a custom font was injected
+  const theme: StyleTheme = titleFont
+    ? { ...baseTheme, titleFont: `"${titleFont}", ${baseTheme.titleFont}` }
+    : baseTheme;
   const [sceneIdx, setSceneIdx] = useState(0);
 
   const timeline = buildTimeline(data);
@@ -683,6 +710,10 @@ function PromoPlayer({ data }: { data: PromoData }) {
 
 export default function StudioPromoPreviewPage() {
   const [data, setData] = useState<PromoData | null>(null);
+  /** CSS font-family string for the injected custom font, or undefined */
+  const [injectedFont, setInjectedFont] = useState<string | undefined>(undefined);
+  /** true once font is ready (either system font, or custom font has been injected) */
+  const [fontReady, setFontReady] = useState(false);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -693,16 +724,60 @@ export default function StudioPromoPreviewPage() {
     }
   }, []);
 
+  // Inject selected font as a base64 @font-face so no external network request
+  // is needed during headless Playwright rendering.
+  useEffect(() => {
+    if (!data) return;
+
+    const fontOpt = FONT_OPTIONS.find((f) => f.id === (data.fontId ?? "system"));
+    if (!fontOpt || !fontOpt.file || !fontOpt.family) {
+      // System font — no injection needed
+      setFontReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/fonts/${fontOpt.file}`);
+        if (!res.ok) throw new Error(`Font fetch failed: ${res.status}`);
+        const buf = await res.arrayBuffer();
+        // Convert to base64
+        const bytes = new Uint8Array(buf);
+        let binary = "";
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+        const b64 = btoa(binary);
+        const dataUri = `data:font/woff2;base64,${b64}`;
+        if (cancelled) return;
+
+        // Inject @font-face into document
+        const style = document.createElement("style");
+        style.textContent = `@font-face{font-family:"${fontOpt.family}";src:url("${dataUri}") format("woff2");font-weight:700 900;font-style:normal;font-display:block;}`;
+        document.head.appendChild(style);
+
+        // Ask browser to load the font
+        await document.fonts.load(`700 1em "${fontOpt.family}"`).catch(() => {});
+        if (cancelled) return;
+        setInjectedFont(fontOpt.family);
+      } catch (e) {
+        console.warn("Custom font injection failed, using system font:", e);
+      } finally {
+        if (!cancelled) setFontReady(true);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [data]);
+
   const scale =
     typeof window !== "undefined"
       ? Math.min(window.innerWidth / 1280, window.innerHeight / 720)
       : 1;
 
-  if (!data) {
+  if (!data || !fontReady) {
+    // Keep blank — promo-ready must NOT appear until fonts are loaded
     return (
-      <div style={{ width: "100vw", height: "100vh", background: "#000", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div className="promo-ready" style={{ display: "none" }} />
-      </div>
+      <div style={{ width: "100vw", height: "100vh", background: "#000", display: "flex", alignItems: "center", justifyContent: "center" }} />
     );
   }
 
@@ -712,7 +787,7 @@ export default function StudioPromoPreviewPage() {
     // Playwright captures at exactly 1280×720 — no scaling
     return (
       <div style={{ width: 1280, height: 720, overflow: "hidden", background: "#000" }}>
-        <PromoPlayer data={data} />
+        <PromoPlayer data={data} titleFont={injectedFont} />
       </div>
     );
   }
@@ -723,8 +798,17 @@ export default function StudioPromoPreviewPage() {
       display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
     }}>
       <div style={{ transform: `scale(${scale})`, transformOrigin: "center center" }}>
-        <PromoPlayer data={data} />
+        <PromoPlayer data={data} titleFont={injectedFont} />
       </div>
     </div>
   );
 }
+
+export const FONT_OPTIONS: FontOption[] = [
+  { id: "system",     label: "Default",    hint: "Style preset font",       file: null,                   family: null,             preview: "Aa" },
+  { id: "montserrat", label: "Montserrat", hint: "Bold modern sans-serif",  file: "montserrat-900.woff2", family: "Montserrat",     preview: "Aa" },
+  { id: "playfair",   label: "Playfair",   hint: "Elegant serif",           file: "playfair-700.woff2",   family: "Playfair Display", preview: "Aa" },
+  { id: "oswald",     label: "Oswald",     hint: "Condensed & punchy",      file: "oswald-700.woff2",     family: "Oswald",         preview: "Aa" },
+  { id: "nunito",     label: "Nunito",     hint: "Friendly & rounded",      file: "nunito-700.woff2",     family: "Nunito",         preview: "Aa" },
+  { id: "raleway",    label: "Raleway",    hint: "Sleek & elegant",         file: "raleway-700.woff2",    family: "Raleway",        preview: "Aa" },
+];

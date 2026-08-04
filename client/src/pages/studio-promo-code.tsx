@@ -13,6 +13,7 @@ import {
   Play, RefreshCw, Eye, Star,
 } from "lucide-react";
 import type { PromoData } from "./studio-promo-preview";
+import { FONT_OPTIONS } from "./studio-promo-preview";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,7 @@ const STYLE_PRESETS = [
 ];
 
 const DURATION_OPTIONS = [5, 10, 15, 20, 30] as const;
+
 type Dur = typeof DURATION_OPTIONS[number];
 type Focus = "top" | "center" | "bottom";
 
@@ -227,8 +229,9 @@ export default function StudioPromoCodePage() {
   // Highlights
   const [features, setFeatures] = useState(["", "", ""]);
 
-  // Style + duration
+  // Style + font + duration
   const [styleId, setStyleId]   = useState("professional");
+  const [fontId, setFontId]     = useState("system");
   const [duration, setDuration] = useState<Dur>(15);
 
   // Logo
@@ -297,6 +300,7 @@ export default function StudioPromoCodePage() {
     logoUrl: logoUrl ?? undefined,
     features: features.filter(Boolean),
     targetDuration: duration,
+    fontId,
   };
 
   const previewUrl =
@@ -462,6 +466,44 @@ export default function StudioPromoCodePage() {
                     <span className="text-xs font-bold">{s.label}</span>
                   </div>
                   <p className="text-[10px] leading-snug" style={{ color: active ? "hsl(0 0% 58%)" : "hsl(222 47% 38%)" }}>{s.sub}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Font */}
+        <div>
+          <SL>Brand Name Font</SL>
+          <div className="grid grid-cols-3 gap-2">
+            {FONT_OPTIONS.map((f) => {
+              const active = fontId === f.id;
+              return (
+                <button
+                  key={f.id}
+                  disabled={renderState === "rendering"}
+                  onClick={() => { setFontId(f.id); setShowPreview(false); }}
+                  className="text-left rounded-xl p-3 transition-all disabled:opacity-40"
+                  style={{
+                    background: active ? "hsl(222 47% 10%)" : "hsl(222 47% 6%)",
+                    border: `1px solid ${active ? selectedStyle.accent + "55" : "hsl(222 47% 14%)"}`,
+                  }}
+                >
+                  <div
+                    className="text-lg font-bold leading-none mb-1"
+                    style={{
+                      fontFamily: f.family ? `"${f.family}", system-ui, sans-serif` : "inherit",
+                      color: active ? selectedStyle.accent : "hsl(0 0% 80%)",
+                    }}
+                  >
+                    {f.preview}
+                  </div>
+                  <div className="text-[11px] font-semibold" style={{ color: active ? "hsl(0 0% 80%)" : "hsl(222 47% 55%)" }}>
+                    {f.label}
+                  </div>
+                  <div className="text-[10px] leading-tight mt-0.5" style={{ color: active ? "hsl(0 0% 55%)" : "hsl(222 47% 38%)" }}>
+                    {f.hint}
+                  </div>
                 </button>
               );
             })}

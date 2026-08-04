@@ -20,6 +20,8 @@ export interface PromoRenderInput {
   callToAction?: string;
   images: string[];
   targetDuration: number; // seconds
+  /** Font id from FONT_OPTIONS — passed through to the preview page */
+  fontId?: string;
 }
 
 const FPS = 24;
