@@ -2,6 +2,9 @@ name: Build Android AAB
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -14,18 +17,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Verify Android permission declarations and handlers
+        run: |
+          chmod +x scripts/check-android-permissions.sh
+          ./scripts/check-android-permissions.sh
+
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm ci --registry https://registry.npmjs.org
+        run: npm install
 
       - name: Build web app
         run: npm run build
         env:
           NODE_ENV: production
+          # Vite inlines any env var prefixed with VITE_ into the production
+          # JS bundle at build time. Without this the Google Sign-In plugin
+          # initializes with an empty webClientId and silently fails on Android.
           VITE_GOOGLE_WEB_CLIENT_ID: ${{ secrets.VITE_GOOGLE_WEB_CLIENT_ID }}
 
       - name: Set up JDK 21
@@ -55,8 +66,8 @@ jobs:
           mkdir -p android-build-config
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android-build-config/guber-release.jks
 
-      - name: Build signed release AAB
-        run: cd android && ./gradlew bundleRelease --no-daemon
+      - name: Build signed release AAB + APK
+        run: cd android && ./gradlew bundleRelease assembleRelease --no-daemon
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/android-build-config/guber-release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -68,4 +79,11 @@ jobs:
         with:
           name: guber-v1.3-release.aab
           path: android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30
+
+      - name: Upload signed APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: guber-v1.3-release.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
