@@ -145,16 +145,19 @@ class ViewController: CAPBridgeViewController, WKUIDelegate {
 }
 SWIFT
 
-  # ── Bad fixture: identifier appears in live code but not in func webView ──
-  # (e.g. a log tag or string constant — must NOT satisfy the guard)
+  # ── Bad fixture: identifier appears as a string literal inside an unrelated
+  #    func webView override — must NOT satisfy the guard even though both
+  #    "func webView" and the identifier appear in live (non-comment) code
   cat > "$BAD_SWIFT_NON_HANDLER" <<'SWIFT'
 import UIKit
 import WebKit
 import Capacitor
-class SomeHelper {
-    // References the permission label as a constant, not a WKUIDelegate override
-    let permTag = "requestMediaCapturePermissionFor"
-    func logPermission() { print(permTag) }
+class ViewController: CAPBridgeViewController, WKNavigationDelegate {
+    // A navigation-delegate override that happens to log the permission label
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation nav: WKNavigation!) {
+        let tag = "requestMediaCapturePermissionFor"
+        print(tag)
+    }
 }
 SWIFT
 
@@ -239,11 +242,20 @@ source = re.sub(r"//[^\n]*", "", source)
 
 # requestMediaCapturePermissionFor is a *parameter label* in the WKUIDelegate
 # method (func webView(_:requestMediaCapturePermissionFor:...)), not the
-# function name itself.  A bare word-boundary search would accept it appearing
-# as a string literal, log tag, or constant elsewhere in the file.  Instead
-# require that "func webView" and "requestMediaCapturePermissionFor" both
-# appear within the same function-signature span (≤800 chars apart), which is
-# tight enough to match only the actual delegate override.
+# function name itself.
+#
+# Two hazards prevented here:
+#   1. Comment-only references — handled by stripping comments above.
+#   2. String-literal references — e.g. a *different* func webView override
+#      that stores the label as a log tag: `let tag = "requestMediaCapture…"`.
+#      Strip all Swift string literals (including escape sequences) before
+#      searching so the label inside quotes cannot satisfy the check.
+#
+# After stripping, require "func webView" and the label to co-appear within
+# 800 chars (DOTALL), which matches the multi-line parameter-label form of
+# the real WKUIDelegate override while rejecting unrelated webView methods.
+source = re.sub(r'"(?:[^"\\]|\\.)*"', '""', source)
+
 pattern = re.compile(
     r"\bfunc\s+webView\b.{0,800}\b" + re.escape(method) + r"\b",
     re.DOTALL,
