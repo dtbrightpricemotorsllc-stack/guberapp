@@ -38,6 +38,10 @@ args = "statebleed"
 task = "workflow.run"
 args = "smoke-promo-render"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "android-permissions-guard"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -68,6 +72,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "node scripts/smoke-promo-render.mjs"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "android-permissions-guard"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "node scripts/check-android-permissions.test.mjs"
 
 [workflows.workflow.metadata]
 isValidation = true
