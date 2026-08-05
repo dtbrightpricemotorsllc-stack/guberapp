@@ -87,10 +87,10 @@ export async function renderPromoVideo(
     const totalFrames = Math.ceil(input.targetDuration * FPS);
     const frameMs = 1000 / FPS;
 
-    // Encode promo data as base64 for the preview URL
-    const encoded = encodeURIComponent(
-      Buffer.from(JSON.stringify(input)).toString("base64"),
-    );
+    // Encode promo data for the preview URL.  Plain encodeURIComponent(JSON.stringify())
+    // handles all Unicode correctly (apostrophes, emojis, curly quotes, etc.).
+    // The old Buffer base64 layer was unnecessary and caused client-side btoa crashes.
+    const encoded = encodeURIComponent(JSON.stringify(input));
     const previewUrl = `http://localhost:${process.env.PORT ?? 5000}/studio/promo/preview?d=${encoded}&headless=1`;
 
     // ── Launch Playwright ───────────────────────────────────────────────────

@@ -36,12 +36,13 @@ const WIDTH           = 1280;
 const HEIGHT          = 720;
 const PORT            = process.env.PORT ?? 5000;
 
+// Includes Unicode that previously crashed btoa(): apostrophes, curly quotes, emoji
 const SAMPLE_PROMO = {
-  brandName: "SmokeTest Co",
-  tagline: "Built to verify",
-  productDescription: "A short description exercising the render pipeline start to finish.",
+  brandName: "GUBER 🎥",
+  tagline: "Can't be there? Send someone through GUBER.",
+  productDescription: '"You ask. They go. You see." Check a vehicle — without making the trip.',
   stylePreset: "professional",
-  callToAction: "Get Started",
+  callToAction: "GUBER 📍",
   images: [],
   targetDuration: TARGET_DURATION,
 };
@@ -155,9 +156,9 @@ async function main() {
     }
 
     // 2. Build the preview URL ──────────────────────────────────────────────
-    const encoded = encodeURIComponent(
-      Buffer.from(JSON.stringify(SAMPLE_PROMO)).toString("base64"),
-    );
+    // Plain encodeURIComponent(JSON.stringify()) — no base64 layer needed and
+    // base64 (btoa) crashes on Unicode text (emoji, curly quotes, em-dashes).
+    const encoded = encodeURIComponent(JSON.stringify(SAMPLE_PROMO));
     const previewUrl = `http://localhost:${PORT}/studio/promo/preview?d=${encoded}&headless=1`;
     log(`Preview URL (truncated): ${previewUrl.slice(0, 90)}…`);
 

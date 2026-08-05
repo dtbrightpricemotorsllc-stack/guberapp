@@ -394,8 +394,17 @@ export default function StudioPromoCodePage() {
     fontId,
   };
 
-  const previewUrl =
-    `/studio/promo/preview?d=${encodeURIComponent(btoa(JSON.stringify(promoData)))}&t=${previewKey}`;
+  // encodeURIComponent(JSON.stringify(...)) handles all Unicode correctly (apostrophes, emojis,
+  // curly quotes, etc.).  The old btoa() layer crashed on anything outside Latin-1 — removed.
+  let previewUrl: string;
+  try {
+    previewUrl = `/studio/promo/preview?d=${encodeURIComponent(JSON.stringify(promoData))}&t=${previewKey}`;
+  } catch (encodeErr) {
+    if (import.meta.env.DEV) {
+      console.error("[studio/promo] failed to encode promo data for preview URL:", encodeErr);
+    }
+    previewUrl = "/studio/promo/preview";   // fallback — preview page will show empty
+  }
 
   // ── Export ─────────────────────────────────────────────────────────────────
 
