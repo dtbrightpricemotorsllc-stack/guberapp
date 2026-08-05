@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Upload, X, Loader2, Download, CheckCircle2,
   Sparkles, Megaphone, Zap, Award, Gem, Smile, Flame, Target,
-  Play, RefreshCw, Eye, Star,
+  Play, RefreshCw, Eye, Star, Music, VolumeX,
 } from "lucide-react";
 import type { PromoData } from "./studio-promo-preview";
 import { FONT_OPTIONS } from "./studio-promo-preview";
@@ -394,8 +394,17 @@ export default function StudioPromoCodePage() {
     fontId,
   };
 
-  const previewUrl =
-    `/studio/promo/preview?d=${encodeURIComponent(btoa(JSON.stringify(promoData)))}&t=${previewKey}`;
+  // encodeURIComponent(JSON.stringify(...)) handles all Unicode correctly (apostrophes, emojis,
+  // curly quotes, etc.).  The old btoa() layer crashed on anything outside Latin-1 — removed.
+  let previewUrl: string;
+  try {
+    previewUrl = `/studio/promo/preview?d=${encodeURIComponent(JSON.stringify(promoData))}&t=${previewKey}`;
+  } catch (encodeErr) {
+    if (import.meta.env.DEV) {
+      console.error("[studio/promo] failed to encode promo data for preview URL:", encodeErr);
+    }
+    previewUrl = "/studio/promo/preview";   // fallback — preview page will show empty
+  }
 
   // ── Export ─────────────────────────────────────────────────────────────────
 
