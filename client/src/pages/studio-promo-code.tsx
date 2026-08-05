@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Upload, X, Loader2, Download, CheckCircle2,
   Sparkles, Megaphone, Zap, Award, Gem, Smile, Flame, Target,
-  Play, RefreshCw, Eye, Star,
+  Play, RefreshCw, Eye, Star, Music, VolumeX,
 } from "lucide-react";
 import type { PromoData } from "./studio-promo-preview";
 import { FONT_OPTIONS } from "./studio-promo-preview";
