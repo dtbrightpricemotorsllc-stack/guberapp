@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Bell, X } from "lucide-react";
 import { subscribeToPush, getPushStatus } from "@/lib/push";
 import { useAuth } from "@/lib/auth-context";
@@ -42,10 +42,44 @@ interface AlertPromptModalProps {
   onClose: () => void;
 }
 
+// How long (ms) before we show the "taking longer" secondary message
+const SLOW_THRESHOLD_MS = 4_500;
+
 export function AlertPromptModal({ onClose }: AlertPromptModalProps) {
   const { user } = useAuth();
   const [enabling, setEnabling] = useState(false);
   const [done, setDone] = useState(false);
+  // Elapsed seconds since "ENABLING…" started — drives the count-up display
+  const [elapsedSec, setElapsedSec] = useState(0);
+  // True once SLOW_THRESHOLD_MS passes without a response
+  const [isSlow, setIsSlow] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const slowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Start / stop the timers whenever enabling changes
+  useEffect(() => {
+    if (enabling) {
+      setElapsedSec(0);
+      setIsSlow(false);
+
+      intervalRef.current = setInterval(() => {
+        setElapsedSec((s) => s + 1);
+      }, 1_000);
+
+      slowTimerRef.current = setTimeout(() => {
+        setIsSlow(true);
+      }, SLOW_THRESHOLD_MS);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+      intervalRef.current = null;
+      slowTimerRef.current = null;
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+    };
+  }, [enabling]);
 
   const handleEnable = async () => {
     if (!user?.id) return;
@@ -54,6 +88,7 @@ export function AlertPromptModal({ onClose }: AlertPromptModalProps) {
     // do NOT trust getPushStatus() here, it always returns "default" on native.
     const granted = await subscribeToPush(user.id);
     setEnabling(false);
+    setIsSlow(false);
     setAlertStatus(granted ? "granted" : "declined");
     if (granted) {
       setDone(true);
@@ -142,31 +177,95 @@ export function AlertPromptModal({ onClose }: AlertPromptModalProps) {
           data-testid="button-turn-on-alerts"
           style={{
             width: "100%", background: enabling ? "rgba(201,168,76,0.4)" : "linear-gradient(135deg,#C9A84C,#a8873c)",
-            color: "#000", border: "none", borderRadius: 14,
+            color: enabling ? "rgba(0,0,0,0.7)" : "#000", border: "none", borderRadius: 14,
             padding: "15px 0", fontWeight: 900, fontSize: 15,
             fontFamily: "Oxanium, sans-serif", letterSpacing: "0.08em",
             cursor: enabling ? "not-allowed" : "pointer",
             boxShadow: "0 0 20px rgba(201,168,76,0.25)",
-            marginBottom: 12, textTransform: "uppercase",
+            marginBottom: 0, textTransform: "uppercase",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+            transition: "background 0.3s",
           }}
         >
-          {enabling ? "Enabling…" : "Turn On Alerts"}
+          {enabling ? (
+            <>
+              {/* Spinning ring */}
+              <span
+                aria-hidden="true"
+                style={{
+                  display: "inline-block",
+                  width: 16, height: 16,
+                  border: "2.5px solid rgba(0,0,0,0.25)",
+                  borderTopColor: "rgba(0,0,0,0.75)",
+                  borderRadius: "50%",
+                  animation: "spin 0.75s linear infinite",
+                  flexShrink: 0,
+                }}
+              />
+              <span>Enabling… {elapsedSec > 0 ? `${elapsedSec}s` : ""}</span>
+            </>
+          ) : "Turn On Alerts"}
         </button>
 
-        <button
-          onClick={handleNotNow}
-          data-testid="button-not-now-alerts"
+        {/* Slow-response hint — fades in after SLOW_THRESHOLD_MS */}
+        <div
+          aria-live="polite"
           style={{
-            width: "100%", background: "none", border: "none",
-            color: "rgba(255,255,255,0.85)", fontSize: 13,
-            cursor: "pointer", fontFamily: "Oxanium, sans-serif",
-            letterSpacing: "0.04em", padding: "8px 0",
+            minHeight: 38,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            marginTop: 10, marginBottom: 2,
+            opacity: isSlow ? 1 : 0,
+            transition: "opacity 0.5s ease",
+            pointerEvents: isSlow ? "auto" : "none",
           }}
         >
-          Not now
-        </button>
+          <p style={{
+            color: "rgba(255,255,255,0.6)", fontSize: 12,
+            fontFamily: "Oxanium, sans-serif", textAlign: "center",
+            margin: 0, lineHeight: 1.4,
+          }}>
+            This is taking longer than usual — you can skip for now
+          </p>
+        </div>
+
+        {/* "Not now" — plain link normally, promoted to a full button when slow */}
+        {isSlow ? (
+          <button
+            onClick={handleNotNow}
+            data-testid="button-not-now-alerts"
+            style={{
+              width: "100%", background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.2)",
+              borderRadius: 14, color: "#fff", fontSize: 14,
+              cursor: "pointer", fontFamily: "Oxanium, sans-serif",
+              letterSpacing: "0.04em", padding: "13px 0",
+              fontWeight: 700, marginTop: 0,
+              animation: "fade-in-up 0.35s ease forwards",
+            }}
+          >
+            Skip for now
+          </button>
+        ) : (
+          <button
+            onClick={handleNotNow}
+            data-testid="button-not-now-alerts"
+            style={{
+              width: "100%", background: "none", border: "none",
+              color: "rgba(255,255,255,0.85)", fontSize: 13,
+              cursor: "pointer", fontFamily: "Oxanium, sans-serif",
+              letterSpacing: "0.04em", padding: "8px 0",
+              marginTop: 4,
+            }}
+          >
+            Not now
+          </button>
+        )}
       </div>
-      <style>{`@keyframes slide-up { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }`}</style>
+      <style>{`
+        @keyframes slide-up { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fade-in-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
     </div>
   );
 }
