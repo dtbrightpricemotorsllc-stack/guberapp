@@ -1405,17 +1405,82 @@ export async function registerRoutes(
   // ── Business Leads ────────────────────────────────────────────────────────
   // Public submission — no auth required. Phone never returned publicly.
 
+  /** Minimal HTML-entity escaper — prevents stored-XSS in the Resend email. */
+  function escHtml(s: unknown): string {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  const BIZ_LEAD_ALLOWED_STATUSES = new Set([
+    "new", "contacted", "consultation_scheduled",
+    "proposal_sent", "won", "not_ready", "closed",
+  ]);
+
+  const BIZ_LEAD_ALLOWED_INTERESTS = new Set([
+    "Join GUBER",
+    "Promote my business",
+    "Build an app",
+    "Build a website",
+    "Add AI or automation",
+    "Sponsor a cash drop or treasure hunt",
+    "Interested but not ready",
+    "Not sure, contact me",
+  ]);
+
+  /** YYYY-MM-DD date-string validator */
+  const isValidDateString = (v: unknown): boolean =>
+    typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+
   app.post("/api/public/business-leads", async (req: Request, res: Response) => {
     const {
       businessName, contactName, phone, email, city, state,
       businessCategory, selectedInterest, message, permissionToContact,
     } = req.body;
 
-    if (!businessName || !contactName || !phone || !email || !city || !state || !businessCategory || !selectedInterest) {
-      return res.status(400).json({ error: "Required fields missing" });
-    }
-    if (!permissionToContact) {
-      return res.status(400).json({ error: "Permission to contact is required" });
+    // ── Server-side validation ─────────────────────────────────────────────
+    const errors: string[] = [];
+
+    const str = (v: unknown, max: number) =>
+      typeof v === "string" && v.trim().length > 0 && v.trim().length <= max
+        ? v.trim()
+        : null;
+
+    const bName    = str(businessName, 200);
+    const cName    = str(contactName, 200);
+    const bCity    = str(city, 100);
+    const bState   = str(state, 50);
+    const bCat     = str(businessCategory, 200);
+    const bMsg     = typeof message === "string" ? message.trim().slice(0, 600) || null : null;
+
+    if (!bName)    errors.push("Business name is required (max 200 chars)");
+    if (!cName)    errors.push("Contact name is required (max 200 chars)");
+    if (!bCity)    errors.push("City is required");
+    if (!bState)   errors.push("State is required");
+    if (!bCat)     errors.push("Business category is required");
+
+    // Phone: strict allowlist — only digits, spaces, dashes, dots, parentheses, leading +
+    // Rejects URI delimiters (?&=@#%), angle brackets, semicolons, and other injection chars.
+    const phoneRaw = typeof phone === "string" ? phone.trim() : "";
+    const phoneAllowlist = /^[0-9+\-(). ]{7,25}$/;
+    if (!phoneAllowlist.test(phoneRaw)) errors.push("Valid phone number is required (digits, spaces, dashes, dots, parentheses only)");
+    const phoneDigits = phoneRaw.replace(/\D/g, "");
+    if (phoneDigits.length < 7 || phoneDigits.length > 20) errors.push("Valid phone number is required");
+
+    // Email: basic format check
+    const emailVal = typeof email === "string" ? email.trim().toLowerCase() : "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) errors.push("Valid email address is required");
+
+    // Interest: must be one of the declared options
+    if (!BIZ_LEAD_ALLOWED_INTERESTS.has(selectedInterest)) errors.push("Invalid interest selection");
+
+    if (!permissionToContact) errors.push("Permission to contact is required");
+
+    if (errors.length > 0) {
+      return res.status(400).json({ error: errors[0] });
     }
 
     try {
@@ -1425,8 +1490,8 @@ export async function registerRoutes(
             business_category, selected_interest, message, permission_to_contact,
             status, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'new',NOW(),NOW())`,
-        [businessName, contactName, phone, email, city, state,
-         businessCategory, selectedInterest, message || null, !!permissionToContact]
+        [bName, cName, phone, emailVal, bCity, bState,
+         bCat, selectedInterest, bMsg, true]
       );
 
       // Admin email notification (best-effort — don't fail the request if email fails)
@@ -1438,23 +1503,43 @@ export async function registerRoutes(
             const { Resend } = await import("resend");
             const resend = new Resend(process.env.RESEND_API_KEY);
             const fromDomain = process.env.RESEND_FROM_DOMAIN || "guberapp.app";
+            // Use plain-text email to guarantee no HTML injection from user-supplied fields
+            const adminUrl = `${process.env.APP_BASE_URL || "https://guberapp.com"}/admin?tab=biz-leads`;
             await resend.emails.send({
               from: `GUBER <noreply@${fromDomain}>`,
               to: adminEmails,
-              subject: `New Business Lead: ${businessName}`,
+              subject: `New Business Lead: ${escHtml(bName)}`,
+              text: [
+                "New Business Lead Received",
+                "─────────────────────────",
+                `Business:  ${bName}`,
+                `Contact:   ${cName}`,
+                `Email:     ${emailVal}`,
+                `Location:  ${bCity}, ${bState}`,
+                `Category:  ${bCat}`,
+                `Interest:  ${selectedInterest}`,
+                bMsg ? `Message:   ${bMsg}` : "",
+                "",
+                `View in Admin: ${adminUrl}`,
+              ].filter(l => l !== "").join("\n"),
               html: `
                 <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
                   <h2 style="color:#a855f7">New Business Lead Received</h2>
                   <table style="width:100%;border-collapse:collapse">
-                    <tr><td style="padding:6px 0;color:#666;width:150px">Business</td><td style="padding:6px 0;font-weight:bold">${businessName}</td></tr>
-                    <tr><td style="padding:6px 0;color:#666">Contact</td><td style="padding:6px 0">${contactName}</td></tr>
-                    <tr><td style="padding:6px 0;color:#666">Email</td><td style="padding:6px 0">${email}</td></tr>
-                    <tr><td style="padding:6px 0;color:#666">Location</td><td style="padding:6px 0">${city}, ${state}</td></tr>
-                    <tr><td style="padding:6px 0;color:#666">Category</td><td style="padding:6px 0">${businessCategory}</td></tr>
-                    <tr><td style="padding:6px 0;color:#666">Interest</td><td style="padding:6px 0">${selectedInterest}</td></tr>
-                    ${message ? `<tr><td style="padding:6px 0;color:#666">Message</td><td style="padding:6px 0">${message}</td></tr>` : ""}
+                    <tr><td style="padding:6px 0;color:#666;width:150px">Business</td><td style="padding:6px 0;font-weight:bold">${escHtml(bName)}</td></tr>
+                    <tr><td style="padding:6px 0;color:#666">Contact</td><td style="padding:6px 0">${escHtml(cName)}</td></tr>
+                    <tr><td style="padding:6px 0;color:#666">Email</td><td style="padding:6px 0">${escHtml(emailVal)}</td></tr>
+                    <tr><td style="padding:6px 0;color:#666">Location</td><td style="padding:6px 0">${escHtml(bCity)}, ${escHtml(bState)}</td></tr>
+                    <tr><td style="padding:6px 0;color:#666">Category</td><td style="padding:6px 0">${escHtml(bCat)}</td></tr>
+                    <tr><td style="padding:6px 0;color:#666">Interest</td><td style="padding:6px 0">${escHtml(selectedInterest)}</td></tr>
+                    ${bMsg ? `<tr><td style="padding:6px 0;color:#666">Message</td><td style="padding:6px 0">${escHtml(bMsg)}</td></tr>` : ""}
                   </table>
-                  <p style="margin-top:20px"><a href="${process.env.APP_BASE_URL || ""}/admin?tab=biz-leads" style="background:#a855f7;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold">View in Admin Panel</a></p>
+                  <p style="margin-top:20px">
+                    <a href="${escHtml(adminUrl)}"
+                       style="background:#a855f7;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold">
+                      View in Admin Panel
+                    </a>
+                  </p>
                 </div>
               `,
             });
@@ -1482,6 +1567,7 @@ export async function registerRoutes(
                 created_at, updated_at
          FROM business_leads ORDER BY created_at DESC`
       );
+      // phone intentionally excluded from list response
       res.json(r.rows.map((b: any) => ({
         id: b.id,
         businessName: b.business_name,
@@ -1514,6 +1600,7 @@ export async function registerRoutes(
       const r = await pool.query(`SELECT * FROM business_leads WHERE id = $1`, [id]);
       if (!r.rows.length) return res.status(404).json({ error: "Not found" });
       const b = r.rows[0];
+      // phone included — admin-only detail endpoint
       res.json({
         id: b.id,
         businessName: b.business_name,
@@ -1543,16 +1630,52 @@ export async function registerRoutes(
     if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+
     const { status, internalNotes, followUpDate } = req.body;
+
+    // ── Validate PATCH inputs ─────────────────────────────────────────────
+    if (status !== undefined && !BIZ_LEAD_ALLOWED_STATUSES.has(status)) {
+      return res.status(400).json({ error: `Invalid status. Allowed: ${[...BIZ_LEAD_ALLOWED_STATUSES].join(", ")}` });
+    }
+    if (internalNotes !== undefined && internalNotes !== null) {
+      if (typeof internalNotes !== "string" || internalNotes.length > 4000) {
+        return res.status(400).json({ error: "internalNotes must be a string ≤4000 chars" });
+      }
+    }
+    // followUpDate must be YYYY-MM-DD or null/undefined (clearing the field)
+    if (followUpDate !== undefined && followUpDate !== null && followUpDate !== "") {
+      if (!isValidDateString(followUpDate)) {
+        return res.status(400).json({ error: "followUpDate must be YYYY-MM-DD or null" });
+      }
+    }
+
+    // Build the UPDATE dynamically so omitted fields are never touched,
+    // while an explicit null or "" properly clears the column.
+    const updates: string[] = ["updated_at = NOW()"];
+    const params: unknown[] = [];
+    let p = 1;
+
+    if (status !== undefined) {
+      updates.push(`status = $${p++}`);
+      params.push(status);
+    }
+    if (internalNotes !== undefined) {
+      updates.push(`internal_notes = $${p++}`);
+      params.push(internalNotes ?? null);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, "followUpDate")) {
+      // Explicit key present — null/"" clears the column; valid date string sets it
+      const dateVal = (followUpDate === null || followUpDate === "") ? null : followUpDate;
+      updates.push(`follow_up_date = $${p++}`);
+      params.push(dateVal);
+    }
+
+    params.push(id); // always last
+
     try {
       const r = await pool.query(
-        `UPDATE business_leads SET
-           status         = COALESCE($1, status),
-           internal_notes = COALESCE($2, internal_notes),
-           follow_up_date = COALESCE($3, follow_up_date),
-           updated_at     = NOW()
-         WHERE id = $4 RETURNING *`,
-        [status ?? null, internalNotes ?? null, followUpDate ?? null, id]
+        `UPDATE business_leads SET ${updates.join(", ")} WHERE id = $${p} RETURNING *`,
+        params
       );
       if (!r.rows.length) return res.status(404).json({ error: "Not found" });
       const b = r.rows[0];

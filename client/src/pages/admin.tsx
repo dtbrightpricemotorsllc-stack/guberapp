@@ -6364,7 +6364,7 @@ function BizLeadsTab() {
               {/* Action buttons — link to business's contact, not Guber Global */}
               <div className="flex gap-2">
                 <a
-                  href={`mailto:${detail.email}?subject=GUBER Business Inquiry — ${encodeURIComponent(detail.businessName)}`}
+                  href={`mailto:${encodeURIComponent(detail.email)}?subject=${encodeURIComponent(`GUBER Business Inquiry — ${detail.businessName}`)}`}
                   className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-display tracking-wider transition-all"
                   style={{ background: "rgba(0,229,229,0.1)", border: "1px solid rgba(0,229,229,0.2)", color: "#00E5E5" }}
                   data-testid="btn-email-lead"
@@ -6372,7 +6372,7 @@ function BizLeadsTab() {
                   <Mail className="w-3.5 h-3.5" /> EMAIL
                 </a>
                 <a
-                  href={`sms:${detail.phone}`}
+                  href={`sms:${encodeURIComponent((detail.phone ?? "").replace(/[^\d+\-().#* ]/g, ""))}`}
                   className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-display tracking-wider transition-all"
                   style={{ background: "rgba(0,229,118,0.1)", border: "1px solid rgba(0,229,118,0.2)", color: "#00e576" }}
                   data-testid="btn-sms-lead"
