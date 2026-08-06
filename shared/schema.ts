@@ -1307,6 +1307,17 @@ export const businessProfiles = pgTable("business_profiles", {
   companyVerified: boolean("company_verified").default(false),
   verifiedAt: timestamp("verified_at"),
   createdAt: timestamp("created_at").defaultNow(),
+  // Extended onboarding fields
+  address: text("address"),
+  zipCode: text("zip_code"),
+  serviceArea: text("service_area"),
+  businessDescription: text("business_description"),
+  productsServices: text("products_services"),
+  businessHours: jsonb("business_hours"),
+  website: text("website"),
+  socialLinks: jsonb("social_links"),
+  photoUrls: jsonb("photo_urls"),
+  preferredContactMethod: text("preferred_contact_method"),
 });
 
 export const bulkJobBatches = pgTable("bulk_job_batches", {

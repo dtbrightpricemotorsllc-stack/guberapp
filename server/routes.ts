@@ -1491,15 +1491,17 @@ export async function registerRoutes(
     }
 
     try {
-      await pool.query(
+      const insertResult = await pool.query(
         `INSERT INTO business_leads
            (business_name, contact_name, phone, email, city, state,
             business_category, selected_interest, message, permission_to_contact,
             source, status, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'new',NOW(),NOW())`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'new',NOW(),NOW())
+         RETURNING id`,
         [bName, cName, phoneRaw, emailVal, bCity, bState,
          bCat, selectedInterest, bMsg, true, bSource]
       );
+      const leadId: number = insertResult.rows[0]?.id;
 
       if (process.env.RESEND_API_KEY) {
         const { Resend } = await import("resend");
@@ -1641,7 +1643,7 @@ export async function registerRoutes(
         }
       }
 
-      res.json({ ok: true });
+      res.json({ ok: true, leadId });
     } catch (err) {
       console.error("[business-leads POST] error:", err);
       res.status(500).json({ error: "Failed to save lead" });
@@ -1797,6 +1799,155 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[admin/business-leads PATCH] error:", err);
       res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  // ── Admin: Convert business lead to a real business account ─────────────────
+  app.post("/api/admin/business-leads/:id/convert", async (req: Request, res: Response) => {
+    const adminUser = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!adminUser || adminUser.role !== "admin") return res.status(403).json({ message: "Admin only" });
+
+    const leadId = parseInt(req.params.id);
+    if (isNaN(leadId)) return res.status(400).json({ error: "invalid id" });
+
+    try {
+      // Load the lead
+      const leadR = await pool.query(`SELECT * FROM business_leads WHERE id = $1`, [leadId]);
+      if (!leadR.rows.length) return res.status(404).json({ error: "Lead not found" });
+      const lead = leadR.rows[0];
+
+      if (lead.converted_to_user_id) {
+        return res.status(409).json({ error: "Lead already converted", userId: lead.converted_to_user_id });
+      }
+
+      // Check for existing account with same email
+      const existingByEmail = await storage.getUserByEmail(lead.email);
+      if (existingByEmail) {
+        // Just link the lead to the existing user
+        await pool.query(
+          `UPDATE business_leads SET converted_to_user_id = $1, status = 'converted', updated_at = NOW() WHERE id = $2`,
+          [existingByEmail.id, leadId]
+        );
+        return res.json({ ok: true, userId: existingByEmail.id, existing: true });
+      }
+
+      // Generate unique guberId, username, referral code
+      let newGuberId = generateGuberId();
+      while (await storage.getUserByGuberId(newGuberId)) { newGuberId = generateGuberId(); }
+
+      // Build a unique username from business name
+      const baseUsername = lead.business_name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 18) || "biz";
+      let username = baseUsername;
+      let usernameAttempts = 0;
+      while (await storage.getUserByUsername(username)) {
+        username = `${baseUsername}${Math.floor(Math.random() * 9000) + 1000}`;
+        if (++usernameAttempts > 20) throw new Error("Could not generate unique username");
+      }
+
+      let newRefCode = generateReferralCode();
+      while (true) {
+        const clash = await db.execute(sql`SELECT 1 FROM users WHERE referral_code = ${newRefCode} LIMIT 1`);
+        if (!clash.rows.length) break;
+        newRefCode = generateReferralCode();
+      }
+
+      // Generate a temporary random password — user must reset via email
+      const tempPassword = `Guber_${Math.random().toString(36).slice(2, 10)}!`;
+      const hashedPassword = await hashPassword(tempPassword);
+
+      let newUser: any;
+      let bizAccount: any;
+
+      try {
+        await db.execute(sql`BEGIN`);
+
+        newUser = await storage.createUser({
+          email: lead.email,
+          username,
+          fullName: lead.contact_name || lead.business_name,
+          password: hashedPassword,
+          role: "buyer",
+          tier: "community",
+          day1OG: false,
+          guberId: newGuberId,
+          referralCode: newRefCode,
+          accountType: "business",
+          termsAcceptedAt: new Date(),
+        });
+
+        bizAccount = await storage.createBusinessAccount({
+          ownerUserId: newUser.id,
+          businessName: lead.business_name,
+          workEmail: lead.email,
+          phone: lead.phone || null,
+          industry: lead.business_category || null,
+          companyNeedsSummary: lead.message || null,
+          status: "pending_business",
+        });
+
+        await storage.createBusinessProfile({
+          userId: newUser.id,
+          companyName: lead.business_name,
+          industry: lead.business_category || null,
+          contactPhone: lead.phone || null,
+          contactPerson: lead.contact_name || null,
+        });
+
+        await pool.query(
+          `UPDATE business_leads SET converted_to_user_id = $1, status = 'converted', updated_at = NOW() WHERE id = $2`,
+          [newUser.id, leadId]
+        );
+
+        await db.execute(sql`COMMIT`);
+      } catch (txErr) {
+        await db.execute(sql`ROLLBACK`).catch(() => {});
+        throw txErr;
+      }
+
+      // Send a claim email with password-reset link
+      if (process.env.RESEND_API_KEY) {
+        try {
+          const { Resend } = await import("resend");
+          const resend = new Resend(process.env.RESEND_API_KEY);
+          const fromDomain = process.env.RESEND_FROM_DOMAIN || "guberapp.app";
+          const appBase = process.env.APP_BASE_URL || "https://guberapp.com";
+          const resetLink = `${appBase}/forgot-password`;
+
+          await resend.emails.send({
+            from: `GUBER <noreply@${fromDomain}>`,
+            to: [lead.email],
+            subject: `Your GUBER Business Account is Ready, ${escHtml(lead.contact_name || lead.business_name)}!`,
+            html: `
+              <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#0a0a0a;color:#fff;border-radius:16px;overflow:hidden">
+                <div style="background:linear-gradient(135deg,#a855f7,#7c3aed);padding:24px 32px">
+                  <h1 style="margin:0;font-size:20px;letter-spacing:0.05em">GUBER GLOBAL LLC</h1>
+                  <p style="margin:4px 0 0;font-size:12px;opacity:0.8;letter-spacing:0.1em">BUSINESS ACCOUNT READY</p>
+                </div>
+                <div style="padding:28px 32px">
+                  <p style="color:#ccc;margin-top:0">Hi ${escHtml(lead.contact_name || lead.business_name)},</p>
+                  <p style="color:#ccc">A GUBER Business account has been created for <strong style="color:#fff">${escHtml(lead.business_name)}</strong>.</p>
+                  <div style="background:#1a1a1a;border-radius:10px;padding:16px 20px;margin:20px 0">
+                    <p style="margin:0 0 8px;font-size:10px;letter-spacing:0.15em;color:#a855f7;text-transform:uppercase">Your Login</p>
+                    <p style="margin:0;font-size:13px;color:#ccc">Email: <strong style="color:#fff">${escHtml(lead.email)}</strong></p>
+                    <p style="margin:8px 0 0;font-size:13px;color:#ccc">Username: <strong style="color:#fff">${escHtml(username)}</strong></p>
+                  </div>
+                  <a href="${escHtml(resetLink)}" style="display:inline-block;background:linear-gradient(135deg,#a855f7,#7c3aed);color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px">Set Your Password →</a>
+                  <p style="color:#666;font-size:11px;margin-top:28px;border-top:1px solid #222;padding-top:16px">
+                    Guber Global LLC &nbsp;|&nbsp; <a href="${escHtml(appBase)}" style="color:#a855f7">GuberApp.com</a> &nbsp;|&nbsp; (336) 484-1536
+                  </p>
+                </div>
+              </div>
+            `,
+          });
+        } catch (emailErr) {
+          console.error("[admin/biz-leads/convert] claim email error (non-fatal):", emailErr);
+        }
+      }
+
+      return res.json({ ok: true, userId: newUser.id, username, bizAccountId: bizAccount?.id });
+    } catch (err) {
+      console.error("[admin/business-leads/convert] error:", err);
+      res.status(500).json({ error: "Conversion failed" });
     }
   });
 
@@ -22659,7 +22810,12 @@ OUTPUT STYLE:
   app.post("/api/business/profile", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const { companyName, companyLogo, billingEmail, industry, contactPerson, contactPhone, description } = req.body;
+      const {
+        companyName, companyLogo, billingEmail, industry, contactPerson, contactPhone, description,
+        // Extended onboarding fields
+        address, zipCode, serviceArea, businessDescription, productsServices,
+        businessHours, website, socialLinks, photoUrls, preferredContactMethod,
+      } = req.body;
       if (!companyName) return res.status(400).json({ error: "Company name required" });
 
       // Gate: only users pre-approved by admin (pending_business) or already business can create/update
@@ -22668,7 +22824,19 @@ OUTPUT STYLE:
         return res.status(403).json({ error: "Business access not authorized. Contact GUBER support to apply." });
       }
 
-      const profileData = { companyName, companyLogo, billingEmail, industry, contactPerson, contactPhone, description };
+      const profileData = {
+        companyName, companyLogo, billingEmail, industry, contactPerson, contactPhone, description,
+        address: address || null,
+        zipCode: zipCode || null,
+        serviceArea: serviceArea || null,
+        businessDescription: businessDescription || null,
+        productsServices: productsServices || null,
+        businessHours: businessHours || null,
+        website: website || null,
+        socialLinks: socialLinks || null,
+        photoUrls: photoUrls || null,
+        preferredContactMethod: preferredContactMethod || null,
+      };
       const existing = await storage.getBusinessProfile(userId);
       let profile;
       if (existing) {

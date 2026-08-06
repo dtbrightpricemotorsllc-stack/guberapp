@@ -6538,6 +6538,7 @@ function BizLeadsTab() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [saving, setSaving] = useState(false);
+  const [converting, setConverting] = useState(false);
   const [detailForm, setDetailForm] = useState({ status: "", internalNotes: "", followUpDate: "" });
 
   const { data: leads = [], isLoading, refetch } = useQuery<any[]>({
@@ -6592,6 +6593,27 @@ function BizLeadsTab() {
       toast({ title: "Save failed", variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleConvert = async () => {
+    if (!selectedId) return;
+    setConverting(true);
+    try {
+      const res = await fetch(`/api/admin/business-leads/${selectedId}/convert`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Conversion failed");
+      await refetch();
+      await refetchDetail();
+      toast({ title: data.existing ? "Lead linked to existing account" : "Business account created", description: `User #${data.userId} — claim email sent.` });
+    } catch (err: any) {
+      toast({ title: "Conversion failed", description: err.message, variant: "destructive" });
+    } finally {
+      setConverting(false);
     }
   };
 
@@ -6889,6 +6911,33 @@ function BizLeadsTab() {
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "SAVE CHANGES"}
               </Button>
+
+              {/* Convert to business account — only shown when not yet converted */}
+              {!detail.convertedToUserId ? (
+                <Button
+                  onClick={handleConvert}
+                  disabled={converting}
+                  variant="outline"
+                  className="w-full h-10 font-display text-xs tracking-[0.15em] rounded-xl"
+                  style={{ borderColor: "rgba(0,229,118,0.3)", color: "#00e576" }}
+                  data-testid="btn-convert-lead"
+                >
+                  {converting ? <Loader2 className="w-4 h-4 animate-spin" /> : "CONVERT TO BUSINESS ACCOUNT"}
+                </Button>
+              ) : (
+                <div className="rounded-xl px-4 py-3 text-xs flex items-center justify-between gap-2"
+                  style={{ background: "rgba(0,229,118,0.06)", border: "1px solid rgba(0,229,118,0.2)" }}>
+                  <span className="text-muted-foreground font-display tracking-wider">Registered account:</span>
+                  <a
+                    href={`/admin?tab=users&userId=${detail.convertedToUserId}`}
+                    className="font-display font-bold hover:underline"
+                    style={{ color: "#00e576" }}
+                    data-testid="link-converted-user"
+                  >
+                    User #{detail.convertedToUserId}
+                  </a>
+                </div>
+              )}
             </div>
           ) : selectedId ? (
             <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">

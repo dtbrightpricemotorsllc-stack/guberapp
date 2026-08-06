@@ -215,6 +215,17 @@ export default function BusinessLanding() {
         const data = await res.json();
         throw new Error(data.error || "Submission failed");
       }
+      const data = await res.json();
+      // Store lead prefill in sessionStorage so /business-signup can pre-populate fields
+      try {
+        sessionStorage.setItem("guber_biz_lead_prefill", JSON.stringify({
+          leadId: data.leadId,
+          businessName: form.businessName,
+          email: form.email,
+          contactName: form.contactName,
+          phone: form.phone,
+        }));
+      } catch {}
       setSubmitted(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: any) {
@@ -257,6 +268,16 @@ export default function BusinessLanding() {
               href="/business-signup"
               className="flex items-center justify-center gap-2 h-12 px-6 rounded-xl font-display tracking-[0.15em] text-sm font-bold transition-all active:scale-95"
               style={{ background: `linear-gradient(135deg, ${PURPLE}, #7c3aed)`, color: "#fff" }}
+              data-testid="btn-create-account"
+            >
+              <Building2 className="w-4 h-4" />
+              CREATE YOUR FREE BUSINESS ACCOUNT
+            </Link>
+
+            <Link
+              href="/business-signup"
+              className="flex items-center justify-center gap-2 h-12 px-6 rounded-xl font-display tracking-[0.15em] text-sm transition-all active:scale-95"
+              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.8)" }}
               data-testid="btn-complete-profile"
             >
               <Building2 className="w-4 h-4" />

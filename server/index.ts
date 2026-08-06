@@ -2122,6 +2122,20 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_digital_proposals_created ON digital_proposal_requests (created_at DESC);
   `).catch(e => console.error("[migration] digital_proposal_requests table error:", e));
 
+  // ── Business Profiles extended onboarding columns ────────────────────────────
+  await pool.query(`
+    ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS address TEXT;
+    ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS zip_code TEXT;
+    ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS service_area TEXT;
+    ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS business_description TEXT;
+    ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS products_services TEXT;
+    ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS business_hours JSONB;
+    ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS website TEXT;
+    ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS social_links JSONB;
+    ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS photo_urls JSONB;
+    ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS preferred_contact_method TEXT;
+  `).catch(e => console.error("[migration] business_profiles extended columns error:", e));
+
   const shutdown = () => {
     httpServer.close(() => process.exit(0));
   };

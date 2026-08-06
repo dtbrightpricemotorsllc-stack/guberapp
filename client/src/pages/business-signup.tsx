@@ -59,6 +59,24 @@ export default function BusinessSignup() {
     }
   }, [user, setLocation]);
 
+  // Pre-fill from lead submission sessionStorage (set by /business success screen)
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("guber_biz_lead_prefill");
+      if (raw) {
+        sessionStorage.removeItem("guber_biz_lead_prefill");
+        const prefill = JSON.parse(raw);
+        setForm(f => ({
+          ...f,
+          businessName: prefill.businessName || f.businessName,
+          workEmail:    prefill.email        || f.workEmail,
+          fullName:     prefill.contactName  || f.fullName,
+          phone:        prefill.phone        || f.phone,
+        }));
+      }
+    } catch {}
+  }, []);
+
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     businessName: "",

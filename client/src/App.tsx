@@ -129,6 +129,7 @@ const BusinessPromoRequest = lazy(() => import("@/pages/business-promo-request")
 const BusinessProposalRequest = lazy(() => import("@/pages/business-proposal-request"));
 const BusinessOnboarding = lazy(() => import("@/pages/business-onboarding"));
 const BusinessSignup = lazy(() => import("@/pages/business-signup"));
+const BusinessNextSteps = lazy(() => import("@/pages/business-next-steps"));
 
 // Business portal pages — lazy loaded
 const BizDashboard = lazy(() => import("@/pages/biz-dashboard"));
@@ -352,6 +353,7 @@ function Router() {
       <Route path="/business" component={() => <Suspense fallback={<PageLoader />}><BusinessLanding /></Suspense>} />
       <Route path="/business/promotion" component={() => <Suspense fallback={<PageLoader />}><BusinessPromoRequest /></Suspense>} />
       <Route path="/business/proposal" component={() => <Suspense fallback={<PageLoader />}><BusinessProposalRequest /></Suspense>} />
+      <Route path="/business/next-steps" component={() => <Suspense fallback={<PageLoader />}><BusinessNextSteps /></Suspense>} />
       <Route path="/login" component={() => <PublicOnly component={Login} />} />
       <Route path="/signup" component={() => <PublicOnly component={Signup} />} />
       <Route path="/business-signup" component={() => <PublicOnly component={BusinessSignup} />} />
