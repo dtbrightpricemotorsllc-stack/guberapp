@@ -281,7 +281,7 @@ export default function BusinessLanding() {
 
         {/* Header */}
         <div className="text-center mb-10">
-          <GuberLogo size="md" className="mx-auto mb-5" />
+          <div className="mx-auto mb-5 w-fit"><GuberLogo size="md" /></div>
           <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full text-[10px] font-display tracking-widest"
             style={{ background: `rgba(168,85,247,0.1)`, border: `1px solid rgba(168,85,247,0.25)`, color: PURPLE }}>
             <Star className="w-3 h-3" /> GUBER GLOBAL — BUSINESS
