@@ -6184,16 +6184,16 @@ function BizLeadsTab() {
   const [saving, setSaving] = useState(false);
   const [detailForm, setDetailForm] = useState({ status: "", internalNotes: "", followUpDate: "" });
 
+  const { data: leads = [], isLoading, refetch } = useQuery<any[]>({
+    queryKey: ["/api/admin/business-leads"],
+    staleTime: 30_000,
+  });
+
   // Count leads per status for chip badges
   const statusCounts = (leads as any[]).reduce((acc: Record<string, number>, l: any) => {
     acc[l.status] = (acc[l.status] || 0) + 1;
     return acc;
   }, {});
-
-  const { data: leads = [], isLoading, refetch } = useQuery<any[]>({
-    queryKey: ["/api/admin/business-leads"],
-    staleTime: 30_000,
-  });
 
   const { data: detail, refetch: refetchDetail } = useQuery<any>({
     queryKey: ["/api/admin/business-leads", selectedId],
