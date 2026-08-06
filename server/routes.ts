@@ -1462,8 +1462,12 @@ export async function registerRoutes(
     if (!bState)   errors.push("State is required");
     if (!bCat)     errors.push("Business category is required");
 
-    // Phone: must be a string with 7–20 characters after stripping non-digits
-    const phoneDigits = typeof phone === "string" ? phone.replace(/\D/g, "") : "";
+    // Phone: strict allowlist — only digits, spaces, dashes, dots, parentheses, leading +
+    // Rejects URI delimiters (?&=@#%), angle brackets, semicolons, and other injection chars.
+    const phoneRaw = typeof phone === "string" ? phone.trim() : "";
+    const phoneAllowlist = /^[0-9+\-(). ]{7,25}$/;
+    if (!phoneAllowlist.test(phoneRaw)) errors.push("Valid phone number is required (digits, spaces, dashes, dots, parentheses only)");
+    const phoneDigits = phoneRaw.replace(/\D/g, "");
     if (phoneDigits.length < 7 || phoneDigits.length > 20) errors.push("Valid phone number is required");
 
     // Email: basic format check
@@ -1645,23 +1649,33 @@ export async function registerRoutes(
       }
     }
 
-    const safeFollowUpDate = (followUpDate === "" || followUpDate === null) ? null
-      : (followUpDate === undefined ? undefined : followUpDate);
+    // Build the UPDATE dynamically so omitted fields are never touched,
+    // while an explicit null or "" properly clears the column.
+    const updates: string[] = ["updated_at = NOW()"];
+    const params: unknown[] = [];
+    let p = 1;
+
+    if (status !== undefined) {
+      updates.push(`status = $${p++}`);
+      params.push(status);
+    }
+    if (internalNotes !== undefined) {
+      updates.push(`internal_notes = $${p++}`);
+      params.push(internalNotes ?? null);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, "followUpDate")) {
+      // Explicit key present — null/"" clears the column; valid date string sets it
+      const dateVal = (followUpDate === null || followUpDate === "") ? null : followUpDate;
+      updates.push(`follow_up_date = $${p++}`);
+      params.push(dateVal);
+    }
+
+    params.push(id); // always last
 
     try {
       const r = await pool.query(
-        `UPDATE business_leads SET
-           status         = COALESCE($1, status),
-           internal_notes = COALESCE($2, internal_notes),
-           follow_up_date = CASE WHEN $3::text IS NOT NULL THEN $3::text ELSE follow_up_date END,
-           updated_at     = NOW()
-         WHERE id = $4 RETURNING *`,
-        [
-          status ?? null,
-          internalNotes ?? null,
-          safeFollowUpDate !== undefined ? (safeFollowUpDate ?? null) : null,
-          id,
-        ]
+        `UPDATE business_leads SET ${updates.join(", ")} WHERE id = $${p} RETURNING *`,
+        params
       );
       if (!r.rows.length) return res.status(404).json({ error: "Not found" });
       const b = r.rows[0];

@@ -61,7 +61,19 @@ const US_STATES = [
   "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY",
 ];
 
-const LEAD_OPTIONS = [
+type LeadOption = {
+  key: string;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  title: string;
+  description: string;
+  interest: string;
+  color: string;
+  bg: string;
+  border: string;
+  small?: boolean;
+};
+
+const LEAD_OPTIONS: LeadOption[] = [
   {
     key: "join",
     icon: Building2,
@@ -103,7 +115,7 @@ const LEAD_OPTIONS = [
     border: `rgba(245,158,11,0.25)`,
     small: true,
   },
-] as const;
+];
 
 // ── Component ────────────────────────────────────────────────────────────────
 export default function BusinessLanding() {
@@ -191,7 +203,7 @@ export default function BusinessLanding() {
             <CheckCircle2 className="w-8 h-8" style={{ color: PURPLE }} />
           </div>
 
-          <GuberLogo size="md" className="mx-auto mb-6" />
+          <div className="mx-auto mb-6 w-fit"><GuberLogo size="md" /></div>
 
           <h1 className="text-2xl font-display font-black tracking-wider mb-3" data-testid="success-heading">
             Your Business Request Has Been Received
