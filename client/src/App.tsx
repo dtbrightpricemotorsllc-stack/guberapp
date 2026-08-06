@@ -125,6 +125,8 @@ const AdminJacTraining = lazy(() => import("@/pages/admin-jac-training"));
 const AiOrNot = lazy(() => import("@/pages/ai-or-not"));
 const VerifyInspect = lazy(() => import("@/pages/verify-inspect"));
 const BusinessLanding = lazy(() => import("@/pages/business-landing"));
+const BusinessPromoRequest = lazy(() => import("@/pages/business-promo-request"));
+const BusinessProposalRequest = lazy(() => import("@/pages/business-proposal-request"));
 const BusinessOnboarding = lazy(() => import("@/pages/business-onboarding"));
 const BusinessSignup = lazy(() => import("@/pages/business-signup"));
 
@@ -348,6 +350,8 @@ function Router() {
       <Route path="/" component={RootRoute} />
       <Route path="/get-started" component={GetStarted} />
       <Route path="/business" component={() => <Suspense fallback={<PageLoader />}><BusinessLanding /></Suspense>} />
+      <Route path="/business/promotion" component={() => <Suspense fallback={<PageLoader />}><BusinessPromoRequest /></Suspense>} />
+      <Route path="/business/proposal" component={() => <Suspense fallback={<PageLoader />}><BusinessProposalRequest /></Suspense>} />
       <Route path="/login" component={() => <PublicOnly component={Login} />} />
       <Route path="/signup" component={() => <PublicOnly component={Signup} />} />
       <Route path="/business-signup" component={() => <PublicOnly component={BusinessSignup} />} />

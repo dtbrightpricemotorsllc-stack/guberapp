@@ -91,6 +91,26 @@ const passwordResetLimiter = rateLimit({
   },
 });
 
+// Business intake forms — 3 submissions per IP per 10 min (unauthenticated public forms)
+const bizFormLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many submissions. Please wait 10 minutes and try again." },
+  skip: () => process.env.NODE_ENV !== "production",
+});
+
+// Public biz-asset upload sign — 10 sign requests per IP per hour
+const bizAssetSignLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many upload requests. Please try again later." },
+  skip: () => process.env.NODE_ENV !== "production",
+});
+
 app.use("/api", generalLimiter);
 app.use("/api/auth/login", loginLimiter);
 app.use("/api/demo-login", demoLoginLimiter);
@@ -101,6 +121,9 @@ app.use("/api/auth/business-signup", signupLimiter);
 app.use("/api/auth/business-access-request", signupLimiter);
 app.use("/api/auth/forgot-password", passwordResetLimiter);
 app.use("/api/auth/reset-password", passwordResetLimiter);
+app.use("/api/public/promotion-requests", bizFormLimiter);
+app.use("/api/public/digital-proposal-requests", bizFormLimiter);
+app.use("/api/public/upload/biz-asset", bizAssetSignLimiter);
 
 // Use type: () => true so the body is always captured as a raw Buffer regardless
 // of how the production proxy may modify the Content-Type header.
@@ -2041,6 +2064,63 @@ app.use((req, res, next) => {
     ALTER TABLE business_leads ADD COLUMN IF NOT EXISTS last_contact_date TIMESTAMP;
     ALTER TABLE business_leads ADD COLUMN IF NOT EXISTS converted_to_user_id INTEGER;
   `).catch(e => console.error("[migration] business_leads v2 columns error:", e));
+
+  // ── Promotion Requests table ──────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS promotion_requests (
+      id                      SERIAL PRIMARY KEY,
+      business_name           TEXT NOT NULL,
+      contact_name            TEXT NOT NULL,
+      phone                   TEXT NOT NULL,
+      email                   TEXT NOT NULL,
+      website                 TEXT,
+      campaign_goal           TEXT NOT NULL,
+      campaign_type           TEXT NOT NULL,
+      desired_start_date      TEXT,
+      target_city             TEXT,
+      desired_customer_action TEXT,
+      budget_range            TEXT NOT NULL,
+      logo_url                TEXT,
+      promo_image_url         TEXT,
+      additional_details      TEXT,
+      source                  TEXT,
+      status                  TEXT NOT NULL DEFAULT 'new',
+      internal_notes          TEXT,
+      created_at              TIMESTAMP DEFAULT NOW(),
+      updated_at              TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_promo_requests_status  ON promotion_requests (status);
+    CREATE INDEX IF NOT EXISTS idx_promo_requests_created ON promotion_requests (created_at DESC);
+  `).catch(e => console.error("[migration] promotion_requests table error:", e));
+
+  // ── Digital Proposal Requests table ──────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS digital_proposal_requests (
+      id                   SERIAL PRIMARY KEY,
+      business_name        TEXT NOT NULL,
+      contact_name         TEXT NOT NULL,
+      phone                TEXT NOT NULL,
+      email                TEXT NOT NULL,
+      what_business_does   TEXT NOT NULL,
+      problem_to_solve     TEXT NOT NULL,
+      intended_users       TEXT,
+      desired_features     TEXT NOT NULL,
+      websites_they_like   TEXT,
+      budget_range         TEXT NOT NULL,
+      desired_timeline     TEXT,
+      screenshot_urls      TEXT[],
+      document_urls        TEXT[],
+      additional_notes     TEXT,
+      project_type         TEXT NOT NULL,
+      source               TEXT,
+      status               TEXT NOT NULL DEFAULT 'new',
+      internal_notes       TEXT,
+      created_at           TIMESTAMP DEFAULT NOW(),
+      updated_at           TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_digital_proposals_status  ON digital_proposal_requests (status);
+    CREATE INDEX IF NOT EXISTS idx_digital_proposals_created ON digital_proposal_requests (created_at DESC);
+  `).catch(e => console.error("[migration] digital_proposal_requests table error:", e));
 
   const shutdown = () => {
     httpServer.close(() => process.exit(0));

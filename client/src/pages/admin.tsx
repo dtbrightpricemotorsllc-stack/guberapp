@@ -6161,6 +6161,361 @@ return (
 );
 }
 
+// ── Promotion Requests Section ────────────────────────────────────────────────
+const PROMO_REQ_STATUSES = ["new", "reviewing", "in_progress", "completed", "declined"] as const;
+const PROMO_REQ_STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  new:         { label: "New",         color: "#a855f7" },
+  reviewing:   { label: "Reviewing",   color: "#00E5E5" },
+  in_progress: { label: "In Progress", color: "#3b82f6" },
+  completed:   { label: "Completed",   color: "#00e576" },
+  declined:    { label: "Declined",    color: "#ef4444" },
+};
+
+function PromoRequestsSection() {
+  const { toast } = useToast();
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [detailForm, setDetailForm] = useState({ status: "", internalNotes: "" });
+
+  const { data: items = [], isLoading, refetch } = useQuery<any[]>({
+    queryKey: ["/api/admin/promotion-requests"],
+    staleTime: 30_000,
+  });
+
+  const { data: detail, refetch: refetchDetail } = useQuery<any>({
+    queryKey: ["/api/admin/promotion-requests", selectedId],
+    queryFn: async () => {
+      if (!selectedId) return null;
+      const res = await fetch(`/api/admin/promotion-requests/${selectedId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!selectedId,
+    staleTime: 0,
+  });
+
+  useEffect(() => {
+    if (detail) setDetailForm({ status: detail.status || "new", internalNotes: detail.internalNotes || "" });
+  }, [detail]);
+
+  const handleSave = async () => {
+    if (!selectedId) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/promotion-requests/${selectedId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        credentials: "include", body: JSON.stringify(detailForm),
+      });
+      if (!res.ok) throw new Error("Failed");
+      await refetch(); await refetchDetail();
+      toast({ title: "Saved" });
+    } catch { toast({ title: "Save failed", variant: "destructive" }); }
+    finally { setSaving(false); }
+  };
+
+  const statusInfo = (s: string) => PROMO_REQ_STATUS_LABELS[s] || { label: s, color: "#6b7280" };
+
+  if (isLoading) return <div className="space-y-2 pt-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-14 rounded-xl bg-muted animate-pulse" />)}</div>;
+  if (!items.length) return <div className="text-center py-16 text-muted-foreground text-sm">No promotion requests yet. They'll appear here once submitted via /business/promotion.</div>;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2">
+      {/* List */}
+      <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+        {items.map((item: any) => {
+          const si = statusInfo(item.status);
+          const isSel = selectedId === item.id;
+          return (
+            <button key={item.id} onClick={() => setSelectedId(item.id)}
+              className="w-full text-left rounded-xl p-3 transition-all"
+              style={{ background: isSel ? "rgba(0,229,229,0.08)" : "hsl(var(--muted))", border: `1px solid ${isSel ? "rgba(0,229,229,0.35)" : "transparent"}` }}
+              data-testid={`row-promo-req-${item.id}`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-display font-bold text-sm truncate">{item.businessName}</p>
+                  <p className="text-xs text-muted-foreground truncate">{item.campaignType} · {item.budgetRange}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {item.targetCity && <p className="text-[10px] text-muted-foreground">{item.targetCity}</p>}
+                    {item.source && <span className="text-[9px] font-display px-1.5 py-0 rounded-full" style={{ background: "rgba(0,229,229,0.1)", color: "#00E5E5", border: "1px solid rgba(0,229,229,0.2)" }}>{item.source}</span>}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <span className="text-[10px] font-display font-bold px-2 py-0.5 rounded-full" style={{ background: `${si.color}18`, color: si.color }}>{si.label}</span>
+                  <p className="text-[9px] text-muted-foreground mt-1">{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ""}</p>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Detail panel */}
+      {selectedId && detail ? (
+        <div className="rounded-xl p-4 space-y-4" style={{ background: "hsl(var(--card))", border: "1px solid rgba(255,255,255,0.07)" }}>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h3 className="font-display font-black text-base">{detail.businessName}</h3>
+              <p className="text-xs text-muted-foreground">{detail.campaignType} · {detail.budgetRange}</p>
+              {detail.source && <p className="text-[10px] mt-0.5"><span className="text-muted-foreground">Source: </span><span className="font-display font-bold" style={{ color: "#00E5E5" }}>{detail.source}</span></p>}
+            </div>
+            <button onClick={() => setSelectedId(null)} className="text-muted-foreground hover:text-foreground p-1"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="rounded-xl p-3 space-y-2" style={{ background: "hsl(var(--muted))" }}>
+            <p className="text-[10px] font-display tracking-widest text-muted-foreground mb-2">CONTACT INFO</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+              <div><span className="text-muted-foreground">Contact:</span> <span className="font-medium">{detail.contactName}</span></div>
+              <div><span className="text-muted-foreground">Email:</span> <span className="font-medium">{detail.email}</span></div>
+              {detail.targetCity && <div><span className="text-muted-foreground">Target City:</span> <span className="font-medium">{detail.targetCity}</span></div>}
+              {detail.desiredStartDate && <div><span className="text-muted-foreground">Start Date:</span> <span className="font-medium">{detail.desiredStartDate}</span></div>}
+            </div>
+            <div className="mt-2 pt-2 border-t border-white/5">
+              <p className="text-[10px] text-muted-foreground mb-0.5">Phone (admin only):</p>
+              <p className="text-xs font-mono font-bold">{detail.phone}</p>
+            </div>
+            {detail.campaignGoal && (
+              <div className="mt-2 pt-2 border-t border-white/5">
+                <p className="text-[10px] text-muted-foreground mb-0.5">Campaign Goal:</p>
+                <p className="text-xs leading-relaxed">{detail.campaignGoal}</p>
+              </div>
+            )}
+            {detail.desiredCustomerAction && (
+              <div className="mt-2 pt-2 border-t border-white/5">
+                <p className="text-[10px] text-muted-foreground mb-0.5">Desired Customer Action:</p>
+                <p className="text-xs">{detail.desiredCustomerAction}</p>
+              </div>
+            )}
+            {(detail.logoUrl || detail.promoImageUrl) && (
+              <div className="mt-2 pt-2 border-t border-white/5 flex gap-2 flex-wrap">
+                {detail.logoUrl && <a href={detail.logoUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] underline" style={{ color: "#00E5E5" }}>View Logo →</a>}
+                {detail.promoImageUrl && <a href={detail.promoImageUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] underline" style={{ color: "#a855f7" }}>View Promo Image →</a>}
+              </div>
+            )}
+            {detail.additionalDetails && (
+              <div className="mt-2 pt-2 border-t border-white/5">
+                <p className="text-[10px] text-muted-foreground mb-0.5">Additional Details:</p>
+                <p className="text-xs leading-relaxed">{detail.additionalDetails}</p>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <a href={`tel:${encodeURIComponent((detail.phone ?? "").replace(/[^\d+\-().#* ]/g, ""))}`} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-display tracking-wider" style={{ background: "rgba(0,229,118,0.1)", border: "1px solid rgba(0,229,118,0.2)", color: "#00e576" }}><Phone className="w-3.5 h-3.5" /> CALL</a>
+            <a href={`sms:${encodeURIComponent((detail.phone ?? "").replace(/[^\d+\-().#* ]/g, ""))}`} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-display tracking-wider" style={{ background: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.2)", color: "#a855f7" }}><MessageSquare className="w-3.5 h-3.5" /> TEXT</a>
+            <a href={`mailto:${encodeURIComponent(detail.email ?? "")}?subject=${encodeURIComponent(`GUBER Promo — ${detail.businessName}`)}`} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-display tracking-wider" style={{ background: "rgba(0,229,229,0.1)", border: "1px solid rgba(0,229,229,0.2)", color: "#00E5E5" }}><Mail className="w-3.5 h-3.5" /> EMAIL</a>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-display tracking-widest text-muted-foreground">STATUS</Label>
+            <Select value={detailForm.status} onValueChange={v => setDetailForm(f => ({ ...f, status: v }))}>
+              <SelectTrigger className="h-10 rounded-xl border-0 bg-muted text-sm" data-testid="select-promo-status"><SelectValue /></SelectTrigger>
+              <SelectContent>{PROMO_REQ_STATUSES.map(s => <SelectItem key={s} value={s}>{PROMO_REQ_STATUS_LABELS[s]?.label ?? s}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-display tracking-widest text-muted-foreground">INTERNAL NOTES</Label>
+            <Textarea value={detailForm.internalNotes} onChange={e => setDetailForm(f => ({ ...f, internalNotes: e.target.value }))} placeholder="Add internal notes..." className="rounded-xl border-0 bg-muted text-sm min-h-[80px]" data-testid="input-promo-notes" />
+          </div>
+          <Button onClick={handleSave} disabled={saving} className="w-full h-10 font-display text-xs tracking-[0.15em] rounded-xl" style={{ background: "linear-gradient(135deg,#00E5E5,#0099aa)", color: "#000" }} data-testid="btn-save-promo">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "SAVE CHANGES"}
+          </Button>
+        </div>
+      ) : selectedId ? (
+        <div className="flex items-center justify-center h-32 text-muted-foreground text-sm"><Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading...</div>
+      ) : (
+        <div className="hidden lg:flex items-center justify-center h-48 rounded-xl text-muted-foreground text-sm" style={{ background: "hsl(var(--muted))" }}>Select a request to view details</div>
+      )}
+    </div>
+  );
+}
+
+// ── Digital Proposal Requests Section ─────────────────────────────────────────
+const PROPOSAL_REQ_STATUSES = ["new", "reviewing", "scoping", "proposal_sent", "in_development", "completed", "declined"] as const;
+const PROPOSAL_REQ_STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  new:            { label: "New",            color: "#a855f7" },
+  reviewing:      { label: "Reviewing",      color: "#00E5E5" },
+  scoping:        { label: "Scoping",        color: "#3b82f6" },
+  proposal_sent:  { label: "Proposal Sent",  color: "#f59e0b" },
+  in_development: { label: "In Dev",         color: "#f97316" },
+  completed:      { label: "Completed",      color: "#00e576" },
+  declined:       { label: "Declined",       color: "#ef4444" },
+};
+
+function ProposalRequestsSection() {
+  const { toast } = useToast();
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [detailForm, setDetailForm] = useState({ status: "", internalNotes: "" });
+
+  const { data: items = [], isLoading, refetch } = useQuery<any[]>({
+    queryKey: ["/api/admin/digital-proposal-requests"],
+    staleTime: 30_000,
+  });
+
+  const { data: detail, refetch: refetchDetail } = useQuery<any>({
+    queryKey: ["/api/admin/digital-proposal-requests", selectedId],
+    queryFn: async () => {
+      if (!selectedId) return null;
+      const res = await fetch(`/api/admin/digital-proposal-requests/${selectedId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!selectedId,
+    staleTime: 0,
+  });
+
+  useEffect(() => {
+    if (detail) setDetailForm({ status: detail.status || "new", internalNotes: detail.internalNotes || "" });
+  }, [detail]);
+
+  const handleSave = async () => {
+    if (!selectedId) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/digital-proposal-requests/${selectedId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        credentials: "include", body: JSON.stringify(detailForm),
+      });
+      if (!res.ok) throw new Error("Failed");
+      await refetch(); await refetchDetail();
+      toast({ title: "Saved" });
+    } catch { toast({ title: "Save failed", variant: "destructive" }); }
+    finally { setSaving(false); }
+  };
+
+  const statusInfo = (s: string) => PROPOSAL_REQ_STATUS_LABELS[s] || { label: s, color: "#6b7280" };
+
+  if (isLoading) return <div className="space-y-2 pt-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-14 rounded-xl bg-muted animate-pulse" />)}</div>;
+  if (!items.length) return <div className="text-center py-16 text-muted-foreground text-sm">No digital proposal requests yet. They'll appear here once submitted via /business/proposal.</div>;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2">
+      {/* List */}
+      <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+        {items.map((item: any) => {
+          const si = statusInfo(item.status);
+          const isSel = selectedId === item.id;
+          return (
+            <button key={item.id} onClick={() => setSelectedId(item.id)}
+              className="w-full text-left rounded-xl p-3 transition-all"
+              style={{ background: isSel ? "rgba(0,229,118,0.08)" : "hsl(var(--muted))", border: `1px solid ${isSel ? "rgba(0,229,118,0.35)" : "transparent"}` }}
+              data-testid={`row-proposal-req-${item.id}`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-display font-bold text-sm truncate">{item.businessName}</p>
+                  <p className="text-xs text-muted-foreground truncate">{item.projectType} · {item.budgetRange}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {item.desiredTimeline && <p className="text-[10px] text-muted-foreground">{item.desiredTimeline}</p>}
+                    {item.source && <span className="text-[9px] font-display px-1.5 py-0 rounded-full" style={{ background: "rgba(0,229,118,0.1)", color: "#00e576", border: "1px solid rgba(0,229,118,0.2)" }}>{item.source}</span>}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <span className="text-[10px] font-display font-bold px-2 py-0.5 rounded-full" style={{ background: `${si.color}18`, color: si.color }}>{si.label}</span>
+                  <p className="text-[9px] text-muted-foreground mt-1">{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ""}</p>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Detail panel */}
+      {selectedId && detail ? (
+        <div className="rounded-xl p-4 space-y-4" style={{ background: "hsl(var(--card))", border: "1px solid rgba(255,255,255,0.07)" }}>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h3 className="font-display font-black text-base">{detail.businessName}</h3>
+              <p className="text-xs text-muted-foreground">{detail.projectType} · {detail.budgetRange}</p>
+              {detail.source && <p className="text-[10px] mt-0.5"><span className="text-muted-foreground">Source: </span><span className="font-display font-bold" style={{ color: "#00e576" }}>{detail.source}</span></p>}
+            </div>
+            <button onClick={() => setSelectedId(null)} className="text-muted-foreground hover:text-foreground p-1"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="rounded-xl p-3 space-y-2" style={{ background: "hsl(var(--muted))" }}>
+            <p className="text-[10px] font-display tracking-widest text-muted-foreground mb-2">CONTACT INFO</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+              <div><span className="text-muted-foreground">Contact:</span> <span className="font-medium">{detail.contactName}</span></div>
+              <div><span className="text-muted-foreground">Email:</span> <span className="font-medium">{detail.email}</span></div>
+              {detail.desiredTimeline && <div className="col-span-2"><span className="text-muted-foreground">Timeline:</span> <span className="font-medium">{detail.desiredTimeline}</span></div>}
+            </div>
+            <div className="mt-2 pt-2 border-t border-white/5">
+              <p className="text-[10px] text-muted-foreground mb-0.5">Phone (admin only):</p>
+              <p className="text-xs font-mono font-bold">{detail.phone}</p>
+            </div>
+            {detail.whatBusinessDoes && (
+              <div className="mt-2 pt-2 border-t border-white/5">
+                <p className="text-[10px] text-muted-foreground mb-0.5">What the Business Does:</p>
+                <p className="text-xs leading-relaxed">{detail.whatBusinessDoes}</p>
+              </div>
+            )}
+            {detail.problemToSolve && (
+              <div className="mt-2 pt-2 border-t border-white/5">
+                <p className="text-[10px] text-muted-foreground mb-0.5">Problem to Solve:</p>
+                <p className="text-xs leading-relaxed">{detail.problemToSolve}</p>
+              </div>
+            )}
+            {detail.desiredFeatures && (
+              <div className="mt-2 pt-2 border-t border-white/5">
+                <p className="text-[10px] text-muted-foreground mb-0.5">Desired Features:</p>
+                <p className="text-xs leading-relaxed whitespace-pre-wrap">{detail.desiredFeatures}</p>
+              </div>
+            )}
+            {detail.intendedUsers && (
+              <div className="mt-2 pt-2 border-t border-white/5">
+                <p className="text-[10px] text-muted-foreground mb-0.5">Intended Users:</p>
+                <p className="text-xs">{detail.intendedUsers}</p>
+              </div>
+            )}
+            {detail.websitesTheyLike && (
+              <div className="mt-2 pt-2 border-t border-white/5">
+                <p className="text-[10px] text-muted-foreground mb-0.5">Sites/Apps They Like:</p>
+                <p className="text-xs">{detail.websitesTheyLike}</p>
+              </div>
+            )}
+            {detail.screenshotUrls?.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-white/5">
+                <p className="text-[10px] text-muted-foreground mb-1">Screenshots ({detail.screenshotUrls.length}):</p>
+                <div className="flex gap-2 flex-wrap">
+                  {detail.screenshotUrls.map((url: string, i: number) => (
+                    <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                      <img src={url} alt={`ss-${i}`} className="w-16 h-16 rounded-lg object-cover border border-white/10" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+            {detail.additionalNotes && (
+              <div className="mt-2 pt-2 border-t border-white/5">
+                <p className="text-[10px] text-muted-foreground mb-0.5">Additional Notes:</p>
+                <p className="text-xs leading-relaxed">{detail.additionalNotes}</p>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <a href={`tel:${encodeURIComponent((detail.phone ?? "").replace(/[^\d+\-().#* ]/g, ""))}`} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-display tracking-wider" style={{ background: "rgba(0,229,118,0.1)", border: "1px solid rgba(0,229,118,0.2)", color: "#00e576" }}><Phone className="w-3.5 h-3.5" /> CALL</a>
+            <a href={`sms:${encodeURIComponent((detail.phone ?? "").replace(/[^\d+\-().#* ]/g, ""))}`} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-display tracking-wider" style={{ background: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.2)", color: "#a855f7" }}><MessageSquare className="w-3.5 h-3.5" /> TEXT</a>
+            <a href={`mailto:${encodeURIComponent(detail.email ?? "")}?subject=${encodeURIComponent(`GUBER Digital Proposal — ${detail.businessName}`)}`} className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-display tracking-wider" style={{ background: "rgba(0,229,229,0.1)", border: "1px solid rgba(0,229,229,0.2)", color: "#00E5E5" }}><Mail className="w-3.5 h-3.5" /> EMAIL</a>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-display tracking-widest text-muted-foreground">STATUS</Label>
+            <Select value={detailForm.status} onValueChange={v => setDetailForm(f => ({ ...f, status: v }))}>
+              <SelectTrigger className="h-10 rounded-xl border-0 bg-muted text-sm" data-testid="select-proposal-status"><SelectValue /></SelectTrigger>
+              <SelectContent>{PROPOSAL_REQ_STATUSES.map(s => <SelectItem key={s} value={s}>{PROPOSAL_REQ_STATUS_LABELS[s]?.label ?? s}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-display tracking-widest text-muted-foreground">INTERNAL NOTES</Label>
+            <Textarea value={detailForm.internalNotes} onChange={e => setDetailForm(f => ({ ...f, internalNotes: e.target.value }))} placeholder="Add internal notes..." className="rounded-xl border-0 bg-muted text-sm min-h-[80px]" data-testid="input-proposal-notes" />
+          </div>
+          <Button onClick={handleSave} disabled={saving} className="w-full h-10 font-display text-xs tracking-[0.15em] rounded-xl" style={{ background: "linear-gradient(135deg,#00e576,#009944)", color: "#000" }} data-testid="btn-save-proposal">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "SAVE CHANGES"}
+          </Button>
+        </div>
+      ) : selectedId ? (
+        <div className="flex items-center justify-center h-32 text-muted-foreground text-sm"><Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading...</div>
+      ) : (
+        <div className="hidden lg:flex items-center justify-center h-48 rounded-xl text-muted-foreground text-sm" style={{ background: "hsl(var(--muted))" }}>Select a request to view details</div>
+      )}
+    </div>
+  );
+}
+
 // ── Business Leads Tab ────────────────────────────────────────────────────────
 const BIZ_LEAD_STATUSES = [
   "new", "contacted", "consultation_scheduled", "proposal_sent", "won", "not_ready", "closed",
@@ -6178,6 +6533,7 @@ const BIZ_LEAD_STATUS_LABELS: Record<string, { label: string; color: string }> =
 
 function BizLeadsTab() {
   const { toast } = useToast();
+  const [activeSubTab, setActiveSubTab] = useState<"leads" | "promotions" | "proposals">("leads");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -6254,14 +6610,43 @@ function BizLeadsTab() {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-4">
         <Building2 className="w-5 h-5" style={{ color: "#a855f7" }} />
         <div>
           <h2 className="text-lg font-display font-black tracking-wide">Business Leads</h2>
-          <p className="text-xs text-muted-foreground">{leads.length} lead{leads.length !== 1 ? "s" : ""} total</p>
+          <p className="text-xs text-muted-foreground">Leads, Promotions, and Digital Proposals</p>
         </div>
       </div>
 
+      {/* Sub-tab navigation */}
+      <div className="flex gap-2 mb-5" data-testid="biz-sub-tabs">
+        {(["leads", "promotions", "proposals"] as const).map(tab => {
+          const active = activeSubTab === tab;
+          const colors: Record<string, string> = { leads: "#a855f7", promotions: "#00E5E5", proposals: "#00e576" };
+          const c = colors[tab];
+          return (
+            <button key={tab} onClick={() => {
+                // Reset all leads-branch-scoped state when switching sub-tabs
+                // (satisfies statebleed guard — selectedId, search, filterStatus, detailForm are leads-specific)
+                setActiveSubTab(tab);
+                setSelectedId(null);
+                setSearch("");
+                setFilterStatus("all");
+                setDetailForm({ status: "", internalNotes: "", followUpDate: "" });
+              }}
+              className="h-8 px-4 rounded-full text-[10px] font-display font-bold tracking-wider transition-all"
+              style={active ? { background: c, color: "#000" } : { background: `${c}12`, color: c, border: `1px solid ${c}30` }}
+              data-testid={`sub-tab-${tab}`}>
+              {tab === "leads" ? `LEADS` : tab === "promotions" ? "PROMOTIONS" : "PROPOSALS"}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeSubTab === "promotions" && <PromoRequestsSection />}
+      {activeSubTab === "proposals" && <ProposalRequestsSection />}
+
+      {activeSubTab === "leads" && (<>
       {/* Search */}
       <div className="relative mb-3">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -6517,6 +6902,7 @@ function BizLeadsTab() {
           )}
         </div>
       )}
+      </>)}
     </div>
   );
 }
@@ -6524,7 +6910,12 @@ function BizLeadsTab() {
 export default function Admin() {
 const { user } = useAuth();
 const { toast } = useToast();
-const [activeTab, setActiveTab] = useState("users");
+const [activeTab, setActiveTab] = useState(() => {
+  try {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    return t || "users";
+  } catch { return "users"; }
+});
 const [sponsorPrefill, setSponsorPrefill] = useState<any | null>(null);
 const [strikeUserId, setStrikeUserId] = useState("");
 const [strikeReason, setStrikeReason] = useState("");

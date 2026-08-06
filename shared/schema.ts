@@ -3311,3 +3311,56 @@ export const insertBusinessLeadSchema = z.object({
   permissionToContact: z.boolean(),
   source:             z.string().max(80).optional(),
 });
+
+// ── Promotion Requests ────────────────────────────────────────────────────────
+export const promotionRequests = pgTable("promotion_requests", {
+  id:                    serial("id").primaryKey(),
+  businessName:          text("business_name").notNull(),
+  contactName:           text("contact_name").notNull(),
+  phone:                 text("phone").notNull(),
+  email:                 text("email").notNull(),
+  website:               text("website"),
+  campaignGoal:          text("campaign_goal").notNull(),
+  campaignType:          text("campaign_type").notNull(),
+  desiredStartDate:      text("desired_start_date"),
+  targetCity:            text("target_city"),
+  desiredCustomerAction: text("desired_customer_action"),
+  budgetRange:           text("budget_range").notNull(),
+  logoUrl:               text("logo_url"),
+  promoImageUrl:         text("promo_image_url"),
+  additionalDetails:     text("additional_details"),
+  source:                text("source"),
+  status:                text("status").notNull().default("new"),
+  internalNotes:         text("internal_notes"),
+  createdAt:             timestamp("created_at").defaultNow(),
+  updatedAt:             timestamp("updated_at").defaultNow(),
+});
+export type PromotionRequest = typeof promotionRequests.$inferSelect;
+export type InsertPromotionRequest = typeof promotionRequests.$inferInsert;
+
+// ── Digital Proposal Requests ─────────────────────────────────────────────────
+export const digitalProposalRequests = pgTable("digital_proposal_requests", {
+  id:                serial("id").primaryKey(),
+  businessName:      text("business_name").notNull(),
+  contactName:       text("contact_name").notNull(),
+  phone:             text("phone").notNull(),
+  email:             text("email").notNull(),
+  whatBusinessDoes:  text("what_business_does").notNull(),
+  problemToSolve:    text("problem_to_solve").notNull(),
+  intendedUsers:     text("intended_users"),
+  desiredFeatures:   text("desired_features").notNull(),
+  websitesTheyLike:  text("websites_they_like"),
+  budgetRange:       text("budget_range").notNull(),
+  desiredTimeline:   text("desired_timeline"),
+  screenshotUrls:    text("screenshot_urls").array(),
+  documentUrls:      text("document_urls").array(),
+  additionalNotes:   text("additional_notes"),
+  projectType:       text("project_type").notNull(),
+  source:            text("source"),
+  status:            text("status").notNull().default("new"),
+  internalNotes:     text("internal_notes"),
+  createdAt:         timestamp("created_at").defaultNow(),
+  updatedAt:         timestamp("updated_at").defaultNow(),
+});
+export type DigitalProposalRequest = typeof digitalProposalRequests.$inferSelect;
+export type InsertDigitalProposalRequest = typeof digitalProposalRequests.$inferInsert;

@@ -3,6 +3,7 @@
 // Phone collected privately; never displayed publicly.
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useLocation } from "wouter";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -71,6 +72,7 @@ type LeadOption = {
   bg: string;
   border: string;
   small?: boolean;
+  href?: string;
 };
 
 const LEAD_OPTIONS: LeadOption[] = [
@@ -88,21 +90,23 @@ const LEAD_OPTIONS: LeadOption[] = [
     key: "promo",
     icon: Megaphone,
     title: "Request a Promotion",
-    description: "Business spotlight, social campaign, cash drop, treasure hunt, grand opening, or local activation.",
+    description: "Business spotlight, social campaign, cash drop, treasure hunt, grand opening, or local activation. Open the full brief form →",
     interest: "Promote my business",
     color: TEAL,
     bg: `rgba(0,229,229,0.08)`,
     border: `rgba(0,229,229,0.25)`,
+    href: "/business/promotion",
   },
   {
     key: "digital",
     icon: Cpu,
     title: "Request a Digital Proposal",
-    description: "Custom app, premium website, AI assistant, booking system, customer portal, or business automation.",
+    description: "Custom app, premium website, AI assistant, booking system, customer portal, or business automation. Open the full brief form →",
     interest: "Build an app",
     color: GREEN,
     bg: `rgba(0,229,118,0.08)`,
     border: `rgba(0,229,118,0.25)`,
+    href: "/business/proposal",
   },
   {
     key: "future",
@@ -130,6 +134,7 @@ const INTENT_TO_INTEREST: Record<string, string> = {
 
 // ── Component ────────────────────────────────────────────────────────────────
 export default function BusinessLanding() {
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const formRef = useRef<HTMLDivElement>(null);
   const [selectedInterest, setSelectedInterest] = useState("");
@@ -395,7 +400,7 @@ export default function BusinessLanding() {
             return (
               <button
                 key={opt.key}
-                onClick={() => handleCardClick(opt.interest)}
+                onClick={() => opt.href ? setLocation(opt.href) : handleCardClick(opt.interest)}
                 className={`w-full text-left rounded-2xl p-5 transition-all active:scale-[0.99] ${opt.small ? "opacity-80" : ""}`}
                 style={{
                   background: isActive ? opt.bg : "rgba(255,255,255,0.03)",

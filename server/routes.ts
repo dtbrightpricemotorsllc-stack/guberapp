@@ -1800,6 +1800,608 @@ export async function registerRoutes(
     }
   });
 
+  // ── Public biz-asset server-side proxy upload ───────────────────────────────────
+  // Unauthenticated upload for /business/promotion and /business/proposal forms.
+  // Rate-limited at server/index.ts (10/hr per IP).
+  // Files are received by OUR server, validated (size + MIME), then uploaded server-side
+  // to Cloudinary — guaranteed enforcement regardless of any SDK/preset quirks.
+  app.post("/api/public/upload/biz-asset", async (req: Request, res: Response) => {
+    try {
+      if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+        return res.status(503).json({ error: "Media storage not configured." });
+      }
+      const { IncomingForm } = await import("formidable");
+      const BIZ_MAX_BYTES = 8 * 1024 * 1024; // 8 MB — enforced server-side before any Cloudinary call
+      const ALLOWED_MIMES = new Set(["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"]);
+
+      const form = new IncomingForm({
+        maxFileSize: BIZ_MAX_BYTES,
+        maxFiles: 1,
+        keepExtensions: true,
+        filter: ({ mimetype }) => !!(mimetype && ALLOWED_MIMES.has(mimetype)),
+      });
+
+      let files: Record<string, any>;
+      try {
+        [, files] = await form.parse(req);
+      } catch (parseErr: any) {
+        // formidable throws when file is too large (maxFileSize exceeded)
+        if (String(parseErr?.message ?? "").toLowerCase().includes("maxfilesize") || parseErr?.code === 1009) {
+          return res.status(413).json({ error: "File too large — max 8 MB" });
+        }
+        return res.status(400).json({ error: "Invalid or missing file" });
+      }
+
+      const fileArr = Array.isArray(files.file) ? files.file : (files.file ? [files.file] : []);
+      const uploadedFile = fileArr[0];
+      if (!uploadedFile) {
+        return res.status(400).json({ error: "No file provided" });
+      }
+      // Double-check MIME type (formidable filter catches most, but verify defensively)
+      if (!uploadedFile.mimetype || !ALLOWED_MIMES.has(uploadedFile.mimetype)) {
+        return res.status(400).json({ error: "Only image files are allowed (jpg, png, gif, webp)" });
+      }
+      // Double-check size
+      if (uploadedFile.size > BIZ_MAX_BYTES) {
+        return res.status(413).json({ error: "File too large — max 8 MB" });
+      }
+
+      const cloudinary = (await import("./cloudinary.js")).default;
+      const result = await cloudinary.uploader.upload(uploadedFile.filepath, {
+        folder: "guber-biz-assets",
+        resource_type: "image",
+        allowed_formats: ["jpg", "jpeg", "png", "gif", "webp"],
+      });
+
+      res.json({ url: result.secure_url });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Promotion Requests (public + admin) ───────────────────────────────────────
+  const PROMO_CAMPAIGN_TYPES = new Set([
+    "Business Spotlight", "Social Media Campaign", "Cash Drop Sponsorship",
+    "Treasure Hunt", "Grand Opening", "Local Activation / Event",
+    "App Feature / Push Notification", "Brand Partnership", "Custom Campaign",
+  ]);
+  const PROMO_BUDGET_RANGES = new Set([
+    "Under $500", "$500 – $2,000", "$2,000 – $5,000",
+    "$5,000 – $15,000", "$15,000+", "Not sure",
+  ]);
+  const PROMO_ALLOWED_STATUSES = new Set([
+    "new", "reviewing", "in_progress", "completed", "declined",
+  ]);
+
+  app.post("/api/public/promotion-requests", async (req: Request, res: Response) => {
+    const {
+      businessName, contactName, phone, email, website,
+      campaignGoal, campaignType, desiredStartDate, targetCity,
+      desiredCustomerAction, budgetRange, logoUrl, promoImageUrl,
+      additionalDetails, source,
+    } = req.body;
+
+    const errors: string[] = [];
+    const str = (v: unknown, max: number) =>
+      typeof v === "string" && v.trim().length > 0 && v.trim().length <= max ? v.trim() : null;
+
+    const bName   = str(businessName, 200);
+    const cName   = str(contactName, 200);
+    const bGoal   = str(campaignGoal, 2000);
+    const bCity   = str(targetCity, 200);
+    const bAction = str(desiredCustomerAction, 500);
+    const bDets   = typeof additionalDetails === "string" ? additionalDetails.trim().slice(0, 2000) || null : null;
+    const bSite   = typeof website === "string" ? website.trim().slice(0, 500) || null : null;
+    const bSource = sanitizeSource(source);
+    const bDate   = typeof desiredStartDate === "string" ? desiredStartDate.trim().slice(0, 30) || null : null;
+
+    if (!bName)    errors.push("Business name is required");
+    if (!cName)    errors.push("Contact name is required");
+    if (!bGoal)    errors.push("Campaign goal is required");
+
+    const phoneRaw = typeof phone === "string" ? phone.trim() : "";
+    if (!/^[0-9+\-(). ]{7,25}$/.test(phoneRaw)) errors.push("Valid phone number is required");
+
+    const emailVal = typeof email === "string" ? email.trim().toLowerCase() : "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) errors.push("Valid email address is required");
+
+    if (!PROMO_CAMPAIGN_TYPES.has(campaignType)) errors.push("Invalid campaign type");
+    if (!PROMO_BUDGET_RANGES.has(budgetRange))   errors.push("Invalid budget range");
+
+    // URL validation for optional image URLs
+    const safeUrl = (v: unknown) =>
+      typeof v === "string" && /^https:\/\/res\.cloudinary\.com\//.test(v.trim()) ? v.trim() : null;
+    const bLogoUrl  = safeUrl(logoUrl);
+    const bPromoUrl = safeUrl(promoImageUrl);
+
+    if (errors.length > 0) return res.status(400).json({ error: errors[0] });
+
+    try {
+      await pool.query(
+        `INSERT INTO promotion_requests
+           (business_name, contact_name, phone, email, website, campaign_goal, campaign_type,
+            desired_start_date, target_city, desired_customer_action, budget_range,
+            logo_url, promo_image_url, additional_details, source, status, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'new',NOW(),NOW())`,
+        [bName, cName, phoneRaw, emailVal, bSite, bGoal, campaignType,
+         bDate, bCity, bAction, budgetRange, bLogoUrl, bPromoUrl, bDets, bSource]
+      );
+
+      if (process.env.RESEND_API_KEY) {
+        const { Resend } = await import("resend");
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        const fromDomain = process.env.RESEND_FROM_DOMAIN || "guberapp.app";
+        const adminUrl = `${process.env.APP_BASE_URL || "https://guberapp.com"}/admin?tab=biz-leads`;
+
+        // Business confirmation
+        try {
+          await resend.emails.send({
+            from: `GUBER <noreply@${fromDomain}>`,
+            to: [emailVal],
+            subject: `Promotion request received — ${escHtml(bName)}`,
+            text: [
+              `Hi ${cName},`,
+              "",
+              `We received your promotion request for ${bName}. Here's a summary:`,
+              "",
+              `CAMPAIGN TYPE: ${campaignType}`,
+              `BUDGET RANGE:  ${budgetRange}`,
+              bCity ? `TARGET CITY:   ${bCity}` : "",
+              "",
+              "WHAT HAPPENS NEXT:",
+              "A Guber Global representative will review your brief and reach out within 1–2 business days.",
+              "",
+              "Need to reach us sooner?",
+              "  Call/text: (336) 484-1536",
+              "  Web:       GuberApp.com",
+              "",
+              "— The Guber Global Team",
+            ].filter(l => l !== null).join("\n"),
+            html: `
+              <div style="font-family:sans-serif;max-width:580px;margin:0 auto;background:#0a0a0a;color:#fff;border-radius:16px;overflow:hidden">
+                <div style="background:linear-gradient(135deg,#00E5E5,#0099aa);padding:20px 28px">
+                  <h1 style="margin:0;font-size:20px;letter-spacing:0.05em">GUBER GLOBAL LLC</h1>
+                  <p style="margin:4px 0 0;font-size:11px;opacity:0.8;letter-spacing:0.1em">PROMOTION REQUEST RECEIVED</p>
+                </div>
+                <div style="padding:28px">
+                  <p style="color:#ccc;margin-top:0">Hi ${escHtml(cName)},</p>
+                  <p style="color:#ccc">We received your promotion request for <strong style="color:#fff">${escHtml(bName)}</strong>.</p>
+                  <div style="background:#1a1a1a;border-radius:12px;padding:16px;margin:16px 0">
+                    <table style="width:100%;border-collapse:collapse">
+                      <tr><td style="padding:4px 0;color:#888;width:140px;font-size:13px">Campaign Type</td><td style="padding:4px 0;font-weight:bold;font-size:13px">${escHtml(campaignType)}</td></tr>
+                      <tr><td style="padding:4px 0;color:#888;font-size:13px">Budget Range</td><td style="padding:4px 0;font-size:13px">${escHtml(budgetRange)}</td></tr>
+                      ${bCity ? `<tr><td style="padding:4px 0;color:#888;font-size:13px">Target City</td><td style="padding:4px 0;font-size:13px">${escHtml(bCity)}</td></tr>` : ""}
+                    </table>
+                  </div>
+                  <div style="background:#1a1a2e;border-left:3px solid #00E5E5;border-radius:0 8px 8px 0;padding:14px 18px;margin:16px 0">
+                    <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.1em;color:#00E5E5;text-transform:uppercase">What Happens Next</p>
+                    <p style="margin:0;color:#ccc;font-size:13px;line-height:1.6">A Guber Global representative will review your brief and reach out within <strong style="color:#fff">1–2 business days</strong>.</p>
+                  </div>
+                  <p style="color:#666;font-size:11px;margin-top:24px;border-top:1px solid #222;padding-top:14px">
+                    Guber Global LLC &nbsp;|&nbsp; <a href="https://guberapp.com" style="color:#00E5E5">GuberApp.com</a> &nbsp;|&nbsp; (336) 484-1536
+                  </p>
+                </div>
+              </div>
+            `,
+          });
+        } catch {}
+
+        // Admin notification
+        try {
+          const adminRows = await pool.query(`SELECT email FROM users WHERE role = 'admin' LIMIT 5`);
+          const adminEmails: string[] = adminRows.rows.map((r: any) => r.email).filter(Boolean);
+          if (adminEmails.length > 0) {
+            const bizPhone = encodeURIComponent(phoneRaw.replace(/[^\d+\-().#* ]/g, ""));
+            const bizEmail = encodeURIComponent(emailVal);
+            const bizSubj  = encodeURIComponent(`GUBER Promotion — ${bName}`);
+            await resend.emails.send({
+              from: `GUBER <noreply@${fromDomain}>`,
+              to: adminEmails,
+              subject: `New Promotion Request: ${bName}${bSource ? ` [${bSource}]` : ""}`,
+              text: [
+                "NEW PROMOTION REQUEST",
+                "─────────────────────",
+                `Business:      ${bName}`,
+                `Contact:       ${cName}`,
+                `Email:         ${emailVal}`,
+                `Phone:         ${phoneRaw}`,
+                `Campaign Type: ${campaignType}`,
+                `Budget:        ${budgetRange}`,
+                bCity ? `Target City:   ${bCity}` : "",
+                bSource ? `Source:        ${bSource}` : "",
+                "",
+                `Goal: ${bGoal}`,
+                "",
+                `Admin: ${adminUrl}`,
+              ].filter(l => l !== "").join("\n"),
+              html: `
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#0a0a0a;color:#fff;border-radius:16px;overflow:hidden">
+                  <div style="background:linear-gradient(135deg,#00E5E5,#0099aa);padding:18px 24px">
+                    <h2 style="margin:0;font-size:17px">New Promotion Request${bSource ? ` <span style="font-size:12px;opacity:0.7">[${escHtml(bSource)}]</span>` : ""}</h2>
+                  </div>
+                  <div style="padding:20px 24px">
+                    <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
+                      <tr><td style="padding:5px 0;color:#888;width:130px">Business</td><td style="padding:5px 0;font-weight:bold">${escHtml(bName)}</td></tr>
+                      <tr><td style="padding:5px 0;color:#888">Contact</td><td style="padding:5px 0">${escHtml(cName)}</td></tr>
+                      <tr><td style="padding:5px 0;color:#888">Campaign</td><td style="padding:5px 0"><strong>${escHtml(campaignType)}</strong></td></tr>
+                      <tr><td style="padding:5px 0;color:#888">Budget</td><td style="padding:5px 0">${escHtml(budgetRange)}</td></tr>
+                      ${bCity ? `<tr><td style="padding:5px 0;color:#888">Target City</td><td style="padding:5px 0">${escHtml(bCity)}</td></tr>` : ""}
+                    </table>
+                    <div style="background:#1a1a1a;border-radius:8px;padding:12px 16px;margin-bottom:16px">
+                      <p style="margin:0 0 6px;color:#888;font-size:11px;text-transform:uppercase;letter-spacing:0.1em">Campaign Goal</p>
+                      <p style="margin:0;color:#ccc;font-size:13px;line-height:1.5">${escHtml(bGoal ?? "")}</p>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+                      <a href="tel:${bizPhone}" style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:9px 14px;color:#00E5E5;text-decoration:none;font-size:12px;font-weight:bold">📞 CALL ${escHtml(phoneRaw)}</a>
+                      <a href="sms:${bizPhone}" style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:9px 14px;color:#00e576;text-decoration:none;font-size:12px;font-weight:bold">💬 TEXT</a>
+                      <a href="mailto:${bizEmail}?subject=${bizSubj}" style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:9px 14px;color:#a855f7;text-decoration:none;font-size:12px;font-weight:bold">✉ EMAIL</a>
+                    </div>
+                    <a href="${escHtml(adminUrl)}" style="display:inline-block;background:linear-gradient(135deg,#00E5E5,#0099aa);color:#000;padding:10px 22px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px">View in Admin Panel →</a>
+                  </div>
+                </div>
+              `,
+            });
+          }
+        } catch {}
+      }
+
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[promotion-requests POST] error:", err);
+      res.status(500).json({ error: "Failed to save promotion request" });
+    }
+  });
+
+  app.get("/api/admin/promotion-requests", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    try {
+      const r = await pool.query(
+        `SELECT id, business_name, contact_name, email, campaign_type, budget_range,
+                target_city, source, status, logo_url, promo_image_url,
+                created_at, updated_at
+         FROM promotion_requests ORDER BY created_at DESC`
+      );
+      res.json(r.rows.map((b: any) => ({
+        id: b.id, businessName: b.business_name, contactName: b.contact_name,
+        email: b.email, campaignType: b.campaign_type, budgetRange: b.budget_range,
+        targetCity: b.target_city, source: b.source, status: b.status,
+        logoUrl: b.logo_url, promoImageUrl: b.promo_image_url,
+        createdAt: b.created_at, updatedAt: b.updated_at,
+      })));
+    } catch (err) {
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.get("/api/admin/promotion-requests/:id", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    try {
+      const r = await pool.query(`SELECT * FROM promotion_requests WHERE id = $1`, [id]);
+      if (!r.rows.length) return res.status(404).json({ error: "Not found" });
+      const b = r.rows[0];
+      res.json({
+        id: b.id, businessName: b.business_name, contactName: b.contact_name,
+        phone: b.phone, email: b.email, website: b.website,
+        campaignGoal: b.campaign_goal, campaignType: b.campaign_type,
+        desiredStartDate: b.desired_start_date, targetCity: b.target_city,
+        desiredCustomerAction: b.desired_customer_action, budgetRange: b.budget_range,
+        logoUrl: b.logo_url, promoImageUrl: b.promo_image_url,
+        additionalDetails: b.additional_details, source: b.source,
+        status: b.status, internalNotes: b.internal_notes,
+        createdAt: b.created_at, updatedAt: b.updated_at,
+      });
+    } catch (err) {
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.patch("/api/admin/promotion-requests/:id", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    const { status, internalNotes } = req.body;
+    if (status !== undefined && !PROMO_ALLOWED_STATUSES.has(status)) {
+      return res.status(400).json({ error: "Invalid status" });
+    }
+    const updates = ["updated_at = NOW()"];
+    const params: unknown[] = [];
+    let p = 1;
+    if (status !== undefined)       { updates.push(`status = $${p++}`);          params.push(status); }
+    if (internalNotes !== undefined) { updates.push(`internal_notes = $${p++}`); params.push(internalNotes ?? null); }
+    params.push(id);
+    try {
+      const r = await pool.query(
+        `UPDATE promotion_requests SET ${updates.join(", ")} WHERE id = $${p} RETURNING id, status, internal_notes, updated_at`,
+        params
+      );
+      if (!r.rows.length) return res.status(404).json({ error: "Not found" });
+      res.json({ id: r.rows[0].id, status: r.rows[0].status, internalNotes: r.rows[0].internal_notes });
+    } catch (err) {
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  // ── Digital Proposal Requests (public + admin) ────────────────────────────────
+  const PROPOSAL_PROJECT_TYPES = new Set([
+    "Mobile App (iOS/Android)", "Web App / Portal", "Business Website",
+    "E-Commerce Store", "AI Assistant / Chatbot", "Booking / Scheduling System",
+    "Customer Portal", "Automation / Integration", "Point of Sale System",
+    "Custom Digital Solution",
+  ]);
+  const PROPOSAL_BUDGET_RANGES = new Set([
+    "Under $1,000", "$1,000 – $5,000", "$5,000 – $15,000",
+    "$15,000 – $50,000", "$50,000+", "Not sure",
+  ]);
+  const PROPOSAL_TIMELINES = new Set([
+    "ASAP (within 30 days)", "1–3 months", "3–6 months",
+    "6–12 months", "No specific deadline",
+  ]);
+  const PROPOSAL_ALLOWED_STATUSES = new Set([
+    "new", "reviewing", "scoping", "proposal_sent", "in_development", "completed", "declined",
+  ]);
+
+  app.post("/api/public/digital-proposal-requests", async (req: Request, res: Response) => {
+    const {
+      businessName, contactName, phone, email, whatBusinessDoes,
+      problemToSolve, intendedUsers, desiredFeatures, websitesTheyLike,
+      budgetRange, desiredTimeline, screenshotUrls, documentUrls,
+      additionalNotes, projectType, source,
+    } = req.body;
+
+    const errors: string[] = [];
+    const str = (v: unknown, max: number) =>
+      typeof v === "string" && v.trim().length > 0 && v.trim().length <= max ? v.trim() : null;
+
+    const bName    = str(businessName, 200);
+    const cName    = str(contactName, 200);
+    const bWhat    = str(whatBusinessDoes, 2000);
+    const bProblem = str(problemToSolve, 2000);
+    const bFeats   = str(desiredFeatures, 3000);
+    const bUsers   = str(intendedUsers, 500);
+    const bSites   = str(websitesTheyLike, 500);
+    const bNotes   = typeof additionalNotes === "string" ? additionalNotes.trim().slice(0, 2000) || null : null;
+    const bSource  = sanitizeSource(source);
+
+    if (!bName)    errors.push("Business name is required");
+    if (!cName)    errors.push("Contact name is required");
+    if (!bWhat)    errors.push("What your business does is required");
+    if (!bProblem) errors.push("Problem to solve is required");
+    if (!bFeats)   errors.push("Desired features are required");
+
+    const phoneRaw = typeof phone === "string" ? phone.trim() : "";
+    if (!/^[0-9+\-(). ]{7,25}$/.test(phoneRaw)) errors.push("Valid phone number is required");
+
+    const emailVal = typeof email === "string" ? email.trim().toLowerCase() : "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) errors.push("Valid email address is required");
+
+    if (!PROPOSAL_PROJECT_TYPES.has(projectType)) errors.push("Invalid project type");
+    if (!PROPOSAL_BUDGET_RANGES.has(budgetRange)) errors.push("Invalid budget range");
+    if (desiredTimeline && !PROPOSAL_TIMELINES.has(desiredTimeline)) errors.push("Invalid timeline");
+
+    // Validate screenshot/doc URLs — must be Cloudinary URLs
+    const safeUrl = (v: unknown) =>
+      typeof v === "string" && /^https:\/\/res\.cloudinary\.com\//.test(v.trim()) ? v.trim() : null;
+    const bScreenshots: string[] = (Array.isArray(screenshotUrls) ? screenshotUrls : [])
+      .map(safeUrl).filter(Boolean) as string[];
+    const bDocs: string[] = (Array.isArray(documentUrls) ? documentUrls : [])
+      .map(safeUrl).filter(Boolean) as string[];
+
+    if (errors.length > 0) return res.status(400).json({ error: errors[0] });
+
+    try {
+      await pool.query(
+        `INSERT INTO digital_proposal_requests
+           (business_name, contact_name, phone, email, what_business_does, problem_to_solve,
+            intended_users, desired_features, websites_they_like, budget_range, desired_timeline,
+            screenshot_urls, document_urls, additional_notes, project_type, source, status, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'new',NOW(),NOW())`,
+        [bName, cName, phoneRaw, emailVal, bWhat, bProblem,
+         bUsers, bFeats, bSites, budgetRange, desiredTimeline || null,
+         bScreenshots, bDocs, bNotes, projectType, bSource]
+      );
+
+      if (process.env.RESEND_API_KEY) {
+        const { Resend } = await import("resend");
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        const fromDomain = process.env.RESEND_FROM_DOMAIN || "guberapp.app";
+        const adminUrl = `${process.env.APP_BASE_URL || "https://guberapp.com"}/admin?tab=biz-leads`;
+
+        // Business confirmation
+        try {
+          await resend.emails.send({
+            from: `GUBER <noreply@${fromDomain}>`,
+            to: [emailVal],
+            subject: `Digital proposal request received — ${escHtml(bName)}`,
+            text: [
+              `Hi ${cName},`,
+              "",
+              `We received your digital proposal request for ${bName}.`,
+              "",
+              `PROJECT TYPE:  ${projectType}`,
+              `BUDGET RANGE:  ${budgetRange}`,
+              desiredTimeline ? `TIMELINE:      ${desiredTimeline}` : "",
+              "",
+              "A Guber Global representative will review your brief and reach out within 1–2 business days.",
+              "",
+              "  Call/text: (336) 484-1536",
+              "  Web:       GuberApp.com",
+              "  Demos:     iSellApps.store",
+              "",
+              "— The Guber Global Team",
+            ].filter(l => l !== null).join("\n"),
+            html: `
+              <div style="font-family:sans-serif;max-width:580px;margin:0 auto;background:#0a0a0a;color:#fff;border-radius:16px;overflow:hidden">
+                <div style="background:linear-gradient(135deg,#00e576,#009944);padding:20px 28px">
+                  <h1 style="margin:0;font-size:20px;letter-spacing:0.05em">GUBER GLOBAL LLC</h1>
+                  <p style="margin:4px 0 0;font-size:11px;opacity:0.8;letter-spacing:0.1em">DIGITAL PROPOSAL REQUEST RECEIVED</p>
+                </div>
+                <div style="padding:28px">
+                  <p style="color:#ccc;margin-top:0">Hi ${escHtml(cName)},</p>
+                  <p style="color:#ccc">We received your digital proposal request for <strong style="color:#fff">${escHtml(bName)}</strong>.</p>
+                  <div style="background:#1a1a1a;border-radius:12px;padding:16px;margin:16px 0">
+                    <table style="width:100%;border-collapse:collapse">
+                      <tr><td style="padding:4px 0;color:#888;width:140px;font-size:13px">Project Type</td><td style="padding:4px 0;font-weight:bold;font-size:13px">${escHtml(projectType)}</td></tr>
+                      <tr><td style="padding:4px 0;color:#888;font-size:13px">Budget Range</td><td style="padding:4px 0;font-size:13px">${escHtml(budgetRange)}</td></tr>
+                      ${desiredTimeline ? `<tr><td style="padding:4px 0;color:#888;font-size:13px">Timeline</td><td style="padding:4px 0;font-size:13px">${escHtml(desiredTimeline)}</td></tr>` : ""}
+                    </table>
+                  </div>
+                  <div style="background:#1a1a2e;border-left:3px solid #00e576;border-radius:0 8px 8px 0;padding:14px 18px;margin:16px 0">
+                    <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.1em;color:#00e576;text-transform:uppercase">What Happens Next</p>
+                    <p style="margin:0;color:#ccc;font-size:13px;line-height:1.6">A Guber Global representative will review your project brief and reach out within <strong style="color:#fff">1–2 business days</strong> to discuss scope, timeline, and next steps.</p>
+                  </div>
+                  <p style="color:#666;font-size:11px;margin-top:24px;border-top:1px solid #222;padding-top:14px">
+                    Guber Global LLC &nbsp;|&nbsp; <a href="https://guberapp.com" style="color:#00e576">GuberApp.com</a> &nbsp;|&nbsp; (336) 484-1536
+                  </p>
+                </div>
+              </div>
+            `,
+          });
+        } catch {}
+
+        // Admin notification
+        try {
+          const adminRows = await pool.query(`SELECT email FROM users WHERE role = 'admin' LIMIT 5`);
+          const adminEmails: string[] = adminRows.rows.map((r: any) => r.email).filter(Boolean);
+          if (adminEmails.length > 0) {
+            const bizPhone = encodeURIComponent(phoneRaw.replace(/[^\d+\-().#* ]/g, ""));
+            const bizEmail = encodeURIComponent(emailVal);
+            const bizSubj  = encodeURIComponent(`GUBER Digital Proposal — ${bName}`);
+            await resend.emails.send({
+              from: `GUBER <noreply@${fromDomain}>`,
+              to: adminEmails,
+              subject: `New Digital Proposal: ${bName}${bSource ? ` [${bSource}]` : ""}`,
+              text: [
+                "NEW DIGITAL PROPOSAL REQUEST",
+                "─────────────────────────────",
+                `Business:     ${bName}`,
+                `Contact:      ${cName}`,
+                `Email:        ${emailVal}`,
+                `Phone:        ${phoneRaw}`,
+                `Project Type: ${projectType}`,
+                `Budget:       ${budgetRange}`,
+                desiredTimeline ? `Timeline:     ${desiredTimeline}` : "",
+                bSource ? `Source:       ${bSource}` : "",
+                "",
+                `Problem: ${bProblem}`,
+                "",
+                `Admin: ${adminUrl}`,
+              ].filter(l => l !== "").join("\n"),
+              html: `
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#0a0a0a;color:#fff;border-radius:16px;overflow:hidden">
+                  <div style="background:linear-gradient(135deg,#00e576,#009944);padding:18px 24px">
+                    <h2 style="margin:0;font-size:17px">New Digital Proposal Request${bSource ? ` <span style="font-size:12px;opacity:0.7">[${escHtml(bSource)}]</span>` : ""}</h2>
+                  </div>
+                  <div style="padding:20px 24px">
+                    <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
+                      <tr><td style="padding:5px 0;color:#888;width:130px">Business</td><td style="padding:5px 0;font-weight:bold">${escHtml(bName)}</td></tr>
+                      <tr><td style="padding:5px 0;color:#888">Contact</td><td style="padding:5px 0">${escHtml(cName)}</td></tr>
+                      <tr><td style="padding:5px 0;color:#888">Project Type</td><td style="padding:5px 0"><strong>${escHtml(projectType)}</strong></td></tr>
+                      <tr><td style="padding:5px 0;color:#888">Budget</td><td style="padding:5px 0">${escHtml(budgetRange)}</td></tr>
+                      ${desiredTimeline ? `<tr><td style="padding:5px 0;color:#888">Timeline</td><td style="padding:5px 0">${escHtml(desiredTimeline)}</td></tr>` : ""}
+                    </table>
+                    <div style="background:#1a1a1a;border-radius:8px;padding:12px 16px;margin-bottom:16px">
+                      <p style="margin:0 0 6px;color:#888;font-size:11px;text-transform:uppercase;letter-spacing:0.1em">Problem to Solve</p>
+                      <p style="margin:0;color:#ccc;font-size:13px;line-height:1.5">${escHtml(bProblem ?? "")}</p>
+                    </div>
+                    ${bScreenshots.length > 0 ? `<p style="margin:0 0 8px;color:#888;font-size:12px">${bScreenshots.length} screenshot(s) uploaded</p>` : ""}
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+                      <a href="tel:${bizPhone}" style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:9px 14px;color:#00E5E5;text-decoration:none;font-size:12px;font-weight:bold">📞 CALL ${escHtml(phoneRaw)}</a>
+                      <a href="sms:${bizPhone}" style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:9px 14px;color:#00e576;text-decoration:none;font-size:12px;font-weight:bold">💬 TEXT</a>
+                      <a href="mailto:${bizEmail}?subject=${bizSubj}" style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:9px 14px;color:#a855f7;text-decoration:none;font-size:12px;font-weight:bold">✉ EMAIL</a>
+                    </div>
+                    <a href="${escHtml(adminUrl)}" style="display:inline-block;background:linear-gradient(135deg,#00e576,#009944);color:#000;padding:10px 22px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px">View in Admin Panel →</a>
+                  </div>
+                </div>
+              `,
+            });
+          }
+        } catch {}
+      }
+
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[digital-proposal-requests POST] error:", err);
+      res.status(500).json({ error: "Failed to save proposal request" });
+    }
+  });
+
+  app.get("/api/admin/digital-proposal-requests", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    try {
+      const r = await pool.query(
+        `SELECT id, business_name, contact_name, email, project_type, budget_range,
+                desired_timeline, source, status, created_at, updated_at
+         FROM digital_proposal_requests ORDER BY created_at DESC`
+      );
+      res.json(r.rows.map((b: any) => ({
+        id: b.id, businessName: b.business_name, contactName: b.contact_name,
+        email: b.email, projectType: b.project_type, budgetRange: b.budget_range,
+        desiredTimeline: b.desired_timeline, source: b.source, status: b.status,
+        createdAt: b.created_at, updatedAt: b.updated_at,
+      })));
+    } catch (err) {
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.get("/api/admin/digital-proposal-requests/:id", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    try {
+      const r = await pool.query(`SELECT * FROM digital_proposal_requests WHERE id = $1`, [id]);
+      if (!r.rows.length) return res.status(404).json({ error: "Not found" });
+      const b = r.rows[0];
+      res.json({
+        id: b.id, businessName: b.business_name, contactName: b.contact_name,
+        phone: b.phone, email: b.email, whatBusinessDoes: b.what_business_does,
+        problemToSolve: b.problem_to_solve, intendedUsers: b.intended_users,
+        desiredFeatures: b.desired_features, websitesTheyLike: b.websites_they_like,
+        budgetRange: b.budget_range, desiredTimeline: b.desired_timeline,
+        screenshotUrls: b.screenshot_urls || [], documentUrls: b.document_urls || [],
+        additionalNotes: b.additional_notes, projectType: b.project_type,
+        source: b.source, status: b.status, internalNotes: b.internal_notes,
+        createdAt: b.created_at, updatedAt: b.updated_at,
+      });
+    } catch (err) {
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.patch("/api/admin/digital-proposal-requests/:id", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    const { status, internalNotes } = req.body;
+    if (status !== undefined && !PROPOSAL_ALLOWED_STATUSES.has(status)) {
+      return res.status(400).json({ error: "Invalid status" });
+    }
+    const updates = ["updated_at = NOW()"];
+    const params: unknown[] = [];
+    let p = 1;
+    if (status !== undefined)       { updates.push(`status = $${p++}`);          params.push(status); }
+    if (internalNotes !== undefined) { updates.push(`internal_notes = $${p++}`); params.push(internalNotes ?? null); }
+    params.push(id);
+    try {
+      const r = await pool.query(
+        `UPDATE digital_proposal_requests SET ${updates.join(", ")} WHERE id = $${p} RETURNING id, status, internal_notes, updated_at`,
+        params
+      );
+      if (!r.rows.length) return res.status(404).json({ error: "Not found" });
+      res.json({ id: r.rows[0].id, status: r.rows[0].status, internalNotes: r.rows[0].internal_notes });
+    } catch (err) {
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
   // ─────────────────────────────────────────────
 
   app.get("/api/geocode", async (req: Request, res: Response) => {
