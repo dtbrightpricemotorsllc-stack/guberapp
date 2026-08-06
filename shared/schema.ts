@@ -3270,3 +3270,40 @@ export const studioAuditLog = pgTable("studio_audit_log", {
   ipAddress:  text("ip_address"),
   createdAt:  timestamp("created_at").defaultNow(),
 });
+
+// ── Business Leads ────────────────────────────────────────────────────────────
+// Pre-account funnel — separate from business_accounts (registered businesses).
+// Phone is stored server-side only; never returned by public APIs.
+export const businessLeads = pgTable("business_leads", {
+  id:                serial("id").primaryKey(),
+  businessName:      text("business_name").notNull(),
+  contactName:       text("contact_name").notNull(),
+  phone:             text("phone").notNull(),
+  email:             text("email").notNull(),
+  city:              text("city").notNull(),
+  state:             text("state").notNull(),
+  businessCategory:  text("business_category").notNull(),
+  selectedInterest:  text("selected_interest").notNull(),
+  message:           text("message"),
+  permissionToContact: boolean("permission_to_contact").notNull().default(false),
+  status:            text("status").notNull().default("new"),
+  internalNotes:     text("internal_notes"),
+  followUpDate:      text("follow_up_date"),
+  createdAt:         timestamp("created_at").defaultNow(),
+  updatedAt:         timestamp("updated_at").defaultNow(),
+});
+export type BusinessLead = typeof businessLeads.$inferSelect;
+export type InsertBusinessLead = typeof businessLeads.$inferInsert;
+
+export const insertBusinessLeadSchema = z.object({
+  businessName:       z.string().min(1, "Business name is required"),
+  contactName:        z.string().min(1, "Contact name is required"),
+  phone:              z.string().min(7, "Phone number is required"),
+  email:              z.string().email("Valid email is required"),
+  city:               z.string().min(1, "City is required"),
+  state:              z.string().min(1, "State is required"),
+  businessCategory:   z.string().min(1, "Business category is required"),
+  selectedInterest:   z.string().min(1, "Please select an interest"),
+  message:            z.string().optional(),
+  permissionToContact: z.boolean(),
+});

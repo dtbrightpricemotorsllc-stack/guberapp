@@ -1402,6 +1402,181 @@ export async function registerRoutes(
     }
   });
 
+  // ── Business Leads ────────────────────────────────────────────────────────
+  // Public submission — no auth required. Phone never returned publicly.
+
+  app.post("/api/public/business-leads", async (req: Request, res: Response) => {
+    const {
+      businessName, contactName, phone, email, city, state,
+      businessCategory, selectedInterest, message, permissionToContact,
+    } = req.body;
+
+    if (!businessName || !contactName || !phone || !email || !city || !state || !businessCategory || !selectedInterest) {
+      return res.status(400).json({ error: "Required fields missing" });
+    }
+    if (!permissionToContact) {
+      return res.status(400).json({ error: "Permission to contact is required" });
+    }
+
+    try {
+      await pool.query(
+        `INSERT INTO business_leads
+           (business_name, contact_name, phone, email, city, state,
+            business_category, selected_interest, message, permission_to_contact,
+            status, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'new',NOW(),NOW())`,
+        [businessName, contactName, phone, email, city, state,
+         businessCategory, selectedInterest, message || null, !!permissionToContact]
+      );
+
+      // Admin email notification (best-effort — don't fail the request if email fails)
+      try {
+        if (process.env.RESEND_API_KEY) {
+          const adminRows = await pool.query(`SELECT email FROM users WHERE role = 'admin' LIMIT 5`);
+          const adminEmails: string[] = adminRows.rows.map((r: any) => r.email).filter(Boolean);
+          if (adminEmails.length > 0) {
+            const { Resend } = await import("resend");
+            const resend = new Resend(process.env.RESEND_API_KEY);
+            const fromDomain = process.env.RESEND_FROM_DOMAIN || "guberapp.app";
+            await resend.emails.send({
+              from: `GUBER <noreply@${fromDomain}>`,
+              to: adminEmails,
+              subject: `New Business Lead: ${businessName}`,
+              html: `
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+                  <h2 style="color:#a855f7">New Business Lead Received</h2>
+                  <table style="width:100%;border-collapse:collapse">
+                    <tr><td style="padding:6px 0;color:#666;width:150px">Business</td><td style="padding:6px 0;font-weight:bold">${businessName}</td></tr>
+                    <tr><td style="padding:6px 0;color:#666">Contact</td><td style="padding:6px 0">${contactName}</td></tr>
+                    <tr><td style="padding:6px 0;color:#666">Email</td><td style="padding:6px 0">${email}</td></tr>
+                    <tr><td style="padding:6px 0;color:#666">Location</td><td style="padding:6px 0">${city}, ${state}</td></tr>
+                    <tr><td style="padding:6px 0;color:#666">Category</td><td style="padding:6px 0">${businessCategory}</td></tr>
+                    <tr><td style="padding:6px 0;color:#666">Interest</td><td style="padding:6px 0">${selectedInterest}</td></tr>
+                    ${message ? `<tr><td style="padding:6px 0;color:#666">Message</td><td style="padding:6px 0">${message}</td></tr>` : ""}
+                  </table>
+                  <p style="margin-top:20px"><a href="${process.env.APP_BASE_URL || ""}/admin?tab=biz-leads" style="background:#a855f7;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold">View in Admin Panel</a></p>
+                </div>
+              `,
+            });
+          }
+        }
+      } catch (emailErr) {
+        console.error("[business-leads] admin email error (non-fatal):", emailErr);
+      }
+
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[business-leads POST] error:", err);
+      res.status(500).json({ error: "Failed to save lead" });
+    }
+  });
+
+  app.get("/api/admin/business-leads", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    try {
+      const r = await pool.query(
+        `SELECT id, business_name, contact_name, email, city, state,
+                business_category, selected_interest, message,
+                permission_to_contact, status, internal_notes, follow_up_date,
+                created_at, updated_at
+         FROM business_leads ORDER BY created_at DESC`
+      );
+      res.json(r.rows.map((b: any) => ({
+        id: b.id,
+        businessName: b.business_name,
+        contactName: b.contact_name,
+        email: b.email,
+        city: b.city,
+        state: b.state,
+        businessCategory: b.business_category,
+        selectedInterest: b.selected_interest,
+        message: b.message,
+        permissionToContact: b.permission_to_contact,
+        status: b.status,
+        internalNotes: b.internal_notes,
+        followUpDate: b.follow_up_date,
+        createdAt: b.created_at,
+        updatedAt: b.updated_at,
+      })));
+    } catch (err) {
+      console.error("[admin/business-leads GET] error:", err);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.get("/api/admin/business-leads/:id", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    try {
+      const r = await pool.query(`SELECT * FROM business_leads WHERE id = $1`, [id]);
+      if (!r.rows.length) return res.status(404).json({ error: "Not found" });
+      const b = r.rows[0];
+      res.json({
+        id: b.id,
+        businessName: b.business_name,
+        contactName: b.contact_name,
+        phone: b.phone,
+        email: b.email,
+        city: b.city,
+        state: b.state,
+        businessCategory: b.business_category,
+        selectedInterest: b.selected_interest,
+        message: b.message,
+        permissionToContact: b.permission_to_contact,
+        status: b.status,
+        internalNotes: b.internal_notes,
+        followUpDate: b.follow_up_date,
+        createdAt: b.created_at,
+        updatedAt: b.updated_at,
+      });
+    } catch (err) {
+      console.error("[admin/business-leads GET/:id] error:", err);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.patch("/api/admin/business-leads/:id", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    const { status, internalNotes, followUpDate } = req.body;
+    try {
+      const r = await pool.query(
+        `UPDATE business_leads SET
+           status         = COALESCE($1, status),
+           internal_notes = COALESCE($2, internal_notes),
+           follow_up_date = COALESCE($3, follow_up_date),
+           updated_at     = NOW()
+         WHERE id = $4 RETURNING *`,
+        [status ?? null, internalNotes ?? null, followUpDate ?? null, id]
+      );
+      if (!r.rows.length) return res.status(404).json({ error: "Not found" });
+      const b = r.rows[0];
+      res.json({
+        id: b.id,
+        businessName: b.business_name,
+        contactName: b.contact_name,
+        phone: b.phone,
+        email: b.email,
+        city: b.city,
+        state: b.state,
+        businessCategory: b.business_category,
+        selectedInterest: b.selected_interest,
+        status: b.status,
+        internalNotes: b.internal_notes,
+        followUpDate: b.follow_up_date,
+        updatedAt: b.updated_at,
+      });
+    } catch (err) {
+      console.error("[admin/business-leads PATCH] error:", err);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
   // ─────────────────────────────────────────────
 
   app.get("/api/geocode", async (req: Request, res: Response) => {
