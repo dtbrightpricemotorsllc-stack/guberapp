@@ -9,7 +9,7 @@ import { useFeatureFlag } from "@/hooks/use-feature-flag";
 import {
   Crown, MapPin, DollarSign, Clock, ChevronRight, ChevronLeft, X,
   Briefcase, ShieldCheck, Zap, Star, ArrowRight, Lock,
-  Truck, Share2, Gift, CheckCircle,
+  Truck, Share2, Gift, CheckCircle, Building2,
 } from "lucide-react";
 import { SiGoogleplay, SiApple } from "react-icons/si";
 import { OpportunityMap } from "@/components/opportunity-map";
@@ -1251,6 +1251,41 @@ export default function Home() {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* ── For Business ── */}
+      <section className="relative z-10 px-5 pb-20 max-w-6xl mx-auto w-full" data-testid="section-for-business">
+        <div className="rounded-2xl p-8 sm:p-12"
+          style={{ background: "linear-gradient(135deg,rgba(168,85,247,0.07) 0%,rgba(0,229,229,0.04) 100%)", border: "1px solid rgba(168,85,247,0.2)" }}>
+          <div className="flex flex-col sm:flex-row items-center gap-8">
+            <div className="shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center"
+              style={{ background: "rgba(168,85,247,0.15)", border: "1.5px solid rgba(168,85,247,0.3)" }}>
+              <Building2 className="w-7 h-7" style={{ color: "#a855f7" }} />
+            </div>
+            <div className="flex-1 text-center sm:text-left">
+              <div className="inline-flex items-center gap-2 mb-3 px-3 py-1 rounded-full text-[10px] font-display tracking-widest"
+                style={{ background: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.2)", color: "#a855f7" }}>
+                GUBER FOR BUSINESS
+              </div>
+              <h2 className="text-2xl font-display font-black tracking-wider mb-2">Are You a Business?</h2>
+              <p className="text-muted-foreground text-sm leading-relaxed mb-5 max-w-md">
+                Reach customers, promote your services, and build better digital tools with Guber Global LLC.
+              </p>
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <Link href="/business" className="flex items-center gap-2 h-11 px-7 rounded-xl font-display tracking-[0.15em] text-sm font-bold transition-all active:scale-95"
+                  style={{ background: "linear-gradient(135deg,#a855f7,#7c3aed)", color: "#fff" }}
+                  data-testid="link-business-get-started">
+                  GET STARTED FREE
+                </Link>
+                <Link href="/business" className="flex items-center gap-2 h-11 px-6 rounded-xl font-display tracking-[0.15em] text-sm transition-all active:scale-95"
+                  style={{ background: "rgba(168,85,247,0.08)", border: "1px solid rgba(168,85,247,0.25)", color: "#a855f7" }}
+                  data-testid="link-business-explore">
+                  EXPLORE BUSINESS OPPORTUNITIES
+                </Link>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

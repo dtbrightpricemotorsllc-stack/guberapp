@@ -2009,6 +2009,32 @@ app.use((req, res, next) => {
     }
   });
 
+  // ── Business Leads table ─────────────────────────────────────────────────────
+  // Pre-account lead funnel — separate from business_accounts.
+  // Phone is stored but never returned by public APIs.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS business_leads (
+      id                  SERIAL PRIMARY KEY,
+      business_name       TEXT NOT NULL,
+      contact_name        TEXT NOT NULL,
+      phone               TEXT NOT NULL,
+      email               TEXT NOT NULL,
+      city                TEXT NOT NULL,
+      state               TEXT NOT NULL,
+      business_category   TEXT NOT NULL,
+      selected_interest   TEXT NOT NULL,
+      message             TEXT,
+      permission_to_contact BOOLEAN NOT NULL DEFAULT false,
+      status              TEXT NOT NULL DEFAULT 'new',
+      internal_notes      TEXT,
+      follow_up_date      TEXT,
+      created_at          TIMESTAMP DEFAULT NOW(),
+      updated_at          TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_business_leads_status ON business_leads (status);
+    CREATE INDEX IF NOT EXISTS idx_business_leads_created ON business_leads (created_at DESC);
+  `).catch(e => console.error("[migration] business_leads table error:", e));
+
   const shutdown = () => {
     httpServer.close(() => process.exit(0));
   };

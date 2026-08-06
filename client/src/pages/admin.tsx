@@ -6161,6 +6161,294 @@ return (
 );
 }
 
+// ── Business Leads Tab ────────────────────────────────────────────────────────
+const BIZ_LEAD_STATUSES = [
+  "new", "contacted", "consultation_scheduled", "proposal_sent", "won", "not_ready", "closed",
+] as const;
+
+const BIZ_LEAD_STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  new:                     { label: "New",                    color: "#a855f7" },
+  contacted:               { label: "Contacted",              color: "#00E5E5" },
+  consultation_scheduled:  { label: "Consultation Scheduled", color: "#3b82f6" },
+  proposal_sent:           { label: "Proposal Sent",          color: "#f59e0b" },
+  won:                     { label: "Won",                    color: "#00e576" },
+  not_ready:               { label: "Not Ready",              color: "#6b7280" },
+  closed:                  { label: "Closed",                 color: "#ef4444" },
+};
+
+function BizLeadsTab() {
+  const { toast } = useToast();
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [saving, setSaving] = useState(false);
+  const [detailForm, setDetailForm] = useState({ status: "", internalNotes: "", followUpDate: "" });
+
+  const { data: leads = [], isLoading, refetch } = useQuery<any[]>({
+    queryKey: ["/api/admin/business-leads"],
+    staleTime: 30_000,
+  });
+
+  const { data: detail, refetch: refetchDetail } = useQuery<any>({
+    queryKey: ["/api/admin/business-leads", selectedId],
+    queryFn: async () => {
+      if (!selectedId) return null;
+      const res = await fetch(`/api/admin/business-leads/${selectedId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch lead");
+      return res.json();
+    },
+    enabled: !!selectedId,
+    staleTime: 0,
+  });
+
+  // Sync detail into form when it loads
+  useEffect(() => {
+    if (detail) {
+      setDetailForm({
+        status: detail.status || "new",
+        internalNotes: detail.internalNotes || "",
+        followUpDate: detail.followUpDate || "",
+      });
+    }
+  }, [detail]);
+
+  const handleSave = async () => {
+    if (!selectedId) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/business-leads/${selectedId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(detailForm),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      await refetch();
+      await refetchDetail();
+      toast({ title: "Lead updated" });
+    } catch {
+      toast({ title: "Save failed", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filtered = (leads as any[]).filter(l => {
+    const matchSearch =
+      !search ||
+      l.businessName?.toLowerCase().includes(search.toLowerCase()) ||
+      l.contactName?.toLowerCase().includes(search.toLowerCase()) ||
+      l.email?.toLowerCase().includes(search.toLowerCase()) ||
+      l.city?.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = filterStatus === "all" || l.status === filterStatus;
+    return matchSearch && matchStatus;
+  });
+
+  const statusInfo = (s: string) => BIZ_LEAD_STATUS_LABELS[s] || { label: s, color: "#6b7280" };
+
+  return (
+    <div className="p-4 sm:p-6">
+      <div className="flex items-center gap-3 mb-6">
+        <Building2 className="w-5 h-5" style={{ color: "#a855f7" }} />
+        <div>
+          <h2 className="text-lg font-display font-black tracking-wide">Business Leads</h2>
+          <p className="text-xs text-muted-foreground">{leads.length} lead{leads.length !== 1 ? "s" : ""} total</p>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by name, email, city..."
+            className="pl-9 rounded-xl h-10 text-sm border-0 bg-muted"
+            data-testid="input-biz-leads-search"
+          />
+        </div>
+        <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <SelectTrigger className="w-full sm:w-48 h-10 rounded-xl border-0 bg-muted text-sm" data-testid="select-biz-leads-status-filter">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            {BIZ_LEAD_STATUSES.map(s => (
+              <SelectItem key={s} value={s}>{statusInfo(s).label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-14 rounded-xl bg-muted animate-pulse" />)}</div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground text-sm">
+          {leads.length === 0 ? "No business leads yet. Submissions from /business will appear here." : "No leads match your filter."}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* List */}
+          <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+            {filtered.map((lead: any) => {
+              const si = statusInfo(lead.status);
+              const isSelected = selectedId === lead.id;
+              return (
+                <button
+                  key={lead.id}
+                  onClick={() => setSelectedId(lead.id)}
+                  className="w-full text-left rounded-xl p-3 transition-all"
+                  style={{
+                    background: isSelected ? "rgba(168,85,247,0.1)" : "hsl(var(--muted))",
+                    border: `1px solid ${isSelected ? "rgba(168,85,247,0.4)" : "transparent"}`,
+                  }}
+                  data-testid={`row-biz-lead-${lead.id}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-display font-bold text-sm truncate">{lead.businessName}</p>
+                      <p className="text-xs text-muted-foreground truncate">{lead.contactName} · {lead.city}, {lead.state}</p>
+                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">{lead.selectedInterest}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <span className="text-[10px] font-display font-bold px-2 py-0.5 rounded-full"
+                        style={{ background: `${si.color}18`, color: si.color }}>
+                        {si.label}
+                      </span>
+                      <p className="text-[9px] text-muted-foreground mt-1">
+                        {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : ""}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Detail panel */}
+          {selectedId && detail ? (
+            <div className="rounded-xl p-4 space-y-4"
+              style={{ background: "hsl(var(--card))", border: "1px solid rgba(255,255,255,0.07)" }}>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-display font-black text-base">{detail.businessName}</h3>
+                  <p className="text-xs text-muted-foreground">{detail.selectedInterest}</p>
+                </div>
+                <button onClick={() => setSelectedId(null)} className="text-muted-foreground hover:text-foreground p-1">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Contact info — phone shown only here (admin) */}
+              <div className="rounded-xl p-3 space-y-2" style={{ background: "hsl(var(--muted))" }}>
+                <p className="text-[10px] font-display tracking-widest text-muted-foreground mb-2">CONTACT INFO</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                  <div><span className="text-muted-foreground">Contact:</span> <span className="font-medium">{detail.contactName}</span></div>
+                  <div><span className="text-muted-foreground">Location:</span> <span className="font-medium">{detail.city}, {detail.state}</span></div>
+                  <div><span className="text-muted-foreground">Category:</span> <span className="font-medium">{detail.businessCategory}</span></div>
+                  <div><span className="text-muted-foreground">Submitted:</span> <span className="font-medium">{detail.createdAt ? new Date(detail.createdAt).toLocaleDateString() : "—"}</span></div>
+                </div>
+                {detail.message && (
+                  <div className="mt-2 pt-2 border-t border-white/5">
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Message:</p>
+                    <p className="text-xs leading-relaxed">{detail.message}</p>
+                  </div>
+                )}
+                {/* Phone — admin-only, shown in detail only */}
+                <div className="mt-2 pt-2 border-t border-white/5">
+                  <p className="text-[10px] text-muted-foreground mb-1">Phone (admin only):</p>
+                  <p className="text-xs font-mono font-bold">{detail.phone}</p>
+                </div>
+              </div>
+
+              {/* Action buttons — link to business's contact, not Guber Global */}
+              <div className="flex gap-2">
+                <a
+                  href={`mailto:${detail.email}?subject=GUBER Business Inquiry — ${encodeURIComponent(detail.businessName)}`}
+                  className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-display tracking-wider transition-all"
+                  style={{ background: "rgba(0,229,229,0.1)", border: "1px solid rgba(0,229,229,0.2)", color: "#00E5E5" }}
+                  data-testid="btn-email-lead"
+                >
+                  <Mail className="w-3.5 h-3.5" /> EMAIL
+                </a>
+                <a
+                  href={`sms:${detail.phone}`}
+                  className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-display tracking-wider transition-all"
+                  style={{ background: "rgba(0,229,118,0.1)", border: "1px solid rgba(0,229,118,0.2)", color: "#00e576" }}
+                  data-testid="btn-sms-lead"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" /> TEXT
+                </a>
+              </div>
+
+              {/* Status */}
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-display tracking-widest text-muted-foreground">STATUS</Label>
+                <Select
+                  value={detailForm.status}
+                  onValueChange={v => setDetailForm(f => ({ ...f, status: v }))}
+                >
+                  <SelectTrigger className="h-10 rounded-xl border-0 bg-muted text-sm" data-testid="select-lead-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BIZ_LEAD_STATUSES.map(s => (
+                      <SelectItem key={s} value={s}>{statusInfo(s).label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Follow-up date */}
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-display tracking-widest text-muted-foreground">FOLLOW-UP DATE</Label>
+                <Input
+                  type="date"
+                  value={detailForm.followUpDate}
+                  onChange={e => setDetailForm(f => ({ ...f, followUpDate: e.target.value }))}
+                  className="h-10 rounded-xl border-0 bg-muted text-sm"
+                  data-testid="input-lead-followup"
+                />
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-display tracking-widest text-muted-foreground">INTERNAL NOTES</Label>
+                <Textarea
+                  value={detailForm.internalNotes}
+                  onChange={e => setDetailForm(f => ({ ...f, internalNotes: e.target.value }))}
+                  placeholder="Add internal notes..."
+                  className="rounded-xl border-0 bg-muted text-sm min-h-[80px]"
+                  data-testid="input-lead-notes"
+                />
+              </div>
+
+              <Button
+                onClick={handleSave}
+                disabled={saving}
+                className="w-full h-10 font-display text-xs tracking-[0.15em] rounded-xl"
+                style={{ background: "linear-gradient(135deg,#a855f7,#7c3aed)", color: "#fff" }}
+                data-testid="btn-save-lead"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "SAVE CHANGES"}
+              </Button>
+            </div>
+          ) : selectedId ? (
+            <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
+              <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading...
+            </div>
+          ) : (
+            <div className="hidden lg:flex items-center justify-center h-48 rounded-xl text-muted-foreground text-sm"
+              style={{ background: "hsl(var(--muted))" }}>
+              Select a lead to view details
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Admin() {
 const { user } = useAuth();
 const { toast } = useToast();
@@ -6669,6 +6957,9 @@ return (
       {(allUsers ?? []).filter(u => !u.backgroundCheckStatus || u.backgroundCheckStatus === "none").length}
     </span>
   )}
+</TabsTrigger>
+<TabsTrigger value="biz-leads" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-biz-leads">
+  💼 Biz Leads
 </TabsTrigger>
 </TabsList>
 </div>
@@ -7480,6 +7771,9 @@ data-testid={`button-resolve-dispute-${j.id}`}
 </TabsContent>
 <TabsContent value="safetyqueue">
 <SafetyQueueTab allUsers={allUsers} usersLoading={usersLoading} bgCheckMutation={bgCheckMutation} />
+</TabsContent>
+<TabsContent value="biz-leads">
+<BizLeadsTab />
 </TabsContent>
 </Tabs>
 </div>
