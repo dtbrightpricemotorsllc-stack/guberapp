@@ -1435,10 +1435,17 @@ export async function registerRoutes(
   const isValidDateString = (v: unknown): boolean =>
     typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
+  /** Sanitize a lead source tag — alphanumeric, dashes, underscores, max 80 chars. */
+  function sanitizeSource(s: unknown): string | null {
+    if (typeof s !== "string" || !s.trim()) return null;
+    const clean = s.trim().toLowerCase().replace(/[^a-z0-9\-_]/g, "-").slice(0, 80);
+    return clean || null;
+  }
+
   app.post("/api/public/business-leads", async (req: Request, res: Response) => {
     const {
       businessName, contactName, phone, email, city, state,
-      businessCategory, selectedInterest, message, permissionToContact,
+      businessCategory, selectedInterest, message, permissionToContact, source,
     } = req.body;
 
     // ── Server-side validation ─────────────────────────────────────────────
@@ -1455,6 +1462,7 @@ export async function registerRoutes(
     const bState   = str(state, 50);
     const bCat     = str(businessCategory, 200);
     const bMsg     = typeof message === "string" ? message.trim().slice(0, 600) || null : null;
+    const bSource  = sanitizeSource(source);
 
     if (!bName)    errors.push("Business name is required (max 200 chars)");
     if (!cName)    errors.push("Contact name is required (max 200 chars)");
@@ -1463,7 +1471,6 @@ export async function registerRoutes(
     if (!bCat)     errors.push("Business category is required");
 
     // Phone: strict allowlist — only digits, spaces, dashes, dots, parentheses, leading +
-    // Rejects URI delimiters (?&=@#%), angle brackets, semicolons, and other injection chars.
     const phoneRaw = typeof phone === "string" ? phone.trim() : "";
     const phoneAllowlist = /^[0-9+\-(). ]{7,25}$/;
     if (!phoneAllowlist.test(phoneRaw)) errors.push("Valid phone number is required (digits, spaces, dashes, dots, parentheses only)");
@@ -1488,65 +1495,150 @@ export async function registerRoutes(
         `INSERT INTO business_leads
            (business_name, contact_name, phone, email, city, state,
             business_category, selected_interest, message, permission_to_contact,
-            status, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'new',NOW(),NOW())`,
-        [bName, cName, phone, emailVal, bCity, bState,
-         bCat, selectedInterest, bMsg, true]
+            source, status, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'new',NOW(),NOW())`,
+        [bName, cName, phoneRaw, emailVal, bCity, bState,
+         bCat, selectedInterest, bMsg, true, bSource]
       );
 
-      // Admin email notification (best-effort — don't fail the request if email fails)
-      try {
-        if (process.env.RESEND_API_KEY) {
+      if (process.env.RESEND_API_KEY) {
+        const { Resend } = await import("resend");
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        const fromDomain = process.env.RESEND_FROM_DOMAIN || "guberapp.app";
+        const adminUrl = `${process.env.APP_BASE_URL || "https://guberapp.com"}/admin?tab=biz-leads`;
+
+        // ── Business confirmation email ───────────────────────────────────
+        try {
+          await resend.emails.send({
+            from: `GUBER <noreply@${fromDomain}>`,
+            to: [emailVal],
+            subject: `We received your business inquiry, ${escHtml(bName)}!`,
+            text: [
+              `Hi ${cName},`,
+              "",
+              `Thank you for reaching out to Guber Global LLC! We received your inquiry for ${bName}.`,
+              "",
+              `WHAT YOU SELECTED: ${selectedInterest}`,
+              `LOCATION: ${bCity}, ${bState}`,
+              "",
+              "WHAT HAPPENS NEXT:",
+              "A Guber Global representative will review your submission and reach out within 1–2 business days to discuss your goals and recommend the best approach.",
+              "",
+              "IN THE MEANTIME:",
+              "  • Explore the app:  GuberApp.com",
+              "  • View live demos:  iSellApps.store",
+              "  • Call or text us:  (336) 484-1536",
+              "",
+              "We look forward to working with you.",
+              "",
+              "— The Guber Global Team",
+              "Guber Global LLC  |  GuberApp.com  |  (336) 484-1536",
+            ].join("\n"),
+            html: `
+              <div style="font-family:sans-serif;max-width:580px;margin:0 auto;background:#0a0a0a;color:#fff;border-radius:16px;overflow:hidden">
+                <div style="background:linear-gradient(135deg,#a855f7,#7c3aed);padding:24px 32px">
+                  <h1 style="margin:0;font-size:22px;letter-spacing:0.05em">GUBER GLOBAL LLC</h1>
+                  <p style="margin:4px 0 0;font-size:12px;opacity:0.8;letter-spacing:0.1em">BUSINESS INQUIRY RECEIVED</p>
+                </div>
+                <div style="padding:32px">
+                  <p style="color:#ccc;margin-top:0">Hi ${escHtml(cName)},</p>
+                  <p style="color:#ccc">Thank you for reaching out! We received your inquiry for <strong style="color:#fff">${escHtml(bName)}</strong>.</p>
+
+                  <div style="background:#1a1a1a;border-radius:12px;padding:20px;margin:20px 0">
+                    <p style="margin:0 0 12px;font-size:10px;letter-spacing:0.15em;color:#a855f7;text-transform:uppercase">Your Submission</p>
+                    <table style="width:100%;border-collapse:collapse">
+                      <tr><td style="padding:4px 0;color:#888;width:130px;font-size:13px">Business</td><td style="padding:4px 0;font-weight:bold;font-size:13px">${escHtml(bName)}</td></tr>
+                      <tr><td style="padding:4px 0;color:#888;font-size:13px">Interest</td><td style="padding:4px 0;font-size:13px">${escHtml(selectedInterest)}</td></tr>
+                      <tr><td style="padding:4px 0;color:#888;font-size:13px">Location</td><td style="padding:4px 0;font-size:13px">${escHtml(bCity)}, ${escHtml(bState)}</td></tr>
+                      <tr><td style="padding:4px 0;color:#888;font-size:13px">Category</td><td style="padding:4px 0;font-size:13px">${escHtml(bCat)}</td></tr>
+                    </table>
+                  </div>
+
+                  <div style="background:#1a1a2e;border-left:3px solid #a855f7;border-radius:0 8px 8px 0;padding:16px 20px;margin:20px 0">
+                    <p style="margin:0 0 8px;font-size:11px;letter-spacing:0.1em;color:#a855f7;text-transform:uppercase">What Happens Next</p>
+                    <p style="margin:0;color:#ccc;font-size:13px;line-height:1.6">A Guber Global representative will review your submission and reach out within <strong style="color:#fff">1–2 business days</strong> to discuss your goals and recommend the right approach.</p>
+                  </div>
+
+                  <p style="color:#888;font-size:13px">In the meantime, you can:</p>
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <a href="https://guberapp.com" style="display:block;background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:12px 16px;color:#fff;text-decoration:none;font-size:13px">🌐 &nbsp;Explore the app at <strong>GuberApp.com</strong></a>
+                    <a href="https://isellapps.store" style="display:block;background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:12px 16px;color:#00e576;text-decoration:none;font-size:13px">▶ &nbsp;View live app demos at <strong>iSellApps.store</strong></a>
+                    <a href="tel:3364841536" style="display:block;background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:12px 16px;color:#00E5E5;text-decoration:none;font-size:13px">📞 &nbsp;Call or text us at <strong>(336) 484-1536</strong></a>
+                  </div>
+
+                  <p style="color:#666;font-size:11px;margin-top:32px;border-top:1px solid #222;padding-top:16px">
+                    Guber Global LLC &nbsp;|&nbsp; <a href="https://guberapp.com" style="color:#a855f7">GuberApp.com</a> &nbsp;|&nbsp; (336) 484-1536
+                  </p>
+                </div>
+              </div>
+            `,
+          });
+        } catch (confErr) {
+          console.error("[business-leads] business confirmation email error (non-fatal):", confErr);
+        }
+
+        // ── Enhanced admin notification ───────────────────────────────────
+        try {
           const adminRows = await pool.query(`SELECT email FROM users WHERE role = 'admin' LIMIT 5`);
           const adminEmails: string[] = adminRows.rows.map((r: any) => r.email).filter(Boolean);
           if (adminEmails.length > 0) {
-            const { Resend } = await import("resend");
-            const resend = new Resend(process.env.RESEND_API_KEY);
-            const fromDomain = process.env.RESEND_FROM_DOMAIN || "guberapp.app";
-            // Use plain-text email to guarantee no HTML injection from user-supplied fields
-            const adminUrl = `${process.env.APP_BASE_URL || "https://guberapp.com"}/admin?tab=biz-leads`;
+            const bizPhone = encodeURIComponent(phoneRaw.replace(/[^\d+\-().#* ]/g, ""));
+            const bizEmail = encodeURIComponent(emailVal);
+            const bizSubject = encodeURIComponent(`GUBER Business Inquiry — ${bName}`);
             await resend.emails.send({
               from: `GUBER <noreply@${fromDomain}>`,
               to: adminEmails,
-              subject: `New Business Lead: ${escHtml(bName)}`,
+              subject: `New Business Lead: ${bName}${bSource ? ` [${bSource}]` : ""}`,
               text: [
-                "New Business Lead Received",
-                "─────────────────────────",
+                "NEW BUSINESS LEAD",
+                "─────────────────",
                 `Business:  ${bName}`,
                 `Contact:   ${cName}`,
                 `Email:     ${emailVal}`,
+                `Phone:     ${phoneRaw}`,
                 `Location:  ${bCity}, ${bState}`,
                 `Category:  ${bCat}`,
                 `Interest:  ${selectedInterest}`,
+                bSource ? `Source:    ${bSource}` : "",
                 bMsg ? `Message:   ${bMsg}` : "",
                 "",
-                `View in Admin: ${adminUrl}`,
+                `Admin panel: ${adminUrl}`,
               ].filter(l => l !== "").join("\n"),
               html: `
-                <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-                  <h2 style="color:#a855f7">New Business Lead Received</h2>
-                  <table style="width:100%;border-collapse:collapse">
-                    <tr><td style="padding:6px 0;color:#666;width:150px">Business</td><td style="padding:6px 0;font-weight:bold">${escHtml(bName)}</td></tr>
-                    <tr><td style="padding:6px 0;color:#666">Contact</td><td style="padding:6px 0">${escHtml(cName)}</td></tr>
-                    <tr><td style="padding:6px 0;color:#666">Email</td><td style="padding:6px 0">${escHtml(emailVal)}</td></tr>
-                    <tr><td style="padding:6px 0;color:#666">Location</td><td style="padding:6px 0">${escHtml(bCity)}, ${escHtml(bState)}</td></tr>
-                    <tr><td style="padding:6px 0;color:#666">Category</td><td style="padding:6px 0">${escHtml(bCat)}</td></tr>
-                    <tr><td style="padding:6px 0;color:#666">Interest</td><td style="padding:6px 0">${escHtml(selectedInterest)}</td></tr>
-                    ${bMsg ? `<tr><td style="padding:6px 0;color:#666">Message</td><td style="padding:6px 0">${escHtml(bMsg)}</td></tr>` : ""}
-                  </table>
-                  <p style="margin-top:20px">
-                    <a href="${escHtml(adminUrl)}"
-                       style="background:#a855f7;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold">
-                      View in Admin Panel
-                    </a>
-                  </p>
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#0a0a0a;color:#fff;border-radius:16px;overflow:hidden">
+                  <div style="background:linear-gradient(135deg,#a855f7,#7c3aed);padding:20px 28px;display:flex;align-items:center;justify-content:space-between">
+                    <div>
+                      <h2 style="margin:0;font-size:18px">New Business Lead</h2>
+                      <p style="margin:4px 0 0;font-size:11px;opacity:0.8">${new Date().toLocaleString()}</p>
+                    </div>
+                    ${bSource ? `<span style="background:rgba(255,255,255,0.2);border-radius:20px;padding:4px 12px;font-size:11px;letter-spacing:0.08em">${escHtml(bSource)}</span>` : ""}
+                  </div>
+                  <div style="padding:24px 28px">
+                    <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+                      <tr><td style="padding:6px 0;color:#888;width:130px">Business</td><td style="padding:6px 0;font-weight:bold;font-size:15px">${escHtml(bName)}</td></tr>
+                      <tr><td style="padding:6px 0;color:#888">Contact</td><td style="padding:6px 0">${escHtml(cName)}</td></tr>
+                      <tr><td style="padding:6px 0;color:#888">Location</td><td style="padding:6px 0">${escHtml(bCity)}, ${escHtml(bState)}</td></tr>
+                      <tr><td style="padding:6px 0;color:#888">Category</td><td style="padding:6px 0">${escHtml(bCat)}</td></tr>
+                      <tr><td style="padding:6px 0;color:#888">Interest</td><td style="padding:6px 0"><strong>${escHtml(selectedInterest)}</strong></td></tr>
+                      ${bMsg ? `<tr><td style="padding:6px 0;color:#888;vertical-align:top">Message</td><td style="padding:6px 0;color:#ccc">${escHtml(bMsg)}</td></tr>` : ""}
+                    </table>
+
+                    <p style="margin:0 0 12px;font-size:11px;letter-spacing:0.1em;color:#a855f7;text-transform:uppercase">Contact This Business</p>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
+                      <a href="tel:${bizPhone}" style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:10px 16px;color:#00E5E5;text-decoration:none;font-size:12px;font-weight:bold">📞 CALL ${escHtml(phoneRaw)}</a>
+                      <a href="sms:${bizPhone}" style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:10px 16px;color:#00e576;text-decoration:none;font-size:12px;font-weight:bold">💬 TEXT</a>
+                      <a href="mailto:${bizEmail}?subject=${bizSubject}" style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:10px 16px;color:#a855f7;text-decoration:none;font-size:12px;font-weight:bold">✉ EMAIL</a>
+                    </div>
+
+                    <a href="${escHtml(adminUrl)}" style="display:inline-block;background:linear-gradient(135deg,#a855f7,#7c3aed);color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px">View in Admin Panel →</a>
+                  </div>
                 </div>
               `,
             });
           }
+        } catch (adminEmailErr) {
+          console.error("[business-leads] admin email error (non-fatal):", adminEmailErr);
         }
-      } catch (emailErr) {
-        console.error("[business-leads] admin email error (non-fatal):", emailErr);
       }
 
       res.json({ ok: true });
@@ -1564,6 +1656,7 @@ export async function registerRoutes(
         `SELECT id, business_name, contact_name, email, city, state,
                 business_category, selected_interest, message,
                 permission_to_contact, status, internal_notes, follow_up_date,
+                source, last_contact_date, converted_to_user_id,
                 created_at, updated_at
          FROM business_leads ORDER BY created_at DESC`
       );
@@ -1582,6 +1675,9 @@ export async function registerRoutes(
         status: b.status,
         internalNotes: b.internal_notes,
         followUpDate: b.follow_up_date,
+        source: b.source,
+        lastContactDate: b.last_contact_date,
+        convertedToUserId: b.converted_to_user_id,
         createdAt: b.created_at,
         updatedAt: b.updated_at,
       })));
@@ -1616,6 +1712,9 @@ export async function registerRoutes(
         status: b.status,
         internalNotes: b.internal_notes,
         followUpDate: b.follow_up_date,
+        source: b.source,
+        lastContactDate: b.last_contact_date,
+        convertedToUserId: b.converted_to_user_id,
         createdAt: b.created_at,
         updatedAt: b.updated_at,
       });
@@ -1651,7 +1750,8 @@ export async function registerRoutes(
 
     // Build the UPDATE dynamically so omitted fields are never touched,
     // while an explicit null or "" properly clears the column.
-    const updates: string[] = ["updated_at = NOW()"];
+    // last_contact_date is always set to NOW() on every admin save.
+    const updates: string[] = ["updated_at = NOW()", "last_contact_date = NOW()"];
     const params: unknown[] = [];
     let p = 1;
 

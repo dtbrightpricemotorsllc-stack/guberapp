@@ -3289,6 +3289,9 @@ export const businessLeads = pgTable("business_leads", {
   status:            text("status").notNull().default("new"),
   internalNotes:     text("internal_notes"),
   followUpDate:      text("follow_up_date"),
+  source:            text("source"),
+  lastContactDate:   timestamp("last_contact_date"),
+  convertedToUserId: integer("converted_to_user_id"),
   createdAt:         timestamp("created_at").defaultNow(),
   updatedAt:         timestamp("updated_at").defaultNow(),
 });
@@ -3306,4 +3309,5 @@ export const insertBusinessLeadSchema = z.object({
   selectedInterest:   z.string().min(1, "Please select an interest"),
   message:            z.string().optional(),
   permissionToContact: z.boolean(),
+  source:             z.string().max(80).optional(),
 });

@@ -24,7 +24,7 @@ Shield, Users, Briefcase, AlertTriangle, Gavel, Ban, ChevronLeft, ChevronRight, 
 CheckCircle, Lock, Camera, Video, MapPin, Image, Edit, Save, X, ScrollText,
 FileText, Clock, Eye, ShieldCheck, UserCheck, RefreshCw, Mail, Loader2, Trash2, Navigation,
 DollarSign, Zap, MessageSquare, Bell, Brain, CalendarDays, BadgeCheck, AlertCircle, Info,
-ExternalLink, ThumbsUp, ThumbsDown, Flame, Building2, XCircle, Search, Download, Sparkles, Cpu, TrendingUp
+ExternalLink, ThumbsUp, ThumbsDown, Flame, Building2, XCircle, Search, Download, Sparkles, Cpu, TrendingUp, Phone
 } from "lucide-react";
 import type { User, Job, VICategory, UseCase, CatalogServiceType, DetailOptionSet, ProofTemplate, ProofChecklistItem, AuditLog, ProofSubmission, WalletTransaction } from "@shared/schema";
 import {
@@ -6184,6 +6184,12 @@ function BizLeadsTab() {
   const [saving, setSaving] = useState(false);
   const [detailForm, setDetailForm] = useState({ status: "", internalNotes: "", followUpDate: "" });
 
+  // Count leads per status for chip badges
+  const statusCounts = (leads as any[]).reduce((acc: Record<string, number>, l: any) => {
+    acc[l.status] = (acc[l.status] || 0) + 1;
+    return acc;
+  }, {});
+
   const { data: leads = [], isLoading, refetch } = useQuery<any[]>({
     queryKey: ["/api/admin/business-leads"],
     staleTime: 30_000,
@@ -6256,28 +6262,48 @@ function BizLeadsTab() {
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 mb-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name, email, city..."
-            className="pl-9 rounded-xl h-10 text-sm border-0 bg-muted"
-            data-testid="input-biz-leads-search"
-          />
-        </div>
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-full sm:w-48 h-10 rounded-xl border-0 bg-muted text-sm" data-testid="select-biz-leads-status-filter">
-            <SelectValue placeholder="All statuses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            {BIZ_LEAD_STATUSES.map(s => (
-              <SelectItem key={s} value={s}>{statusInfo(s).label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {/* Search */}
+      <div className="relative mb-3">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by name, email, city..."
+          className="pl-9 rounded-xl h-10 text-sm border-0 bg-muted"
+          data-testid="input-biz-leads-search"
+        />
+      </div>
+
+      {/* Status filter chips */}
+      <div className="flex flex-wrap gap-1.5 mb-4" data-testid="status-filter-chips">
+        <button
+          onClick={() => setFilterStatus("all")}
+          className="h-7 px-3 rounded-full text-[10px] font-display font-bold tracking-wider transition-all"
+          style={filterStatus === "all"
+            ? { background: "#a855f7", color: "#fff" }
+            : { background: "hsl(var(--muted))", color: "rgba(255,255,255,0.5)" }}
+          data-testid="chip-status-all"
+        >
+          ALL {leads.length > 0 ? `(${leads.length})` : ""}
+        </button>
+        {BIZ_LEAD_STATUSES.map(s => {
+          const si = statusInfo(s);
+          const count = statusCounts[s] || 0;
+          if (count === 0) return null;
+          return (
+            <button
+              key={s}
+              onClick={() => setFilterStatus(filterStatus === s ? "all" : s)}
+              className="h-7 px-3 rounded-full text-[10px] font-display font-bold tracking-wider transition-all"
+              style={filterStatus === s
+                ? { background: si.color, color: "#000" }
+                : { background: `${si.color}18`, color: si.color, border: `1px solid ${si.color}30` }}
+              data-testid={`chip-status-${s}`}
+            >
+              {si.label} ({count})
+            </button>
+          );
+        })}
       </div>
 
       {isLoading ? (
@@ -6306,9 +6332,25 @@ function BizLeadsTab() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="font-display font-bold text-sm truncate">{lead.businessName}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-display font-bold text-sm truncate">{lead.businessName}</p>
+                        {lead.convertedToUserId && (
+                          <span className="text-[9px] font-display font-black px-1.5 py-0.5 rounded-full shrink-0"
+                            style={{ background: "rgba(0,229,118,0.15)", color: "#00e576", border: "1px solid rgba(0,229,118,0.3)" }}>
+                            ✓ CONVERTED
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground truncate">{lead.contactName} · {lead.city}, {lead.state}</p>
-                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">{lead.selectedInterest}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-[10px] text-muted-foreground truncate">{lead.selectedInterest}</p>
+                        {lead.source && (
+                          <span className="text-[9px] font-display px-1.5 py-0 rounded-full shrink-0"
+                            style={{ background: "rgba(168,85,247,0.1)", color: "rgba(168,85,247,0.8)", border: "1px solid rgba(168,85,247,0.2)" }}>
+                            {lead.source}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="shrink-0 text-right">
                       <span className="text-[10px] font-display font-bold px-2 py-0.5 rounded-full"
@@ -6331,8 +6373,22 @@ function BizLeadsTab() {
               style={{ background: "hsl(var(--card))", border: "1px solid rgba(255,255,255,0.07)" }}>
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <h3 className="font-display font-black text-base">{detail.businessName}</h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-display font-black text-base">{detail.businessName}</h3>
+                    {detail.convertedToUserId && (
+                      <span className="text-[9px] font-display font-black px-2 py-0.5 rounded-full"
+                        style={{ background: "rgba(0,229,118,0.15)", color: "#00e576" }}>
+                        ✓ CONVERTED
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">{detail.selectedInterest}</p>
+                  {detail.source && (
+                    <p className="text-[10px] mt-0.5">
+                      <span className="text-muted-foreground">Source: </span>
+                      <span className="font-display font-bold" style={{ color: "#a855f7" }}>{detail.source}</span>
+                    </p>
+                  )}
                 </div>
                 <button onClick={() => setSelectedId(null)} className="text-muted-foreground hover:text-foreground p-1">
                   <X className="w-4 h-4" />
@@ -6347,6 +6403,14 @@ function BizLeadsTab() {
                   <div><span className="text-muted-foreground">Location:</span> <span className="font-medium">{detail.city}, {detail.state}</span></div>
                   <div><span className="text-muted-foreground">Category:</span> <span className="font-medium">{detail.businessCategory}</span></div>
                   <div><span className="text-muted-foreground">Submitted:</span> <span className="font-medium">{detail.createdAt ? new Date(detail.createdAt).toLocaleDateString() : "—"}</span></div>
+                  {detail.lastContactDate && (
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground">Last contact: </span>
+                      <span className="font-medium" style={{ color: "#00E5E5" }}>
+                        {new Date(detail.lastContactDate).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 {detail.message && (
                   <div className="mt-2 pt-2 border-t border-white/5">
@@ -6361,8 +6425,24 @@ function BizLeadsTab() {
                 </div>
               </div>
 
-              {/* Action buttons — link to business's contact, not Guber Global */}
+              {/* Action buttons — link to business's contact */}
               <div className="flex gap-2">
+                <a
+                  href={`tel:${encodeURIComponent((detail.phone ?? "").replace(/[^\d+\-().#* ]/g, ""))}`}
+                  className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-display tracking-wider transition-all"
+                  style={{ background: "rgba(0,229,118,0.1)", border: "1px solid rgba(0,229,118,0.2)", color: "#00e576" }}
+                  data-testid="btn-call-lead"
+                >
+                  <Phone className="w-3.5 h-3.5" /> CALL
+                </a>
+                <a
+                  href={`sms:${encodeURIComponent((detail.phone ?? "").replace(/[^\d+\-().#* ]/g, ""))}`}
+                  className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-display tracking-wider transition-all"
+                  style={{ background: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.2)", color: "#a855f7" }}
+                  data-testid="btn-sms-lead"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" /> TEXT
+                </a>
                 <a
                   href={`mailto:${encodeURIComponent(detail.email)}?subject=${encodeURIComponent(`GUBER Business Inquiry — ${detail.businessName}`)}`}
                   className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-display tracking-wider transition-all"
@@ -6370,14 +6450,6 @@ function BizLeadsTab() {
                   data-testid="btn-email-lead"
                 >
                   <Mail className="w-3.5 h-3.5" /> EMAIL
-                </a>
-                <a
-                  href={`sms:${encodeURIComponent((detail.phone ?? "").replace(/[^\d+\-().#* ]/g, ""))}`}
-                  className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-display tracking-wider transition-all"
-                  style={{ background: "rgba(0,229,118,0.1)", border: "1px solid rgba(0,229,118,0.2)", color: "#00e576" }}
-                  data-testid="btn-sms-lead"
-                >
-                  <MessageSquare className="w-3.5 h-3.5" /> TEXT
                 </a>
               </div>
 

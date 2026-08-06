@@ -2035,6 +2035,13 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_business_leads_created ON business_leads (created_at DESC);
   `).catch(e => console.error("[migration] business_leads table error:", e));
 
+  // ── Business Leads v2 columns ────────────────────────────────────────────────
+  await pool.query(`
+    ALTER TABLE business_leads ADD COLUMN IF NOT EXISTS source TEXT;
+    ALTER TABLE business_leads ADD COLUMN IF NOT EXISTS last_contact_date TIMESTAMP;
+    ALTER TABLE business_leads ADD COLUMN IF NOT EXISTS converted_to_user_id INTEGER;
+  `).catch(e => console.error("[migration] business_leads v2 columns error:", e));
+
   const shutdown = () => {
     httpServer.close(() => process.exit(0));
   };

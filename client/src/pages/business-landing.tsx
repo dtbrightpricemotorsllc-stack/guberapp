@@ -2,7 +2,7 @@
 // No account creation required. ~30-second interest form.
 // Phone collected privately; never displayed publicly.
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import {
   ArrowLeft, Building2, Megaphone, Cpu, Sparkles, CheckCircle2,
-  Loader2, ChevronRight, ExternalLink, Mail, Star,
+  Loader2, ChevronRight, ExternalLink, Mail, Star, Phone, Globe, MessageCircle,
 } from "lucide-react";
 import { GuberLogo } from "@/components/guber-logo";
 
@@ -117,6 +117,17 @@ const LEAD_OPTIONS: LeadOption[] = [
   },
 ];
 
+// ── Intent → card key mapping ─────────────────────────────────────────────────
+const INTENT_TO_INTEREST: Record<string, string> = {
+  join:    "Join GUBER",
+  promo:   "Promote my business",
+  promote: "Promote my business",
+  digital: "Build an app",
+  app:     "Build an app",
+  future:  "Interested but not ready",
+  info:    "Interested but not ready",
+};
+
 // ── Component ────────────────────────────────────────────────────────────────
 export default function BusinessLanding() {
   const { toast } = useToast();
@@ -124,6 +135,7 @@ export default function BusinessLanding() {
   const [selectedInterest, setSelectedInterest] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [source, setSource] = useState<string>("");
 
   const [form, setForm] = useState({
     businessName: "",
@@ -137,6 +149,29 @@ export default function BusinessLanding() {
     message: "",
     permissionToContact: false,
   });
+
+  // ── Read ?source= and ?intent= from URL on mount ─────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const srcParam = params.get("source") || params.get("utm_source") || "";
+    const intentParam = params.get("intent") || params.get("interest") || "";
+
+    if (srcParam) {
+      const cleaned = srcParam.trim().toLowerCase().replace(/[^a-z0-9\-_]/g, "-").slice(0, 80);
+      setSource(cleaned);
+    }
+
+    if (intentParam) {
+      const mapped = INTENT_TO_INTEREST[intentParam.toLowerCase().trim()];
+      if (mapped) {
+        setSelectedInterest(mapped);
+        setForm(f => ({ ...f, selectedInterest: mapped }));
+        setTimeout(() => {
+          formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 200);
+      }
+    }
+  }, []);
 
   const handleCardClick = useCallback((interest: string) => {
     setSelectedInterest(interest);
@@ -169,7 +204,7 @@ export default function BusinessLanding() {
       const res = await fetch("/api/public/business-leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, source: source || undefined }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -291,6 +326,64 @@ export default function BusinessLanding() {
           </h1>
           <p className="text-muted-foreground text-sm leading-relaxed max-w-md mx-auto">
             Get discovered, request a promotion, or let us build your next digital solution.
+          </p>
+        </div>
+
+        {/* How It Works */}
+        <div className="mb-10" data-testid="section-how-it-works">
+          <p className="text-center text-[10px] font-display tracking-[0.18em] text-muted-foreground mb-6">HOW IT WORKS</p>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { step: "01", label: "Pick your goal", sub: "Choose what you're looking for from the options below", color: PURPLE },
+              { step: "02", label: "Submit in 30 sec", sub: "Fill out a quick form — no account required", color: TEAL },
+              { step: "03", label: "We reach out", sub: "A Guber Global rep contacts you within 1–2 business days", color: GREEN },
+            ].map(({ step, label, sub, color }) => (
+              <div key={step} className="flex flex-col items-center text-center gap-2 p-3 rounded-2xl"
+                style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                <span className="text-[11px] font-display font-black" style={{ color }}>{step}</span>
+                <p className="text-[11px] font-display font-bold text-foreground leading-snug">{label}</p>
+                <p className="text-[10px] text-muted-foreground leading-snug">{sub}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Trust / Contact */}
+        <div className="mb-8 rounded-2xl p-5"
+          style={{ background: "rgba(168,85,247,0.05)", border: "1px solid rgba(168,85,247,0.15)" }}
+          data-testid="section-contact-trust">
+          <p className="text-[10px] font-display tracking-[0.18em] text-muted-foreground mb-4">GUBER GLOBAL — DIRECT CONTACT</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <a href="tel:3364841536"
+              className="flex items-center gap-3 p-3 rounded-xl transition-all hover:opacity-80"
+              style={{ background: "rgba(0,229,229,0.06)", border: "1px solid rgba(0,229,229,0.15)" }}>
+              <Phone className="w-4 h-4 flex-shrink-0" style={{ color: TEAL }} />
+              <div className="min-w-0">
+                <p className="text-[9px] text-muted-foreground tracking-widest">CALL OR TEXT</p>
+                <p className="text-xs font-display font-bold truncate" style={{ color: TEAL }}>(336) 484-1536</p>
+              </div>
+            </a>
+            <a href="https://guberapp.com" target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-3 p-3 rounded-xl transition-all hover:opacity-80"
+              style={{ background: "rgba(168,85,247,0.06)", border: "1px solid rgba(168,85,247,0.15)" }}>
+              <Globe className="w-4 h-4 flex-shrink-0" style={{ color: PURPLE }} />
+              <div className="min-w-0">
+                <p className="text-[9px] text-muted-foreground tracking-widest">EXPLORE APP</p>
+                <p className="text-xs font-display font-bold truncate" style={{ color: PURPLE }}>GuberApp.com</p>
+              </div>
+            </a>
+            <a href="https://isellapps.store" target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-3 p-3 rounded-xl transition-all hover:opacity-80"
+              style={{ background: "rgba(0,229,118,0.06)", border: "1px solid rgba(0,229,118,0.15)" }}>
+              <MessageCircle className="w-4 h-4 flex-shrink-0" style={{ color: GREEN }} />
+              <div className="min-w-0">
+                <p className="text-[9px] text-muted-foreground tracking-widest">LIVE DEMOS</p>
+                <p className="text-xs font-display font-bold truncate" style={{ color: GREEN }}>iSellApps.store</p>
+              </div>
+            </a>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-4 text-center leading-relaxed">
+            Guber Global LLC is the technology arm behind the GUBER platform — building apps, digital solutions, and local business tools since 2022.
           </p>
         </div>
 
