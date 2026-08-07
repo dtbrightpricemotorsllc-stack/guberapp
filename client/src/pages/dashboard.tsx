@@ -1476,9 +1476,6 @@ export default function Dashboard() {
         onAction={handlePromoAction}
       />
 
-      {/* ── Floating mascot helper (subtle, anchored bottom-right) ── */}
-      <InstallMascot />
-
       {/* ── Onboarding tour (deferred until the GPS notice is resolved) ── */}
       {showTour && !!user && !gpsBlocking && (
         <DashboardTour

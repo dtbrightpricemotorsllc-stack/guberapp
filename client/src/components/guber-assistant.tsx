@@ -912,6 +912,7 @@ export function GUBERAssistant() {
         side="bottom"
         className="h-[88vh] p-0 rounded-t-3xl border-0 flex flex-col"
         style={{ background: "hsl(222 47% 5%)", borderTop: "1px solid hsl(270 100% 65% / 0.2)" }}
+        hideCloseButton
       >
         <JacConvaiSession
           key={convaiKey}

@@ -442,9 +442,14 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           else                   params.agentId   = session.agentId;
 
           // Always apply overrides — target ~500ms silence → end of turn (default is ~2-3s).
+          // firstMessage is always overridden so ElevenLabs TTS says "Jack" (not "J-A-C" from the
+          // dashboard-configured greeting which uses all-caps "JAC" — TTS spells it out as letters).
+          const jacFirstMessage = suppressFirstMessage
+            ? ""
+            : "Hey, I'm Jack — GUBER's opportunity assistant. What can I help you with today?";
           params.overrides = {
             agent: {
-              ...(suppressFirstMessage ? { firstMessage: "" } : {}),
+              firstMessage: jacFirstMessage,
               turn: { turn_timeout: 0.5, mode: "turn" },
             },
           } as any;
