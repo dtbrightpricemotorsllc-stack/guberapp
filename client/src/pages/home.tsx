@@ -1,14 +1,13 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { App as CapApp } from "@capacitor/app";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { SocialLinks } from "@/components/social-links";
 import { useFeatureFlag } from "@/hooks/use-feature-flag";
 import {
-  Crown, MapPin, DollarSign, Clock, ChevronRight, ChevronLeft, X,
-  Briefcase, ShieldCheck, Zap, Star, ArrowRight, Lock,
+  Crown, DollarSign, ChevronRight, ChevronLeft, X,
+  Briefcase, ShieldCheck, Zap, Star, ArrowRight,
   Truck, Share2, Gift, CheckCircle, Building2,
 } from "lucide-react";
 import { SiGoogleplay, SiApple } from "react-icons/si";
@@ -31,25 +30,6 @@ import proofImg1 from "@assets/Screenshot_20260331_102503_Facebook_1778199034115
 import proofImg2 from "@assets/Screenshot_20260426_064718_Facebook_1778199034048.jpg";
 import proofImg3 from "@assets/Screenshot_20260426_064907_Facebook_1778199034017.jpg";
 import proofImg4 from "@assets/Screenshot_20260426_064624_Facebook_1778199034059.jpg";
-
-interface PublicJob {
-  id: number;
-  title: string;
-  category: string;
-  budget: number;
-  locationApprox: string;
-  zip: string;
-  urgentSwitch: boolean;
-  payType: string;
-  jobType: string;
-  proofRequired: boolean;
-  serviceType: string | null;
-  verifyInspectCategory: string | null;
-  jobImage: string | null;
-  createdAt: string;
-  appUrl: string;
-  _demo?: boolean;
-}
 
 // ── Slideshow ─────────────────────────────────────────────────────────────────
 const SLIDES = [
@@ -253,31 +233,12 @@ function DoorCard({ door }: { door: DoorDef }) {
   );
 }
 
-// ── Demo job tiles ────────────────────────────────────────────────────────────
-const DEMO_JOBS: PublicJob[] = [
-  { id: -1, title: "Help Move a Sectional Sofa",   category: "On-Demand Help",  budget: 75, locationApprox: "Near you", zip: "", urgentSwitch: true,  payType: "flat", jobType: "one-time", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date(Date.now() -  8 * 60_000).toISOString(), appUrl: "", _demo: true },
-  { id: -2, title: "Pre-Purchase Vehicle Photos",  category: "Verify & Inspect", budget: 45, locationApprox: "Near you", zip: "", urgentSwitch: false, payType: "flat", jobType: "one-time", proofRequired: true,  serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date(Date.now() - 23 * 60_000).toISOString(), appUrl: "", _demo: true },
-  { id: -3, title: "Yard Cleanup — Leaf Blowing",  category: "General Labor",    budget: 60, locationApprox: "Near you", zip: "", urgentSwitch: false, payType: "flat", jobType: "one-time", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date(Date.now() - 45 * 60_000).toISOString(), appUrl: "", _demo: true },
-  { id: -4, title: "Furniture Assembly — IKEA",    category: "Skilled Labor",    budget: 90, locationApprox: "Near you", zip: "", urgentSwitch: false, payType: "flat", jobType: "one-time", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date(Date.now() -  2 * 3_600_000).toISOString(), appUrl: "", _demo: true },
-  { id: -5, title: "Grocery Pickup & Delivery",    category: "On-Demand Help",   budget: 30, locationApprox: "Near you", zip: "", urgentSwitch: true,  payType: "flat", jobType: "one-time", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date(Date.now() - 18 * 60_000).toISOString(), appUrl: "", _demo: true },
-  { id: -6, title: "Property Walk-Through Photos", category: "Verify & Inspect", budget: 55, locationApprox: "Near you", zip: "", urgentSwitch: false, payType: "flat", jobType: "one-time", proofRequired: true,  serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date(Date.now() -  3 * 3_600_000).toISOString(), appUrl: "", _demo: true },
-];
-
 const COMMUNITY_PROOF = [
   { img: proofImg1, caption: "James Ellis — Cash Drop Winner", sub: "Mobile, AL · Found &amp; claimed" },
   { img: proofImg2, caption: "Quandala — Cash Drop Found", sub: "Pensacola, FL · Real community drop" },
   { img: proofImg3, caption: "Klin Brantley — \"It's been found!\"", sub: "85 reactions · 8 shares" },
   { img: proofImg4, caption: "Kyle Holley — Drop Hunt", sub: "Pensacola area · 31 reactions" },
 ];
-
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
 
 // ── Gate Modal ────────────────────────────────────────────────────────────────
 function GateModal({ onClose }: { onClose: () => void }) {
@@ -317,54 +278,6 @@ function GateModal({ onClose }: { onClose: () => void }) {
             </Link>
           </div>
           <p className="text-center text-muted-foreground text-[10px] font-display tracking-wider mt-5">FREE TO JOIN · TEAM GUBER · GUBER GLOBAL LLC</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Job Card ──────────────────────────────────────────────────────────────────
-function JobCard({ job, onAccept }: { job: PublicJob; onAccept: () => void }) {
-  return (
-    <div className="bg-card border border-border rounded-2xl overflow-hidden flex flex-col relative" data-testid={`card-job-${job.id}`}>
-      {job._demo && (
-        <div className="absolute top-3 right-3 z-10">
-          <span className="text-[9px] font-display font-black px-1.5 py-0.5 rounded-md tracking-wider"
-            style={{ background: "rgba(0,229,118,0.12)", color: "rgba(0,229,118,0.7)", border: "1px solid rgba(0,229,118,0.2)" }}>
-            SAMPLE
-          </span>
-        </div>
-      )}
-      {job.jobImage && <img src={job.jobImage} alt={job.title} className="w-full h-36 object-cover" />}
-      <div className="p-4 flex flex-col flex-1">
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <h3 className="font-display font-bold text-sm leading-snug pr-10">{job.title}</h3>
-          {job.urgentSwitch && (
-            <Badge className="shrink-0 text-[9px] font-display tracking-widest bg-amber-500/15 text-amber-400 border-amber-500/20 no-default-hover-elevate" data-testid={`badge-urgent-${job.id}`}>
-              <Zap className="w-2.5 h-2.5 mr-0.5" /> URGENT
-            </Badge>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-x-3 gap-y-1 mb-3">
-          <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><MapPin className="w-3 h-3" />{job.locationApprox}</span>
-          <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><Clock className="w-3 h-3" />{timeAgo(job.createdAt)}</span>
-          {job.proofRequired && (
-            <span className="flex items-center gap-1 text-[11px] text-amber-400"><ShieldCheck className="w-3 h-3" />Proof required</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <Badge variant="outline" className="text-[10px] font-display no-default-hover-elevate">{job.category === "Verify & Inspect" ? "See For Me" : job.category}</Badge>
-          <Badge variant="outline" className="text-[10px] font-display no-default-hover-elevate capitalize">{job.jobType}</Badge>
-        </div>
-        <div className="flex items-center justify-between mt-auto">
-          <div className="flex items-baseline gap-0.5">
-            <DollarSign className="w-4 h-4 text-emerald-400" />
-            <span className="text-lg font-display font-black text-emerald-400">{job.budget}</span>
-            {job.payType === "hourly" && <span className="text-[10px] text-muted-foreground ml-0.5">/hr</span>}
-          </div>
-          <button onClick={onAccept} className="flex items-center gap-1.5 h-9 px-4 rounded-xl text-[11px] font-display font-bold tracking-widest premium-btn" data-testid={`button-accept-${job.id}`}>
-            <Lock className="w-3 h-3" />ACCEPT
-          </button>
         </div>
       </div>
     </div>
@@ -887,7 +800,6 @@ export default function Home() {
   const [wallOpen,      setWallOpen]      = useState(false);
   const [copied,        setCopied]        = useState(false);
   const [currentSlide,  setCurrentSlide]  = useState(SLIDES[0]);
-  const jobsSectionRef = useRef<HTMLDivElement>(null);
   const { enabled: investorPitchPublic } = useFeatureFlag("investor_pitch_public");
 
   // Scroll to top on mount AND every time the app is foregrounded.
@@ -905,20 +817,10 @@ export default function Home() {
     return () => { cleanup?.(); };
   }, []);
 
-  const { data: jobs, isLoading: jobsLoading } = useQuery<PublicJob[]>({
-    queryKey: ["/api/public/jobs"],
-  });
-
   const { data: stats } = useQuery<{ members: number; jobs: number; states: number }>({
     queryKey: ["/api/public/stats"],
     staleTime: 5 * 60_000,
   });
-
-  const displayJobs = useMemo(() => {
-    const real = jobs ?? [];
-    if (real.length >= 6) return real.slice(0, 6);
-    return [...real, ...DEMO_JOBS.slice(0, Math.max(0, 6 - real.length))];
-  }, [jobs]);
 
   const handleShare = async () => {
     const url  = "https://guberapp.com";
@@ -1061,37 +963,6 @@ export default function Home() {
 
         <MascotPowerUp />
       </div>
-
-      {/* ── Live Job Feed ── */}
-      <section ref={jobsSectionRef} className="relative z-10 px-5 pb-20 max-w-6xl mx-auto w-full scroll-mt-4">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-2xl font-display font-black tracking-wider">LIVE JOBS NEAR YOU</h2>
-            <p className="text-muted-foreground text-sm mt-1">Real work posted right now in your area</p>
-          </div>
-          <Link href="/browse-jobs" className="flex items-center gap-1 text-xs font-display tracking-wider text-[#00E5E5] hover:opacity-80 transition-opacity" data-testid="link-see-all-jobs">
-            SEE ALL <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
-
-        {jobsLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-52 rounded-2xl" />)}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {displayJobs.map((job) => (
-              <JobCard key={job.id} job={job} onAccept={() => setGateOpen(true)} />
-            ))}
-          </div>
-        )}
-
-        <div className="mt-8 flex justify-center">
-          <button onClick={() => setGateOpen(true)} className="flex items-center gap-2 h-12 px-8 rounded-xl font-display tracking-[0.15em] text-sm btn-glass-premium" data-testid="button-view-more-jobs">
-            <Briefcase className="w-4 h-4" />VIEW MORE JOBS
-          </button>
-        </div>
-      </section>
 
       {/* ── City Activation ── */}
       <section className="relative z-10 px-5 pb-20 max-w-6xl mx-auto w-full" data-testid="section-city-activation">
