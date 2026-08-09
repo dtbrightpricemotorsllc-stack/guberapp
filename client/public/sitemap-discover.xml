@@ -3,131 +3,131 @@
 
   <!-- Hub pages -->
   <url>
-    <loc>https://guberapp.app/discover/</loc>
+    <loc>https://guberapp.com/discover/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/what-is-guber/</loc>
+    <loc>https://guberapp.com/discover/what-is-guber/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/work/</loc>
+    <loc>https://guberapp.com/discover/work/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/hire/</loc>
+    <loc>https://guberapp.com/discover/hire/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/marketplace/</loc>
+    <loc>https://guberapp.com/discover/marketplace/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/services/</loc>
+    <loc>https://guberapp.com/discover/services/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/transport/</loc>
+    <loc>https://guberapp.com/discover/transport/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/verification/</loc>
+    <loc>https://guberapp.com/discover/verification/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/ai/</loc>
+    <loc>https://guberapp.com/discover/ai/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/local/</loc>
+    <loc>https://guberapp.com/discover/local/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <!-- Feature entity pages -->
   <url>
-    <loc>https://guberapp.app/discover/features/jac/</loc>
+    <loc>https://guberapp.com/discover/features/jac/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/features/earn-hire/</loc>
+    <loc>https://guberapp.com/discover/features/earn-hire/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/features/see-for-me/</loc>
+    <loc>https://guberapp.com/discover/features/see-for-me/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/features/load-board/</loc>
+    <loc>https://guberapp.com/discover/features/load-board/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/features/trust-by-action/</loc>
+    <loc>https://guberapp.com/discover/features/trust-by-action/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/features/cash-drops/</loc>
+    <loc>https://guberapp.com/discover/features/cash-drops/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/features/barter/</loc>
+    <loc>https://guberapp.com/discover/features/barter/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/features/payments/</loc>
+    <loc>https://guberapp.com/discover/features/payments/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/features/opportunity-map/</loc>
+    <loc>https://guberapp.com/discover/features/opportunity-map/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <!-- Search intent pages -->
   <url>
-    <loc>https://guberapp.app/discover/work/jobs-near-me/</loc>
+    <loc>https://guberapp.com/discover/work/jobs-near-me/</loc>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/work/gig-work/</loc>
+    <loc>https://guberapp.com/discover/work/gig-work/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/work/side-gigs/</loc>
+    <loc>https://guberapp.com/discover/work/side-gigs/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/hire/local-workers/</loc>
+    <loc>https://guberapp.com/discover/hire/local-workers/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/transport/car-hauling/</loc>
+    <loc>https://guberapp.com/discover/transport/car-hauling/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://guberapp.app/discover/verification/inspect-a-car-remotely/</loc>
+    <loc>https://guberapp.com/discover/verification/inspect-a-car-remotely/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>

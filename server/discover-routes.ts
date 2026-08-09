@@ -9,7 +9,7 @@
 
 import type { Express, Request, Response } from "express";
 
-const BASE_URL = "https://guberapp.app";
+const BASE_URL = "https://guberapp.com";
 const OG_IMAGE = `${BASE_URL}/icon-1024.png`;
 const BRAND = "GUBER";
 const BRAND_TAGLINE = "GUBER is an American super app connecting digital technology with real-world opportunity.";
