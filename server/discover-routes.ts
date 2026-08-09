@@ -12,8 +12,9 @@ import type { Express, Request, Response } from "express";
 const BASE_URL = "https://guberapp.com";
 const OG_IMAGE = `${BASE_URL}/icon-1024.png`;
 const BRAND = "GUBER";
-const BRAND_TAGLINE = "GUBER is an American super app connecting digital technology with real-world opportunity.";
+const BRAND_TAGLINE = "GUBER is America's First Super App — connecting digital technology with real-world opportunity.";
 const BRAND_MANTRA = "Work. Hire. Buy. Sell. Transport. Verify. Earn. Explore.";
+const BRAND_POSITIONING = "Digital tools. Real-world action.";
 
 // ─── Shared utilities ────────────────────────────────────────────────────────
 
@@ -177,7 +178,7 @@ const SITE_FOOTER = `
     <a href="/privacy">Privacy</a>
     <a href="/terms">Terms</a>
   </div>
-  <p>© ${new Date().getFullYear()} GUBER. An American super app. All rights reserved.</p>
+  <p>© ${new Date().getFullYear()} GUBER — America's First Super App. All rights reserved.</p>
 </footer>
 `;
 
@@ -236,9 +237,10 @@ function discoverIndex(): string {
   const crumbs: Breadcrumb[] = [{ name: "Home", url: "/" }, { name: "Discover GUBER", url: "/discover/" }];
   const body = `
 <div class="page-hero">
-  <h1>Discover GUBER — The American Super App</h1>
+  <h1>Discover GUBER — America's First Super App</h1>
   <p class="lead">${BRAND_TAGLINE} One platform for work, hiring, buying, selling, transportation, verification, local services, and AI-powered assistance.</p>
   <p class="mantra">${BRAND_MANTRA}</p>
+  <p class="mantra" style="color:var(--text2);text-transform:none;letter-spacing:normal;font-size:0.85rem;margin-top:6px">${BRAND_POSITIONING}</p>
 </div>
 
 <div class="section">
@@ -275,6 +277,7 @@ function discoverIndex(): string {
 <div class="section">
   <h2>Built for Real Americans</h2>
   <p>GUBER is designed for the full spectrum of American economic life — workers, earners, hirers, buyers, sellers, transporters, and local businesses of every kind. Whether you're an individual looking to make extra income, a small business hiring local help, or a carrier looking for loads, GUBER has a place for you.</p>
+  <p>This is what a super app looks like when it's built for America.</p>
 </div>
 
 <div class="cta-block">
@@ -285,8 +288,8 @@ function discoverIndex(): string {
 </div>`;
 
   return page({
-    title: "Discover GUBER — The American Super App | Work, Hire, Buy, Sell, Transport",
-    description: "GUBER is an American super app connecting people to work, hiring, buying, selling, transportation, verification, local services, and AI assistance — all from one platform.",
+    title: "Discover GUBER — America's First Super App | Work. Hire. Buy. Sell. Earn.",
+    description: "GUBER is America's First Super App — connecting people to work, hiring, buying, selling, transportation, verification, local services, and AI assistance. One platform for real-world opportunity.",
     canonical: "/discover/",
     jsonLd: [
       orgSchema(),
@@ -311,12 +314,12 @@ function whatIsGuber(): string {
   const body = `
 <div class="page-hero">
   <h1>What Is GUBER?</h1>
-  <p class="lead">GUBER is an American super app connecting people to work, hiring, buying, selling, transportation, verification, local services, and real-world opportunities from one platform.</p>
+  <p class="lead">GUBER — America's First Super App — connects people to work, hiring, buying, selling, transportation, verification, local services, and real-world opportunities from one platform. ${BRAND_POSITIONING}</p>
 </div>
 
 <div class="section">
   <h2>A Platform Built Around Real-World Activity</h2>
-  <p>GUBER is not a single-purpose app. It's an integrated platform for the full range of American economic activity — the kind that happens in communities, neighborhoods, driveways, warehouses, job sites, and main streets every day.</p>
+  <p>GUBER is not a single-purpose app. It's America's First Super App — an integrated platform for the full range of American economic activity, the kind that happens in communities, neighborhoods, driveways, warehouses, job sites, and main streets every day.</p>
   <p>Think of GUBER as a digital layer over the physical world. People use it to find work, hire workers, buy and sell items, ship vehicles and equipment, verify things they can't see in person, discover local opportunities, and get guidance from an AI assistant that knows the platform inside and out.</p>
 </div>
 
@@ -371,8 +374,8 @@ function whatIsGuber(): string {
 </div>`;
 
   return page({
-    title: "What Is GUBER? | The American Super App Explained",
-    description: "GUBER is an American super app for work, hiring, buying, selling, transportation, verification, and local opportunity — all connected through one platform. Learn what makes GUBER different.",
+    title: "What Is GUBER? | America's First Super App Explained",
+    description: "GUBER is America's First Super App — built for work, hiring, buying, selling, transportation, verification, and local opportunity. One connected platform for real-world American life.",
     canonical: "/discover/what-is-guber/",
     jsonLd: [
       orgSchema(),
@@ -450,7 +453,7 @@ function workHub(): string {
 
   return page({
     title: "Find Work Near You | GUBER Work & Earning Opportunities",
-    description: "Find local jobs, gig work, side gigs, and earning opportunities near you on GUBER — the American super app for work, hiring, transport, and real-world opportunity.",
+    description: "Find local jobs, gig work, side gigs, and earning opportunities near you on GUBER — America's super app for work, hiring, transport, and real-world opportunity.",
     canonical: "/discover/work/",
     jsonLd: [
       orgSchema(),
