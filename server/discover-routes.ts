@@ -251,7 +251,7 @@ function discoverIndex(): string {
     <div class="card"><h3>Local Services</h3><p>Find help with moving, deliveries, yard work, errands, and other local tasks.</p><a href="/discover/services/">Explore Services →</a></div>
     <div class="card"><h3>Transportation</h3><p>Ship vehicles, equipment, freight, and more — or find loads to haul.</p><a href="/discover/transport/">Explore Transport →</a></div>
     <div class="card"><h3>Verification</h3><p>Get eyes on anything, anywhere — vehicles, properties, items — with GPS-backed proof.</p><a href="/discover/verification/">Explore Verification →</a></div>
-    <div class="card"><h3>AI Assistant</h3><p>Jack, GUBER's AI assistant, helps you find opportunities, post work, and navigate the platform.</p><a href="/discover/ai/">Explore AI →</a></div>
+    <div class="card"><h3>AI Assistant</h3><p>JAC AI, GUBER's AI assistant, helps you find opportunities, post work, and navigate the platform.</p><a href="/discover/ai/">Explore AI →</a></div>
     <div class="card"><h3>Local Discovery</h3><p>See what's happening near you — opportunities, cash drops, missions, and local activity.</p><a href="/discover/local/">Explore Local →</a></div>
   </div>
 </div>
@@ -260,7 +260,7 @@ function discoverIndex(): string {
   <h2>GUBER Platform Features</h2>
   <p>Behind each category, GUBER's technology handles trust, payments, verification, and communication — so every transaction is safer and every interaction is accountable.</p>
   <div class="related-links">
-    <a href="/discover/features/jac/">Jack AI Assistant</a>
+    <a href="/discover/features/jac/">JAC AI Opportunity Assistant</a>
     <a href="/discover/features/earn-hire/">Earn &amp; Hire</a>
     <a href="/discover/features/see-for-me/">See For Me</a>
     <a href="/discover/features/load-board/">Load Board</a>
@@ -333,7 +333,7 @@ function whatIsGuber(): string {
   <h3>Verification &amp; Trust</h3>
   <p>Through features like See For Me and Trust by Action, GUBER creates verifiable records of real-world conditions — useful for buyers, sellers, hirers, and workers alike.</p>
   <h3>AI Assistance</h3>
-  <p>Jack, GUBER's AI assistant, helps users navigate the platform, find opportunities, post work, understand services, and make more informed decisions about real-world transactions.</p>
+  <p>JAC AI, GUBER's AI assistant, helps users navigate the platform, find opportunities, post work, understand services, and make more informed decisions about real-world transactions.</p>
 </div>
 
 <div class="section">
@@ -438,7 +438,7 @@ function workHub(): string {
     <a href="/discover/features/load-board/">Load Board</a>
     <a href="/discover/features/trust-by-action/">Trust by Action</a>
     <a href="/discover/features/payments/">Payments &amp; Escrow</a>
-    <a href="/discover/features/jac/">Jack AI Assistant</a>
+    <a href="/discover/features/jac/">JAC AI Opportunity Assistant</a>
   </div>
 </div>
 
@@ -760,50 +760,50 @@ function aiHub(): string {
   const crumbs: Breadcrumb[] = [{ name: "Home", url: "/" }, { name: "Discover", url: "/discover/" }, { name: "AI Assistant", url: "/discover/ai/" }];
   const body = `
 <div class="page-hero">
-  <h1>Jack — GUBER's AI Opportunity Assistant</h1>
-  <p class="lead">Jack is GUBER's built-in AI assistant, designed to help you find work, hire workers, navigate the platform, understand your options, and make smarter real-world decisions.</p>
+  <h1>JAC AI — GUBER's AI Opportunity Assistant</h1>
+  <p class="lead">JAC AI is GUBER's built-in AI assistant, designed to help you find work, hire workers, navigate the platform, understand your options, and make smarter real-world decisions.</p>
 </div>
 
 <div class="section">
-  <h2>What Jack Can Help With</h2>
+  <h2>What JAC AI Can Help With</h2>
   <div class="card-grid">
-    <div class="card"><h3>Finding Work</h3><p>Ask Jack what opportunities are available near you, which categories fit your skills, or how to apply for specific job types.</p></div>
-    <div class="card"><h3>Hiring Help</h3><p>Describe what you need done and Jack will help you figure out the right category, budget, and posting strategy.</p></div>
-    <div class="card"><h3>Platform Guidance</h3><p>Jack knows GUBER inside and out — features, fees, processes, verification, payments, and more.</p></div>
-    <div class="card"><h3>Marketplace Questions</h3><p>Thinking about buying or selling? Jack can explain how verification works, what to expect, and how to protect yourself.</p></div>
-    <div class="card"><h3>Transport Guidance</h3><p>Need to ship a vehicle or find a load? Jack can walk you through the Load Board and what to expect.</p></div>
-    <div class="card"><h3>Real-World Knowledge</h3><p>Jack can provide context on vehicle specs, equipment pricing, market rates, and other real-world information relevant to GUBER transactions.</p></div>
+    <div class="card"><h3>Finding Work</h3><p>Ask JAC AI what opportunities are available near you, which categories fit your skills, or how to apply for specific job types.</p></div>
+    <div class="card"><h3>Hiring Help</h3><p>Describe what you need done and JAC AI will help you figure out the right category, budget, and posting strategy.</p></div>
+    <div class="card"><h3>Platform Guidance</h3><p>JAC AI knows GUBER inside and out — features, fees, processes, verification, payments, and more.</p></div>
+    <div class="card"><h3>Marketplace Questions</h3><p>Thinking about buying or selling? JAC AI can explain how verification works, what to expect, and how to protect yourself.</p></div>
+    <div class="card"><h3>Transport Guidance</h3><p>Need to ship a vehicle or find a load? JAC AI can walk you through the Load Board and what to expect.</p></div>
+    <div class="card"><h3>Real-World Knowledge</h3><p>JAC AI can provide context on vehicle specs, equipment pricing, market rates, and other real-world information relevant to GUBER transactions.</p></div>
   </div>
 </div>
 
 <div class="section">
   <h2>AI Built for Real-World Transactions</h2>
-  <p>Jack isn't a generic chatbot. Jack is purpose-built for GUBER's ecosystem — trained on the platform's features, policies, and use cases. When you ask Jack about how a GUBER verification works, or how to price a transport job, you get specific, accurate answers rather than generic AI responses.</p>
-  <p>Jack also understands the human context of real-world economic decisions — the importance of getting paid fairly, the risk of buying something you can't inspect, the value of a verified worker record.</p>
+  <p>JAC AI isn't a generic chatbot. JAC AI is purpose-built for GUBER's ecosystem — its knowledge is grounded in the platform's features, policies, and use cases. When you ask JAC AI about how a GUBER verification works, or how to price a transport job, you get specific, accurate answers rather than generic AI responses.</p>
+  <p>JAC AI also understands the human context of real-world economic decisions — the importance of getting paid fairly, the risk of buying something you can't inspect, the value of a verified worker record.</p>
 </div>
 
 <div class="section">
   <h2>Voice and Text</h2>
-  <p>Jack is available in both text and voice modes on GUBER's platform. Whether you're typing from a desktop or using voice while on the go, Jack is accessible throughout the GUBER experience.</p>
+  <p>JAC AI is available in both text and voice modes on GUBER's platform. Whether you're typing from a desktop or using voice while on the go, JAC AI is accessible throughout the GUBER experience.</p>
   <div class="related-links">
-    <a href="/discover/features/jac/">Full Jack Feature Page</a>
-    <a href="/discover/work/">Find Work with Jack's Help</a>
-    <a href="/discover/hire/">Hire with Jack's Help</a>
+    <a href="/discover/features/jac/">Full JAC AI Feature Page</a>
+    <a href="/discover/work/">Find Work with JAC AI&#39;s Help</a>
+    <a href="/discover/hire/">Hire with JAC AI&#39;s Help</a>
     <a href="/discover/verification/">Understanding Verification</a>
   </div>
 </div>
 
 <div class="cta-block">
-  <h2>Talk to Jack on GUBER</h2>
-  <p>Jack is available to all GUBER members — sign up free to access the AI assistant.</p>
-  <a href="/signup" class="cta-btn">Join GUBER &amp; Meet Jack</a>
+  <h2>Talk to JAC AI on GUBER</h2>
+  <p>JAC AI is available to all GUBER members — sign up free to access the AI assistant.</p>
+  <a href="/signup" class="cta-btn">Join GUBER &amp; Meet JAC AI</a>
 </div>`;
 
   return page({
-    title: "Jack — GUBER's AI Assistant for Work, Hiring & Real-World Opportunities",
-    description: "Jack is GUBER's AI assistant — helping users find work, hire locally, navigate the platform, understand verification, and make smarter real-world decisions.",
+    title: "JAC AI — GUBER's AI Assistant for Work, Hiring & Real-World Opportunities",
+    description: "JAC AI is GUBER's AI assistant — helping users find work, hire locally, navigate the platform, understand verification, and make smarter real-world decisions.",
     canonical: "/discover/ai/",
-    jsonLd: [orgSchema(), breadcrumbSchema(crumbs), { "@context": "https://schema.org", "@type": "Service", "name": "Jack — GUBER AI Assistant", "provider": { "@type": "Organization", "name": "GUBER" }, "description": "AI-powered assistant for finding work, hiring, marketplace guidance, and navigating GUBER's super app ecosystem." }],
+    jsonLd: [orgSchema(), breadcrumbSchema(crumbs), { "@context": "https://schema.org", "@type": "Service", "name": "JAC AI — GUBER AI Assistant", "provider": { "@type": "Organization", "name": "GUBER" }, "description": "AI-powered assistant for finding work, hiring, marketplace guidance, and navigating GUBER's super app ecosystem." }],
     breadcrumbs: crumbs,
     body,
   });
@@ -865,39 +865,39 @@ function localHub(): string {
 
 // 11. /discover/features/jac/
 function featureJac(): string {
-  const crumbs: Breadcrumb[] = [{ name: "Home", url: "/" }, { name: "Discover", url: "/discover/" }, { name: "Features", url: "/discover/" }, { name: "Jack AI Assistant", url: "/discover/features/jac/" }];
+  const crumbs: Breadcrumb[] = [{ name: "Home", url: "/" }, { name: "Discover", url: "/discover/" }, { name: "Features", url: "/discover/" }, { name: "JAC AI Opportunity Assistant", url: "/discover/features/jac/" }];
   const body = `
 <div class="page-hero">
-  <h1>Jack — GUBER's AI Opportunity Assistant</h1>
-  <p class="lead">Jack is the AI brain behind GUBER — a purpose-built assistant that helps workers find opportunities, helps hirers describe what they need, and guides every user through the GUBER ecosystem.</p>
+  <h1>JAC AI — GUBER's AI Opportunity Assistant</h1>
+  <p class="lead">JAC AI is the AI brain behind GUBER — a purpose-built assistant that helps workers find opportunities, helps hirers describe what they need, and guides every user through the GUBER ecosystem.</p>
 </div>
 
 <div class="section">
-  <h2>What Is Jack?</h2>
-  <p>Jack is GUBER's integrated AI assistant, available in both text and voice modes. Unlike a generic AI chatbot, Jack is trained specifically on GUBER's platform, features, use cases, policies, and real-world context. Jack knows how GUBER works — and can help you work GUBER to your advantage.</p>
+  <h2>What Is JAC AI?</h2>
+  <p>JAC AI is GUBER's integrated AI assistant, available in both text and voice modes. Unlike a generic AI chatbot, JAC AI is purpose-built for GUBER's ecosystem — its responses are grounded in the platform's features, use cases, policies, and real-world context. JAC AI knows how GUBER works — and can help you work GUBER to your advantage.</p>
 </div>
 
 <div class="section">
-  <h2>Who Jack Helps</h2>
+  <h2>Who JAC AI Helps</h2>
   <h3>Workers &amp; Earners</h3>
-  <p>Jack helps workers understand which GUBER categories fit their skills and time, how to present themselves on the platform, what to expect from different job types, and how to maximize their earnings.</p>
+  <p>JAC AI helps workers understand which GUBER categories fit their skills and time, how to present themselves on the platform, what to expect from different job types, and how to maximize their earnings.</p>
   <h3>Hirers &amp; Businesses</h3>
-  <p>Jack helps hirers clarify what they need, choose the right job category, set competitive budgets, and understand how GUBER's hiring and payment systems work.</p>
+  <p>JAC AI helps hirers clarify what they need, choose the right job category, set competitive budgets, and understand how GUBER's hiring and payment systems work.</p>
   <h3>Buyers &amp; Sellers</h3>
-  <p>Jack can explain how marketplace listings work, how to request a See For Me inspection, how barter works, and how to use GUBER's escrow for a safer transaction.</p>
+  <p>JAC AI can explain how marketplace listings work, how to request a See For Me inspection, how barter works, and how to use GUBER's escrow for a safer transaction.</p>
   <h3>Carriers &amp; Shippers</h3>
-  <p>Jack walks carriers and shippers through the Load Board — what information to provide, how pricing typically works, and what to expect from the transport process.</p>
+  <p>JAC AI walks carriers and shippers through the Load Board — what information to provide, how pricing typically works, and what to expect from the transport process.</p>
 </div>
 
 <div class="section">
-  <h2>Jack's Real-World Knowledge</h2>
-  <p>Jack is designed to be a knowledgeable friend, not just a platform navigator. When you ask Jack about a vehicle you're considering, an equipment price you've seen, or a service rate in your area — Jack draws on real-world context to give you a useful answer, not just a platform redirect.</p>
-  <p>Jack's goal is to help you make a better real-world decision — whether that means applying for the right job, hiring the right worker, or buying or selling something with more confidence.</p>
+  <h2>JAC AI&#39;s Real-World Knowledge</h2>
+  <p>JAC AI is designed to be a knowledgeable friend, not just a platform navigator. When you ask JAC AI about a vehicle you're considering, an equipment price you've seen, or a service rate in your area — JAC AI draws on real-world context to give you a useful answer, not just a platform redirect.</p>
+  <p>JAC AI&#39;s goal is to help you make a better real-world decision — whether that means applying for the right job, hiring the right worker, or buying or selling something with more confidence.</p>
 </div>
 
 <div class="section">
   <h2>Text and Voice</h2>
-  <p>Jack is available in text chat throughout the GUBER app and, for supported platforms, in a voice conversation mode where you can speak naturally and Jack responds in kind.</p>
+  <p>JAC AI is available in text chat throughout the GUBER app and, for supported platforms, in a voice conversation mode where you can speak naturally and JAC AI responds in kind.</p>
 </div>
 
 <div class="section">
@@ -913,16 +913,16 @@ function featureJac(): string {
 </div>
 
 <div class="cta-block">
-  <h2>Meet Jack on GUBER</h2>
-  <p>Jack is available to all GUBER members. Sign up free to start a conversation.</p>
+  <h2>Meet JAC AI on GUBER</h2>
+  <p>JAC AI is available to all GUBER members. Sign up free to start a conversation.</p>
   <a href="/signup" class="cta-btn">Join GUBER Free</a>
 </div>`;
 
   return page({
-    title: "Jack — GUBER's AI Assistant | Text & Voice Opportunity Assistant",
-    description: "Jack is GUBER's purpose-built AI assistant — helping users find work, hire locally, navigate the platform, and make better real-world decisions. Available in text and voice.",
+    title: "JAC AI — GUBER's AI Assistant | Text & Voice Opportunity Assistant",
+    description: "JAC AI is GUBER's purpose-built AI assistant — helping users find work, hire locally, navigate the platform, and make better real-world decisions. Available in text and voice.",
     canonical: "/discover/features/jac/",
-    jsonLd: [orgSchema(), breadcrumbSchema(crumbs), { "@context": "https://schema.org", "@type": "Service", "name": "Jack — GUBER AI Assistant", "provider": { "@type": "Organization", "name": "GUBER" }, "description": "AI-powered assistant integrated into the GUBER super app, available in text and voice modes." }],
+    jsonLd: [orgSchema(), breadcrumbSchema(crumbs), { "@context": "https://schema.org", "@type": "Service", "name": "JAC AI — GUBER AI Assistant", "provider": { "@type": "Organization", "name": "GUBER" }, "description": "AI-powered assistant integrated into the GUBER super app, available in text and voice modes." }],
     breadcrumbs: crumbs,
     body,
   });
@@ -966,7 +966,7 @@ function featureEarnHire(): string {
 
 <div class="section">
   <h2>How They Connect</h2>
-  <p>GUBER's job feed, Live Opportunity Map, and AI assistant Jack all work together to surface the right opportunities to the right people at the right time. Workers see jobs that match their skills and location. Hirers see qualified applicants.</p>
+  <p>GUBER's job feed, Live Opportunity Map, and AI assistant JAC AI all work together to surface the right opportunities to the right people at the right time. Workers see jobs that match their skills and location. Hirers see qualified applicants.</p>
   <div class="related-links">
     <a href="/discover/work/">Work Hub</a>
     <a href="/discover/hire/">Hire Hub</a>
@@ -1247,25 +1247,23 @@ function featureBarter(): string {
   const body = `
 <div class="page-hero">
   <h1>Barter on GUBER — Trade Skills, Services &amp; Items Locally</h1>
-  <p class="lead">Not every transaction needs cash. GUBER's barter feature lets users trade skills, services, time, and items directly — creating economic value without requiring money to change hands.</p>
+  <p class="lead">Not every transaction needs cash. GUBER supports barter-style work arrangements — when posting a job, users can specify a barter payment type, agreeing to exchange skills or services in place of cash payment.</p>
 </div>
 
 <div class="section">
   <h2>Why Barter?</h2>
-  <p>Barter is one of the oldest forms of economic exchange. GUBER brings it into the digital age — with a structured platform for proposing, negotiating, and completing barter arrangements between local users.</p>
-  <p>Common barter scenarios on GUBER include trading lawn care for tech support, swapping household items, trading skilled labor for equipment use, or exchanging services between local businesses.</p>
+  <p>Barter is one of the oldest forms of economic exchange. GUBER supports it natively — when posting a job, users can specify a barter arrangement rather than a cash payment, making it possible to exchange skills and services even when cash isn't the right fit.</p>
+  <p>Common barter scenarios on GUBER include lawn care in exchange for tech help, skilled labor in exchange for use of equipment, or service trades between local individuals and businesses.</p>
 </div>
 
 <div class="section">
   <h2>How Barter Works on GUBER</h2>
-  <h3>List What You're Offering</h3>
-  <p>Post what you're willing to trade — a skill, a service, your time, or a physical item — and what you're looking to receive in exchange.</p>
-  <h3>Find a Match</h3>
-  <p>GUBER's platform surfaces barter listings to users nearby who might benefit from what you're offering. Or browse listings for things you need that others are willing to trade.</p>
+  <h3>Post a Barter Job</h3>
+  <p>When posting a job, GUBER lets you specify a barter arrangement — describing what you're offering in exchange and what you're looking to receive, so applicants know what type of payment to expect.</p>
   <h3>Agree on Terms</h3>
-  <p>Work out the details of the trade directly. GUBER's platform structures the exchange so both sides are clear on what's being traded and when.</p>
-  <h3>Complete the Barter</h3>
-  <p>Both parties confirm completion. The exchange is recorded in both users' GUBER histories, contributing to their Trust by Action profiles.</p>
+  <p>Work out the details of the barter arrangement directly with the other party. Both sides are clear on what's being exchanged before work begins.</p>
+  <h3>Complete the Arrangement</h3>
+  <p>Both parties confirm completion. The exchange is recorded in both users' GUBER histories, contributing to their activity records on the platform.</p>
 </div>
 
 <div class="section">
@@ -1285,10 +1283,10 @@ function featureBarter(): string {
 </div>`;
 
   return page({
-    title: "Barter on GUBER — Trade Skills, Services & Items Locally",
-    description: "GUBER's barter feature lets users trade skills, services, time, and items locally without cash. Find local barter partners and make fair trades through GUBER's platform.",
+    title: "Barter on GUBER — Trade Skills & Services Locally",
+    description: "GUBER supports barter-style work arrangements — post a job with a barter payment type and exchange skills or services with local users instead of cash.",
     canonical: "/discover/features/barter/",
-    jsonLd: [orgSchema(), breadcrumbSchema(crumbs), { "@context": "https://schema.org", "@type": "Service", "name": "GUBER Barter", "provider": { "@type": "Organization", "name": "GUBER" }, "description": "Local barter marketplace — trade skills, services, and items without cash.", "areaServed": { "@type": "Country", "name": "United States" } }],
+    jsonLd: [orgSchema(), breadcrumbSchema(crumbs), { "@context": "https://schema.org", "@type": "Service", "name": "GUBER Barter", "provider": { "@type": "Organization", "name": "GUBER" }, "description": "GUBER supports barter job arrangements — post or accept work where payment is agreed as a skill or service exchange rather than cash.", "areaServed": { "@type": "Country", "name": "United States" } }],
     breadcrumbs: crumbs,
     body,
   });
@@ -1306,9 +1304,9 @@ function featurePayments(): string {
 <div class="section">
   <h2>How GUBER Payments Work</h2>
   <h3>For Hirers</h3>
-  <p>When you accept a worker and confirm the job, GUBER holds your payment in escrow. Your money is committed but not released until you confirm the work is done. This gives workers confidence to start the job and gives you assurance you won't pay for work that isn't completed.</p>
+  <p>When you fund a job on GUBER, your payment is authorized and held. The funds are not captured until the job reaches completion — so you're not paying for work that hasn't been done. You confirm completion to release the payment to the worker.</p>
   <h3>For Workers</h3>
-  <p>Once you complete a job and the hirer confirms completion, GUBER releases payment to your account. You're not chasing payment or waiting on checks — GUBER handles the financial handshake automatically.</p>
+  <p>Once the hirer confirms a job is complete, GUBER processes the payment release to your account. You're not chasing invoices or waiting on manual transfers — the confirmation triggers the payment flow automatically.</p>
 </div>
 
 <div class="section">
