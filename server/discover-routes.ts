@@ -15,6 +15,51 @@ const BRAND = "GUBER";
 const BRAND_TAGLINE = "GUBER is America's First Super App — connecting digital technology with real-world opportunity.";
 const BRAND_MANTRA = "Work. Hire. Buy. Sell. Transport. Verify. Earn. Explore.";
 const BRAND_POSITIONING = "Digital tools. Real-world action.";
+const OG_CTA_URL = "/og-advantage";
+
+// Per-page Day 1 OG CTA config — primary hub pages get a full block, deeper pages get a compact strip
+const OG_PRIMARY: Record<string, { headline: string; sub: string }> = {
+  "/discover/": {
+    headline: "You Found GUBER Early.",
+    sub: "GUBER is America's First Super App — and you're here at the beginning. Day 1 OG is a permanent founding-member status that locks in a 5% fee discount, a gold OG badge on your profile, a trust score boost, and a rate lock guarantee — for life.",
+  },
+  "/discover/what-is-guber/": {
+    headline: "You Found America's First Super App Early.",
+    sub: "GUBER brings work, hiring, buying, selling, transportation, verification, earning, and real-world opportunity into one ecosystem. If you're discovering GUBER now, you're here during the beginning of that journey.",
+  },
+  "/discover/work/": {
+    headline: "Be Here From Day One.",
+    sub: "Day 1 OG members lock in a permanent 5% fee discount — meaning every job you complete earns more, for life. Become a founding member of America's First Super App while it's early.",
+  },
+  "/discover/hire/": {
+    headline: "Early Matters. Become a Day 1 OG.",
+    sub: "Hirers who join GUBER early earn a Day 1 OG badge, a trust score advantage, and a permanent rate lock on the platform's lowest fee tier — locked in regardless of future pricing changes.",
+  },
+  "/discover/marketplace/": {
+    headline: "Don't Just Discover GUBER. Be Part of Day One.",
+    sub: "Day 1 OG is a permanent founding-member designation with real perks — 5% fee discount, OG gold badge, trust score boost, and founder community access. You found GUBER early. Make it count.",
+  },
+  "/discover/services/": {
+    headline: "America's First Super App Is Just Getting Started.",
+    sub: "You found GUBER early. Day 1 OG status locks in a permanent 5% fee discount, a gold OG badge on your profile, priority access to new features, and a rate lock guarantee — for the life of your account.",
+  },
+  "/discover/transport/": {
+    headline: "Be Here From Day One.",
+    sub: "Carriers and shippers who become Day 1 OGs lock in a permanent 5% fee discount, a gold OG badge, and rate lock protection — regardless of how GUBER's pricing evolves.",
+  },
+  "/discover/verification/": {
+    headline: "Early Matters. Become a Day 1 OG.",
+    sub: "GUBER's real-world verification network is expanding. Day 1 OG members lock in a 5% fee discount, a trust score boost, a gold OG badge, and founder community access — permanently.",
+  },
+  "/discover/ai/": {
+    headline: "America's First Super App Is Just Getting Started.",
+    sub: "JAC AI — and GUBER's full ecosystem — is growing fast. Day 1 OGs get priority access to new features as they launch, plus a permanent 5% fee discount, OG badge, and trust score boost.",
+  },
+  "/discover/local/": {
+    headline: "You Found GUBER Early.",
+    sub: "The GUBER community is building city by city. Day 1 OG is a permanent founding-member status — 5% fee discount, gold OG badge, trust score boost, and rate lock guarantee — all locked in for life.",
+  },
+};
 
 // ─── Shared utilities ────────────────────────────────────────────────────────
 
@@ -47,6 +92,23 @@ function orgSchema(): object {
     "description": BRAND_TAGLINE,
     "sameAs": [],
   };
+}
+
+function ogPrimaryBlock(headline: string, sub: string): string {
+  return `
+<div class="og-primary">
+  <div class="og-pill">★ Day 1 OG</div>
+  <h2>${esc(headline)}</h2>
+  <p>${esc(sub)}</p>
+  <a href="${OG_CTA_URL}" class="og-btn">Become a Day 1 OG →</a>
+</div>`;
+}
+
+function ogSecondaryBlock(): string {
+  return `
+<div class="og-secondary">
+  <strong>You found GUBER early.</strong> <a href="${OG_CTA_URL}">Become a Day 1 OG</a> — a permanent founding-member status with a 5% fee discount, a gold OG badge on your profile, and a trust score boost, locked in for life.
+</div>`;
 }
 
 function renderBreadcrumbs(crumbs: Breadcrumb[]): string {
@@ -140,11 +202,25 @@ img{max-width:100%;display:block}
 .site-footer a:hover{color:var(--gold)}
 .site-footer .footer-links{display:flex;justify-content:center;flex-wrap:wrap;gap:16px;margin-bottom:12px}
 
+/* Day 1 OG CTA — primary block */
+.og-primary{background:linear-gradient(135deg,rgba(245,158,11,0.12) 0%,rgba(180,83,9,0.07) 100%);border:1.5px solid rgba(245,158,11,0.42);border-radius:16px;padding:36px 32px;text-align:center;margin-top:48px}
+.og-primary .og-pill{display:inline-block;background:rgba(245,158,11,0.18);border:1px solid rgba(245,158,11,0.48);color:#fbbf24;font-size:0.68rem;font-weight:700;letter-spacing:0.14em;padding:4px 14px;border-radius:20px;margin-bottom:16px;text-transform:uppercase}
+.og-primary h2{font-size:1.45rem;font-weight:800;color:#fbbf24;margin-bottom:10px;line-height:1.2}
+.og-primary p{color:var(--text2);margin-bottom:0 auto 24px;font-size:0.93rem;max-width:520px;margin-left:auto;margin-right:auto;margin-bottom:24px}
+.og-btn{display:inline-block;background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;padding:13px 32px;border-radius:10px;font-weight:700;font-size:0.97rem;text-decoration:none}
+.og-btn:hover{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#000;text-decoration:none}
+/* Day 1 OG CTA — secondary strip */
+.og-secondary{border-left:3px solid rgba(245,158,11,0.55);padding:14px 18px;background:rgba(245,158,11,0.05);border-radius:0 8px 8px 0;margin-top:36px;font-size:0.88rem;color:var(--text2);line-height:1.6}
+.og-secondary strong{color:#fbbf24}
+.og-secondary a{color:#fbbf24;font-weight:600}
+.og-secondary a:hover{color:#fff;text-decoration:none}
+
 @media(max-width:640px){
   .page{padding:24px 16px 60px}
   .site-nav .nav-links{display:none}
   .card-grid{grid-template-columns:1fr}
   .cta-block{padding:24px 20px}
+  .og-primary{padding:28px 20px}
 }
 `;
 
@@ -198,6 +274,12 @@ function page(opts: {
   const ogDesc  = esc(opts.ogDescription ?? opts.description);
   const canonicalUrl = `${BASE_URL}${opts.canonical}`;
 
+  // Day 1 OG CTA — injected automatically based on canonical path
+  const ogConfig = OG_PRIMARY[opts.canonical];
+  const ogInject = ogConfig
+    ? ogPrimaryBlock(ogConfig.headline, ogConfig.sub)
+    : ogSecondaryBlock();
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -224,6 +306,7 @@ ${SITE_NAV}
 ${renderBreadcrumbs(opts.breadcrumbs)}
 <main class="page">
 ${opts.body}
+${ogInject}
 </main>
 ${SITE_FOOTER}
 </body>
