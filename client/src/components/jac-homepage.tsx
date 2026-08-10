@@ -106,6 +106,12 @@ const GREETING: JacMsg = {
   buttons: OPENING_OPTIONS,
 };
 
+const IAB_GREETING: JacMsg = {
+  role: "assistant",
+  content: "Hi! I'm JAC 👋 Voice isn't available in this browser, but I can still help! Tap an option or type your question below.",
+  buttons: OPENING_OPTIONS,
+};
+
 function toSpeechText(text: string): string {
   return text.replace(/GUBER/g, "Goober").replace(/Guber/g, "Goober").replace(/guber/g, "goober");
 }
@@ -281,7 +287,14 @@ export function JacHomepage() {
   // "chat"   = full chat panel + auto-speak fires immediately on enter
   // "intro"  = minimized chip selector (reached via minimize button)
   const [mode, setMode] = useState<"splash" | "intro" | "chat">("chat");
-  const [messages, setMessages] = useState<JacMsg[]>([GREETING]);
+
+  // Detect in-app browsers (Facebook, Instagram, Messenger, TikTok, LinkedIn).
+  // These block WebRTC/getUserMedia so voice is impossible — we fall back to
+  // text-only mode automatically without ever attempting to connect.
+  const isIAB = typeof navigator !== "undefined" &&
+    /FBAN|FBAV|FB_IAB|FBIOS|FB4A|Instagram|Messenger|TikTok|LinkedInApp/i.test(navigator.userAgent);
+
+  const [messages, setMessages] = useState<JacMsg[]>([isIAB ? IAB_GREETING : GREETING]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const [showFloatHint, setShowFloatHint] = useState(() => {
@@ -342,9 +355,18 @@ export function JacHomepage() {
     });
   }, []);
 
-  const handleConvaiError = useCallback((_msg: string) => {
+  const handleConvaiError = useCallback((msg: string) => {
     setLiveMode(false);
     setLiveState("idle");
+    // When the IAB early-exit fires, inject a text bubble so the user knows
+    // they're in text-only mode. Don't do anything for other error codes.
+    if (msg === "IAB_NO_VOICE") {
+      setMessages(prev =>
+        prev.length === 1 && prev[0] === GREETING
+          ? [IAB_GREETING]
+          : prev
+      );
+    }
   }, []);
 
   function stopLiveMode() {
@@ -383,9 +405,10 @@ export function JacHomepage() {
 
   // Pre-warm the ConvAI session token on mount so it's ready before the user
   // taps the mic — eliminates the biggest startup latency (~500-1500 ms).
+  // Skip in in-app browsers: voice is disabled there so the token is never used.
   useEffect(() => {
-    prewarmJacSession("/api/jac/convai/investor-session");
-  }, []);
+    if (!isIAB) prewarmJacSession("/api/jac/convai/investor-session");
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     function onVisibility() {
@@ -775,7 +798,7 @@ export function JacHomepage() {
 
               {/* Primary CTAs */}
               <div className="flex flex-wrap gap-3 justify-center md:justify-start mb-5">
-                <JacConvaiVoice />
+                {!isIAB && <JacConvaiVoice />}
                 <button
                   onClick={() => openChat()}
                   className="flex items-center gap-2 h-11 px-6 rounded-xl text-sm font-display font-black tracking-wide transition-all active:scale-95"
@@ -1033,7 +1056,7 @@ export function JacHomepage() {
                 <button onClick={() => setShowVolumeSlider(v => !v)} className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-lg transition-colors" style={{ color: showVolumeSlider ? "hsl(270 100% 78%)" : "hsl(0 0% 32%)" }} data-testid="button-jac-volume" aria-label="Volume">
                   <Volume2 className="w-3.5 h-3.5" />
                 </button>
-                {micSupported && (
+                {micSupported && !isIAB && (
                   <div className="relative flex flex-col items-center">
                     {/* "Tap to talk" guidance label — shows until first mic use */}
                     {!liveMode && !micHintDone && (
@@ -1096,7 +1119,9 @@ export function JacHomepage() {
                   <Send className="w-3 h-3" />
                 </button>
               </div>
-              <p className="text-center text-[8px] text-white/12 mt-2 font-display tracking-wider">JAC · Voice by ElevenLabs</p>
+              <p className="text-center text-[8px] text-white/12 mt-2 font-display tracking-wider">
+                {isIAB ? "Open guberapp.com in Chrome or Safari for voice" : "JAC · Voice by ElevenLabs"}
+              </p>
             </div>
           </div>
         </div>
@@ -1115,7 +1140,7 @@ export function JacHomepage() {
             )}
             {/* Instant "connecting" indicator — shows as soon as mic is tapped,
                 disappears the moment ConvAI's first transcript replaces the greeting */}
-            {liveMode && liveState !== "speaking" && messages.length === 1 && messages[0].content === "To talk to me, tap the mic button! 🎤" && (
+            {!isIAB && liveMode && liveState !== "speaking" && messages.length === 1 && messages[0].content === "To talk to me, tap the mic button! 🎤" && (
               <div className="flex items-center gap-2 px-4 py-2.5 rounded-[22px] self-start"
                 style={{ background: "hsl(0 0% 97%)", border: "2.5px solid hsl(222 30% 30%)" }}>
                 <span className="flex gap-0.5 items-end h-4">

@@ -373,6 +373,16 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           const platform = detectJacPlatform();
           const isIAB = /iab/.test(platform); // facebook_iab, instagram_iab, etc.
 
+          // In-app browsers (Facebook, Instagram, Messenger, TikTok, LinkedIn)
+          // block WebRTC mic access and ElevenLabs WebSockets. Attempting
+          // getUserMedia hangs indefinitely instead of rejecting, so JAC would
+          // stay in "connecting…" forever. Abort immediately and fall back to
+          // text-only mode with a clear message.
+          if (isIAB) {
+            cbRef.current.onError("IAB_NO_VOICE");
+            return;
+          }
+
           // Run mic permission + session fetch in parallel.
           // Use the pre-warmed session promise if available (avoids a round-trip
           // to our server + ElevenLabs, saving ~500-1500 ms on first open).
