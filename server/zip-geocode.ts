@@ -102,6 +102,51 @@ export function lookupZipCity(zip: string): { zip: string; city: string; state: 
   return { zip, city: result.city, state: result.state };
 }
 
+/**
+ * Map a US two-letter state abbreviation to its primary IANA timezone.
+ * Border counties that straddle two zones are assigned the majority zone.
+ * Returns "America/New_York" for unknown/missing states (safe Eastern default).
+ */
+const STATE_TIMEZONE: Record<string, string> = {
+  // Eastern
+  CT: "America/New_York", DC: "America/New_York", DE: "America/New_York",
+  FL: "America/New_York", GA: "America/New_York", IN: "America/Indiana/Indianapolis",
+  KY: "America/New_York", MA: "America/New_York", MD: "America/New_York",
+  ME: "America/New_York", MI: "America/Detroit",  NC: "America/New_York",
+  NH: "America/New_York", NJ: "America/New_York", NY: "America/New_York",
+  OH: "America/New_York", PA: "America/New_York", RI: "America/New_York",
+  SC: "America/New_York", VA: "America/New_York", VT: "America/New_York",
+  WV: "America/New_York",
+  // Central
+  AL: "America/Chicago",  AR: "America/Chicago",  IA: "America/Chicago",
+  IL: "America/Chicago",  KS: "America/Chicago",  LA: "America/Chicago",
+  MN: "America/Chicago",  MO: "America/Chicago",  MS: "America/Chicago",
+  ND: "America/Chicago",  NE: "America/Chicago",  OK: "America/Chicago",
+  SD: "America/Chicago",  TN: "America/Chicago",  TX: "America/Chicago",
+  WI: "America/Chicago",
+  // Mountain
+  AZ: "America/Phoenix",  CO: "America/Denver",   ID: "America/Denver",
+  MT: "America/Denver",   NM: "America/Denver",   UT: "America/Denver",
+  WY: "America/Denver",
+  // Pacific
+  CA: "America/Los_Angeles", NV: "America/Los_Angeles",
+  OR: "America/Los_Angeles", WA: "America/Los_Angeles",
+  // Alaska / Hawaii / Territories
+  AK: "America/Anchorage", HI: "Pacific/Honolulu",
+  PR: "America/Puerto_Rico", VI: "America/St_Thomas",
+};
+
+/**
+ * Return the IANA timezone for a US ZIP code, falling back to Eastern time.
+ * Lookup is synchronous (no network/DB needed).
+ */
+export function getZipTimezone(zip: string | null | undefined): string {
+  if (!zip) return "America/New_York";
+  const result = zipcodesLib.lookup(zip.trim());
+  if (!result?.state) return "America/New_York";
+  return STATE_TIMEZONE[result.state] ?? "America/New_York";
+}
+
 function normalizeZip(zip: string): string | null {
   const raw = (zip || "").trim();
   const z = raw.replace(/-\d{4}$/, "").padStart(5, "0");

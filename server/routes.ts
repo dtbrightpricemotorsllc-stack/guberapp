@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 import { getStudioToolsCache, setStudioToolsCache } from "./studio-tools-cache";
 import { synthesizeSpeech, httpStatusForError, estimateCostUsd, DEFAULT_JAC_VOICE_ID, DEFAULT_JAC_MODEL_ID } from "./elevenlabs";
 import { lookupZip, lookupZipCity, geocodeZip, geocodeZipFull, lookupZipsByCity, flushZipGeocodeCache } from "./zip-geocode";
+import { validateSameDayAvailability } from "./availability-same-day";
 import { createServer, type Server } from "http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -10347,27 +10348,6 @@ export async function registerRoutes(
       const helper = await storage.getUser(req.session.userId!);
       if (!helper) return res.status(401).json({ message: "User not found" });
 
-      // Proximity check: ASAP / on-demand / urgent jobs require the worker
-      // to be within 20 miles of the job. Scheduled / appointment jobs are
-      // exempt — a specialist may agree to travel. Skipped when either side
-      // has no stored location (can't enforce without GPS data).
-      if (!isDemo && (helper as any).lat && (helper as any).lng && job.lat && job.lng) {
-        const PARTICIPATION_RADIUS_METERS = 20 * 1609.344; // 20 miles
-        const distMeters = haversineDistance(job.lat, job.lng, (helper as any).lat, (helper as any).lng);
-        const jobTimeType = (job as any).jobDetails?.timeType;
-        const isOnDemandOrAsap =
-          job.category === "On-Demand Help" ||
-          job.urgentSwitch ||
-          jobTimeType === "ASAP";
-        if (isOnDemandOrAsap && distMeters > PARTICIPATION_RADIUS_METERS) {
-          const distMiles = Math.round(distMeters / 1609.344);
-          return res.status(400).json({
-            message: "OUTSIDE_AREA",
-            detail: `You are ${distMiles} miles from this job. ASAP and on-demand jobs require you to be within 20 miles. Scheduled / appointment jobs have no distance limit.`,
-          });
-        }
-      }
-
       // Liability protection (Task #318): the helper must have acknowledged
       // the GUBER liability disclaimer at least once before accepting any
       // job. Enforced server-side so the modal cannot be bypassed.
@@ -10472,20 +10452,15 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Availability window must be in the future" });
       }
 
-      if (job.urgentSwitch || job.category === "On-Demand Help") {
-        // Check "same calendar day in the worker's own timezone" rather than
-        // a UTC boundary. A worker in New York at 9 PM setting an availability
-        // window for tonight would otherwise be rejected because that timestamp
-        // is already "tomorrow" in UTC.
-        const fmt = (d: Date) => new Intl.DateTimeFormat("en-CA", {
-          timeZone: workerTz, year: "numeric", month: "2-digit", day: "2-digit",
-        }).format(d);
-        const todayStr    = fmt(new Date());
-        const tomorrowStr = fmt(new Date(Date.now() + 24 * 60 * 60 * 1000));
-        const fromStr     = fmt(fromDate);
-        // Allow today or tomorrow (covers shift workers / late-night accepts).
-        if (fromStr !== todayStr && fromStr !== tomorrowStr) {
-          return res.status(400).json({ message: "Urgent/on-demand jobs require your availability window to start today or tomorrow in your timezone." });
+      if (job.urgentSwitch || job.category === "On-Demand Help" || (job as any).jobDetails?.timeType === "ASAP") {
+        // Enforce same-day availability in the worker's local timezone.
+        // The client pre-fills availableFrom = "now" using browser time and
+        // sends its IANA timezone; we validate here in that same zone so a
+        // NY worker accepting a CA ASAP job at 9 PM ET is never falsely
+        // rejected because the UTC clock rolled past midnight.
+        const sameDayErr = validateSameDayAvailability(fromDate, workerTz);
+        if (sameDayErr) {
+          return res.status(400).json({ message: sameDayErr });
         }
       }
 
@@ -24145,21 +24120,6 @@ OUTPUT STYLE:
         if (!claimCode) return res.status(400).json({ error: "This Cash Drop requires a claim code" });
         if (claimCode.trim().toLowerCase() !== drop.claimCode.trim().toLowerCase()) {
           return res.status(400).json({ error: "Invalid claim code" });
-        }
-      }
-
-      // Proximity check: user must be within 20 miles to participate.
-      // Skipped when either the drop or the user has no stored location.
-      const participant = await storage.getUser(userId);
-      if (participant?.lat && participant?.lng && drop.gpsLat && drop.gpsLng) {
-        const CASH_DROP_RADIUS_METERS = 20 * 1609.344;
-        const distMeters = haversineDistance(drop.gpsLat, drop.gpsLng, participant.lat, participant.lng);
-        if (distMeters > CASH_DROP_RADIUS_METERS) {
-          const distMiles = Math.round(distMeters / 1609.344);
-          return res.status(400).json({
-            error: "OUTSIDE_AREA",
-            detail: `You are ${distMiles} miles away. Cash Drops require you to be within 20 miles to participate.`,
-          });
         }
       }
 

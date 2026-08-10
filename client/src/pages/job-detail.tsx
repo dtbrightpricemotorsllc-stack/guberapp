@@ -506,14 +506,6 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         setGlobalDisclaimerOpen(true);
         return;
       }
-      if (err.message?.includes("OUTSIDE_AREA")) {
-        toast({
-          title: "Too far away 📍",
-          description: err.detail ?? "ASAP and on-demand jobs require you to be within 20 miles. Scheduled / appointment jobs have no distance limit.",
-          variant: "destructive",
-        });
-        return;
-      }
       showError(err);
     },
   });
@@ -1004,11 +996,11 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
     setShowWaiverModal(true);
     setWaiverChecked(false);
     setCategoryWaiverChecked(false);
-    if (job?.urgentSwitch || job?.category === "On-Demand Help") {
+    if (job?.urgentSwitch || job?.category === "On-Demand Help" || (job as any)?.jobDetails?.timeType === "ASAP") {
       const now = new Date();
       setAvailableFrom(toLocalDatetimeString(now));
-      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59);
-      setAvailableTo(toLocalDatetimeString(endOfDay));
+      const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      setAvailableTo(toLocalDatetimeString(twoHoursLater));
     }
   };
 
@@ -3848,9 +3840,13 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   />
                 </div>
               </div>
-              {(job.urgentSwitch || job.category === "On-Demand Help") && (
+              {(job.urgentSwitch || job.category === "On-Demand Help" || (job as any).jobDetails?.timeType === "ASAP") && (
                 <p className="text-[10px] text-amber-400/80 font-medium">
-                  {job.urgentSwitch ? "This is an urgent job" : "This is an on-demand job"} — your availability must start today.
+                  {(job as any).jobDetails?.timeType === "ASAP"
+                    ? "This is an ASAP job — your window starts now by default."
+                    : job.urgentSwitch
+                    ? "This is an urgent job — your window starts now by default."
+                    : "This is an on-demand job — your window starts now by default."}
                 </p>
               )}
             </div>
