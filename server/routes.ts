@@ -10420,15 +10420,23 @@ export async function registerRoutes(
       if (toDate <= fromDate) {
         return res.status(400).json({ message: "availableTo must be after availableFrom" });
       }
-      if (fromDate < new Date()) {
+      // Allow a 5-minute grace window to absorb clock skew and network
+      // latency — workers who pick "now" on ASAP jobs would otherwise be
+      // rejected because the server clock has already ticked past their
+      // selected time by the time the request arrives.
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      if (fromDate < fiveMinutesAgo) {
         return res.status(400).json({ message: "Availability window must be in the future" });
       }
 
       if (job.urgentSwitch || job.category === "On-Demand Help") {
-        const now = new Date();
-        const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-        if (fromDate > endOfToday) {
-          return res.status(400).json({ message: "Urgent/on-demand jobs require same-day availability. Your availability window must start today." });
+        // Use a 24-hour rolling window instead of a UTC calendar-day boundary.
+        // A "same day" check against the server's UTC clock rejects workers in
+        // US evening timezones whose "tonight" timestamp is already "tomorrow"
+        // in UTC.
+        const twentyFourHoursFromNow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        if (fromDate > twentyFourHoursFromNow) {
+          return res.status(400).json({ message: "Urgent/on-demand jobs require same-day availability. Your availability window must start within 24 hours." });
         }
       }
 
