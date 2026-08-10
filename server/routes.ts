@@ -19793,6 +19793,198 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     }
   });
 
+  // ── JAC ConvAI Server Tools ───────────────────────────────────────────────
+  // Called by ElevenLabs when JAC uses a tool mid-conversation.
+  // Auth: x-guber-secret header must match GUBER_SHARED_SECRET env var.
+  // If GUBER_SHARED_SECRET is not set the endpoints are open (dev mode only).
+
+  function jacToolAuth(req: Request, res: Response): boolean {
+    const secret = process.env.GUBER_SHARED_SECRET;
+    if (!secret) return true;
+    const provided = req.headers["x-guber-secret"] as string | undefined;
+    if (!provided || provided !== secret) {
+      console.warn("[jac/tool] unauthorized request — bad or missing x-guber-secret");
+      res.status(401).json({ error: "Unauthorized" });
+      return false;
+    }
+    return true;
+  }
+
+  // In-memory store for pending screen-navigation actions.
+  // key: userId (number), value: { screen, route, expiresAt }
+  const _pendingNavActions = new Map<number, { screen: string; route: string; expiresAt: number }>();
+
+  const JAC_SCREEN_ROUTES: Record<string, string> = {
+    load_board:      "/load-board",
+    marketplace:     "/marketplace",
+    see_for_me:      "/see-for-me",
+    day1_og:         "/og-advantage",
+    b4urepo:         "/b4u-repo",
+    b4uforeclosure:  "/b4u-foreclosure",
+    jobs:            "/my-jobs",
+    missions:        "/missions",
+    profile:         "/profile",
+    cash_drops:      "/cash-drops",
+    credits:         "/credits",
+    wallet:          "/wallet",
+  };
+
+  // POST /api/jac/create-job-draft
+  // Creates a job in draft status on behalf of the authenticated GUBER user.
+  app.post("/api/jac/create-job-draft", async (req: Request, res: Response) => {
+    try {
+      if (!jacToolAuth(req, res)) return;
+
+      const { user_id, title, description, category, price, location, requested_date, requested_time } = req.body || {};
+      if (!user_id) return res.status(400).json({ error: "user_id is required" });
+
+      const userId = parseInt(String(user_id));
+      if (isNaN(userId)) return res.status(400).json({ error: "user_id must be a number" });
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      if (!title && !category) return res.status(400).json({ error: "title and/or category is required" });
+
+      // Append requested date/time to description when provided
+      let fullDescription = description || "";
+      if (requested_date || requested_time) {
+        const timeInfo = [requested_date, requested_time].filter(Boolean).join(" at ");
+        fullDescription = fullDescription
+          ? `${fullDescription}\n\nRequested: ${timeInfo}`
+          : `Requested: ${timeInfo}`;
+      }
+
+      // Geocode location so the job appears on the map
+      let lat: number | null = null;
+      let lng: number | null = null;
+      if (location) {
+        try {
+          const coords = await geocodeAddress(location);
+          if (coords) { lat = coords.lat; lng = coords.lng; }
+        } catch {}
+      }
+
+      const job = await storage.createJob({
+        title: title || `${category} needed`,
+        description: fullDescription || null,
+        category: category || "General Labor",
+        budget: price != null ? parseFloat(String(price)) : 0,
+        location: location || null,
+        locationApprox: location || null,
+        zip: null,
+        lat,
+        lng,
+        postedById: userId,
+        status: "draft",
+        isPaid: false,
+        isPublished: false,
+        urgentSwitch: false,
+        payType: "Flat Rate",
+      } as any);
+
+      console.log(`[jac/create-job-draft] user=${userId} job=${job.id} category=${category}`);
+
+      res.json({
+        success: true,
+        draft_id: String(job.id),
+        job_title: job.title,
+        message: `Draft created — job #${job.id}: "${job.title}". The user can review and publish it at guberapp.com/jobs/${job.id}.`,
+      });
+    } catch (err: any) {
+      console.error("[jac/create-job-draft] error:", err.message);
+      res.status(500).json({ error: "Failed to create job draft", detail: err.message });
+    }
+  });
+
+  // POST /api/jac/publish-job
+  // Returns the checkout / review URL for an existing draft; never auto-charges.
+  app.post("/api/jac/publish-job", async (req: Request, res: Response) => {
+    try {
+      if (!jacToolAuth(req, res)) return;
+
+      const { user_id, draft_id, confirmed } = req.body || {};
+      if (!user_id || !draft_id) return res.status(400).json({ error: "user_id and draft_id are required" });
+      if (confirmed !== true) return res.status(400).json({ error: "confirmed must be explicitly true" });
+
+      const userId = parseInt(String(user_id));
+      const jobId  = parseInt(String(draft_id));
+      if (isNaN(userId) || isNaN(jobId)) return res.status(400).json({ error: "user_id and draft_id must be numbers" });
+
+      const job = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ error: "Job draft not found" });
+      if (job.postedById !== userId) return res.status(403).json({ error: "Job does not belong to this user" });
+      if (job.status !== "draft") return res.status(400).json({ error: `Job is already ${job.status} — nothing to publish` });
+
+      const reviewUrl   = `https://guberapp.com/jobs/${job.id}`;
+      const publishPath = `/jobs/${job.id}?action=publish`;
+
+      console.log(`[jac/publish-job] user=${userId} job=${jobId}`);
+
+      // Store a pending nav so the client navigates the user to the job detail
+      _pendingNavActions.set(userId, {
+        screen: "job_detail",
+        route: `/jobs/${job.id}`,
+        expiresAt: Date.now() + 30_000,
+      });
+
+      res.json({
+        success: true,
+        job_id: job.id,
+        job_title: job.title,
+        review_url: reviewUrl,
+        publish_path: publishPath,
+        message: `Opening job "${job.title}" for review. Tap Publish and complete payment to go live.`,
+      });
+    } catch (err: any) {
+      console.error("[jac/publish-job] error:", err.message);
+      res.status(500).json({ error: "Failed to initiate publish", detail: err.message });
+    }
+  });
+
+  // POST /api/jac/open-screen
+  // Queues a client-side navigation action; the browser polls /api/jac/pending-nav.
+  app.post("/api/jac/open-screen", async (req: Request, res: Response) => {
+    try {
+      if (!jacToolAuth(req, res)) return;
+
+      const { user_id, screen } = req.body || {};
+      if (!user_id || !screen) return res.status(400).json({ error: "user_id and screen are required" });
+
+      const userId = parseInt(String(user_id));
+      if (isNaN(userId)) return res.status(400).json({ error: "user_id must be a number" });
+
+      const route = JAC_SCREEN_ROUTES[screen] ?? `/${String(screen).replace(/_/g, "-")}`;
+      _pendingNavActions.set(userId, { screen, route, expiresAt: Date.now() + 30_000 });
+
+      console.log(`[jac/open-screen] user=${userId} screen=${screen} → ${route}`);
+
+      res.json({
+        success: true,
+        screen,
+        route,
+        message: `Opening ${String(screen).replace(/_/g, " ")} now.`,
+      });
+    } catch (err: any) {
+      console.error("[jac/open-screen] error:", err.message);
+      res.status(500).json({ error: "Failed to queue screen navigation", detail: err.message });
+    }
+  });
+
+  // GET /api/jac/pending-nav
+  // Polled by the client (~2 s interval) when a JAC session is active.
+  // Returns and clears the next pending navigation action for the logged-in user.
+  app.get("/api/jac/pending-nav", requireAuth, (req: Request, res: Response) => {
+    const userId = req.session.userId!;
+    const action = _pendingNavActions.get(userId);
+    if (!action || action.expiresAt < Date.now()) {
+      _pendingNavActions.delete(userId);
+      return res.json({ pending: false });
+    }
+    _pendingNavActions.delete(userId); // consumed — fire once
+    res.json({ pending: true, screen: action.screen, route: action.route });
+  });
+
   // ── JAC Training Admin routes ─────────────────────────────────────────────
   app.get("/api/admin/jac/conversations", requireAdmin, async (req: Request, res: Response) => {
     try {

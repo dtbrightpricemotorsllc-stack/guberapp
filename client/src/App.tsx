@@ -1,6 +1,7 @@
 import { Switch, Route, Redirect, useLocation, useSearch } from "wouter";
 import { useEffect, useState, lazy, Suspense } from "react";
 import { useTimezoneSync } from "@/hooks/use-timezone-sync";
+import { useJacNavPoll } from "@/hooks/use-jac-nav-poll";
 import { queryClient } from "./lib/queryClient";
 import { parsePurchaseUrl } from "@/lib/purchase-toast";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -687,6 +688,15 @@ function TimezoneSync() {
   return null;
 }
 
+/**
+ * Polls /api/jac/pending-nav every 2 s so JAC's open_guber_screen and
+ * publish_job tools can navigate the user to the right screen automatically.
+ */
+function JacNavPoll() {
+  useJacNavPoll();
+  return null;
+}
+
 function App() {
   const [splashDone, setSplashDone] = useState(() => {
     if (isNativeApp) return true;
@@ -704,6 +714,7 @@ function App() {
         <TooltipProvider>
           <AuthProvider>
             <TimezoneSync />
+            <JacNavPoll />
             <TaskTrackingResumer />
             <WakeWordInit />
             <Toaster />
