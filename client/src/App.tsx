@@ -1,5 +1,6 @@
 import { Switch, Route, Redirect, useLocation, useSearch } from "wouter";
 import { useEffect, useState, lazy, Suspense } from "react";
+import { useTimezoneSync } from "@/hooks/use-timezone-sync";
 import { queryClient } from "./lib/queryClient";
 import { parsePurchaseUrl } from "@/lib/purchase-toast";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -680,6 +681,12 @@ function WakeWordInit() {
   return null;
 }
 
+/** Silently keeps the user's IANA timezone in sync with their server profile. */
+function TimezoneSync() {
+  useTimezoneSync();
+  return null;
+}
+
 function App() {
   const [splashDone, setSplashDone] = useState(() => {
     if (isNativeApp) return true;
@@ -696,6 +703,7 @@ function App() {
         <CommerceModeProvider>
         <TooltipProvider>
           <AuthProvider>
+            <TimezoneSync />
             <TaskTrackingResumer />
             <WakeWordInit />
             <Toaster />

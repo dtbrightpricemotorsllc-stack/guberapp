@@ -4490,8 +4490,17 @@ export async function registerRoutes(
       const id = parseInt(req.params.id);
       if (req.session.userId !== id) return res.status(403).json({ message: "Forbidden" });
 
-      const { fullName, userBio, zipcode, profilePhoto, skills, isAvailable } = req.body;
+      const { fullName, userBio, zipcode, timezone, profilePhoto, skills, isAvailable } = req.body;
       const updates: any = {};
+      if (timezone !== undefined) {
+        // Validate it's a real IANA timezone string before storing.
+        try {
+          Intl.DateTimeFormat(undefined, { timeZone: timezone });
+          updates.timezone = timezone;
+        } catch {
+          // Silently ignore invalid timezone strings — don't block the update.
+        }
+      }
       if (fullName !== undefined) {
         const check = filterContactInfo(fullName as string);
         if (check.blocked) return res.status(400).json({ message: "Contact info not allowed in names" });
@@ -10420,6 +10429,19 @@ export async function registerRoutes(
       if (toDate <= fromDate) {
         return res.status(400).json({ message: "availableTo must be after availableFrom" });
       }
+      // Resolve the worker's IANA timezone: request body → stored profile →
+      // fallback. Used for all calendar-day checks so a worker in New York
+      // accepting an ASAP job posted in California is never rejected because
+      // of a UTC boundary mismatch.
+      const requestTz = typeof req.body.timezone === "string" && req.body.timezone
+        ? req.body.timezone : null;
+      const workerTz: string = (() => {
+        const tz = requestTz || (helper as any).timezone || null;
+        if (!tz) return "America/New_York";
+        try { Intl.DateTimeFormat(undefined, { timeZone: tz }); return tz; }
+        catch { return "America/New_York"; }
+      })();
+
       // Allow a 5-minute grace window to absorb clock skew and network
       // latency — workers who pick "now" on ASAP jobs would otherwise be
       // rejected because the server clock has already ticked past their
@@ -10430,13 +10452,19 @@ export async function registerRoutes(
       }
 
       if (job.urgentSwitch || job.category === "On-Demand Help") {
-        // Use a 24-hour rolling window instead of a UTC calendar-day boundary.
-        // A "same day" check against the server's UTC clock rejects workers in
-        // US evening timezones whose "tonight" timestamp is already "tomorrow"
-        // in UTC.
-        const twentyFourHoursFromNow = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        if (fromDate > twentyFourHoursFromNow) {
-          return res.status(400).json({ message: "Urgent/on-demand jobs require same-day availability. Your availability window must start within 24 hours." });
+        // Check "same calendar day in the worker's own timezone" rather than
+        // a UTC boundary. A worker in New York at 9 PM setting an availability
+        // window for tonight would otherwise be rejected because that timestamp
+        // is already "tomorrow" in UTC.
+        const fmt = (d: Date) => new Intl.DateTimeFormat("en-CA", {
+          timeZone: workerTz, year: "numeric", month: "2-digit", day: "2-digit",
+        }).format(d);
+        const todayStr    = fmt(new Date());
+        const tomorrowStr = fmt(new Date(Date.now() + 24 * 60 * 60 * 1000));
+        const fromStr     = fmt(fromDate);
+        // Allow today or tomorrow (covers shift workers / late-night accepts).
+        if (fromStr !== todayStr && fromStr !== tomorrowStr) {
+          return res.status(400).json({ message: "Urgent/on-demand jobs require your availability window to start today or tomorrow in your timezone." });
         }
       }
 

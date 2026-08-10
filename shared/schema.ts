@@ -27,6 +27,11 @@ export const users = pgTable("users", {
   reviewCount: integer("review_count").default(0),
   userBio: text("user_bio"),
   zipcode: text("zipcode"),
+  // IANA timezone string (e.g. "America/New_York") — auto-synced from the
+  // user's browser on login. Used server-side for availability-window
+  // validation and cross-timezone scheduling so we never rely on UTC
+  // calendar-day boundaries.
+  timezone: text("timezone"),
   role: text("role").notNull().default("buyer"),
   tier: text("tier").notNull().default("community"),
   trustScore: integer("trust_score").default(50),

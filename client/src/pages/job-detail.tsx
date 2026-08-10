@@ -480,7 +480,15 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
   const acceptMutation = useMutation({
     mutationFn: ({ waiverAccepted, categoryWaiverAccepted, availableFrom: af, availableTo: at }: { waiverAccepted: boolean; categoryWaiverAccepted: boolean; availableFrom: string; availableTo: string }) =>
-      apiRequest("POST", `/api/jobs/${jobId}/accept`, { waiverAccepted, categoryWaiverAccepted, availableFrom: af, availableTo: at }),
+      apiRequest("POST", `/api/jobs/${jobId}/accept`, {
+        waiverAccepted,
+        categoryWaiverAccepted,
+        availableFrom: af,
+        availableTo: at,
+        // Always send the worker's IANA timezone so the server validates
+        // "same day" checks in the worker's local time, not UTC.
+        timezone: (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return undefined; } })(),
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
       setShowWaiverModal(false);

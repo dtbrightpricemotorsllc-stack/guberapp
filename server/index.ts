@@ -1336,6 +1336,13 @@ app.use((req, res, next) => {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_onboarding_complete BOOLEAN DEFAULT FALSE;
   `).catch(e => console.error("[migration] stripe_onboarding_complete error:", e));
 
+  // Add timezone to users — IANA string auto-synced from the browser.
+  // Used server-side for availability-window validation so we never rely
+  // on UTC calendar-day boundaries when validating cross-timezone accepts.
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone TEXT;
+  `).catch(e => console.error("[migration] users.timezone error:", e));
+
   // Add deleted_at to jobs (soft-delete; used by raw SQL in briefing/context queries)
   await pool.query(`
     ALTER TABLE jobs ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
