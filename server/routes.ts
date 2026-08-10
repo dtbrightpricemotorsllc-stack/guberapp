@@ -10347,6 +10347,27 @@ export async function registerRoutes(
       const helper = await storage.getUser(req.session.userId!);
       if (!helper) return res.status(401).json({ message: "User not found" });
 
+      // Proximity check: ASAP / on-demand / urgent jobs require the worker
+      // to be within 20 miles of the job. Scheduled / appointment jobs are
+      // exempt — a specialist may agree to travel. Skipped when either side
+      // has no stored location (can't enforce without GPS data).
+      if (!isDemo && (helper as any).lat && (helper as any).lng && job.lat && job.lng) {
+        const PARTICIPATION_RADIUS_METERS = 20 * 1609.344; // 20 miles
+        const distMeters = haversineDistance(job.lat, job.lng, (helper as any).lat, (helper as any).lng);
+        const jobTimeType = (job as any).jobDetails?.timeType;
+        const isOnDemandOrAsap =
+          job.category === "On-Demand Help" ||
+          job.urgentSwitch ||
+          jobTimeType === "ASAP";
+        if (isOnDemandOrAsap && distMeters > PARTICIPATION_RADIUS_METERS) {
+          const distMiles = Math.round(distMeters / 1609.344);
+          return res.status(400).json({
+            message: "OUTSIDE_AREA",
+            detail: `You are ${distMiles} miles from this job. ASAP and on-demand jobs require you to be within 20 miles. Scheduled / appointment jobs have no distance limit.`,
+          });
+        }
+      }
+
       // Liability protection (Task #318): the helper must have acknowledged
       // the GUBER liability disclaimer at least once before accepting any
       // job. Enforced server-side so the modal cannot be bypassed.
@@ -24124,6 +24145,21 @@ OUTPUT STYLE:
         if (!claimCode) return res.status(400).json({ error: "This Cash Drop requires a claim code" });
         if (claimCode.trim().toLowerCase() !== drop.claimCode.trim().toLowerCase()) {
           return res.status(400).json({ error: "Invalid claim code" });
+        }
+      }
+
+      // Proximity check: user must be within 20 miles to participate.
+      // Skipped when either the drop or the user has no stored location.
+      const participant = await storage.getUser(userId);
+      if (participant?.lat && participant?.lng && drop.gpsLat && drop.gpsLng) {
+        const CASH_DROP_RADIUS_METERS = 20 * 1609.344;
+        const distMeters = haversineDistance(drop.gpsLat, drop.gpsLng, participant.lat, participant.lng);
+        if (distMeters > CASH_DROP_RADIUS_METERS) {
+          const distMiles = Math.round(distMeters / 1609.344);
+          return res.status(400).json({
+            error: "OUTSIDE_AREA",
+            detail: `You are ${distMiles} miles away. Cash Drops require you to be within 20 miles to participate.`,
+          });
         }
       }
 

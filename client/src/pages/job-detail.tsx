@@ -506,6 +506,14 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         setGlobalDisclaimerOpen(true);
         return;
       }
+      if (err.message?.includes("OUTSIDE_AREA")) {
+        toast({
+          title: "Too far away 📍",
+          description: err.detail ?? "ASAP and on-demand jobs require you to be within 20 miles. Scheduled / appointment jobs have no distance limit.",
+          variant: "destructive",
+        });
+        return;
+      }
       showError(err);
     },
   });

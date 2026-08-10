@@ -289,7 +289,17 @@ export default function CashDropDetail() {
   const acceptMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/cash-drops/${id}/accept`, {}),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/cash-drops", id] }),
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => {
+      if (err.message?.includes("OUTSIDE_AREA") || err.detail?.includes("miles")) {
+        toast({
+          title: "Too far away 📍",
+          description: err.detail ?? "Cash Drops require you to be within 20 miles to participate.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: "Error", description: err.message ?? err.error, variant: "destructive" });
+    },
   });
 
   const arrivedMutation = useMutation({
