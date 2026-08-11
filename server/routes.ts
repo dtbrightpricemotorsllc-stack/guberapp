@@ -19860,6 +19860,376 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     wallet:          "/wallet",
   };
 
+  // ── POST /api/jac/action — Universal JAC action gateway ──────────────────
+  // One ElevenLabs tool ("guber_action") and any future AI provider route here.
+  // Body: { action: string, user_id?: number|string, data?: object }
+  // Auth: x-guber-secret header (same as individual tool endpoints below)
+  //
+  // Response shape (always JSON):
+  //   success path → { success: true, result: any, message: string, nav?: string }
+  //   error path   → { success: false, error: string, message?: string, requires_confirmation?: true }
+  app.post("/api/jac/action", async (req: Request, res: Response) => {
+    try {
+      if (!jacToolAuth(req, res)) return;
+
+      const { action, user_id, data = {} } = req.body || {};
+      if (!action) return res.status(400).json({ success: false, error: "action is required" });
+
+      const rawId = user_id != null ? parseInt(String(user_id)) : null;
+      const userId: number | null = rawId && !isNaN(rawId) ? rawId : null;
+
+      // Fetch + validate user for account-gated actions; sends its own error response.
+      async function requireUser() {
+        if (!userId) {
+          res.status(401).json({
+            success: false,
+            error: "This action requires a signed-in GUBER account. Please sign in first.",
+            requires_auth: true,
+          });
+          return null;
+        }
+        const u = await storage.getUser(userId);
+        if (!u) {
+          res.status(404).json({ success: false, error: "User account not found." });
+          return null;
+        }
+        return u;
+      }
+
+      // Queue a screen navigation consumed by the client's 2-second poll.
+      function queueNav(screen: string, route: string) {
+        if (userId) _pendingNavActions.set(userId, { screen, route, expiresAt: Date.now() + 30_000 });
+      }
+
+      console.log(`[jac/action] action=${action} userId=${userId ?? "anon"}`);
+
+      switch (action) {
+
+        // ── JOBS ─────────────────────────────────────────────────────────────
+
+        case "search_jobs": {
+          const { query, category, zip } = data as any;
+          const all: any[] = (await (storage as any).getJobs?.()) ?? [];
+          const hits = all
+            .filter((j: any) =>
+              (j.status === "posted_public" || j.status === "paid") &&
+              (!category || j.category?.toLowerCase().includes(String(category).toLowerCase())) &&
+              (!zip || j.zip === String(zip)) &&
+              (!query || `${j.title} ${j.description}`.toLowerCase().includes(String(query).toLowerCase()))
+            )
+            .slice(0, 10)
+            .map((j: any) => ({ id: j.id, title: j.title, category: j.category, budget: j.budget, zip: j.zip }));
+          return res.json({ success: true, result: hits, message: `Found ${hits.length} job${hits.length === 1 ? "" : "s"}.` });
+        }
+
+        case "create_job_draft": {
+          const user = await requireUser(); if (!user) return;
+          const { title, description, category, price, location, requested_date, requested_time } = data as any;
+          if (!title && !category) return res.json({ success: false, error: "Please provide a title or category for the job." });
+          let fullDesc = description || "";
+          if (requested_date || requested_time) {
+            const timeInfo = [requested_date, requested_time].filter(Boolean).join(" at ");
+            fullDesc = fullDesc ? `${fullDesc}\n\nRequested: ${timeInfo}` : `Requested: ${timeInfo}`;
+          }
+          let lat: number | null = null, lng: number | null = null;
+          if (location) {
+            try { const c = await geocodeAddress(location); if (c) { lat = c.lat; lng = c.lng; } } catch {}
+          }
+          const job = await storage.createJob({
+            title: title || `${category} needed`, description: fullDesc || null,
+            category: category || "General Labor",
+            budget: price != null ? parseFloat(String(price)) : 0,
+            location: location || null, locationApprox: location || null,
+            zip: null, lat, lng, postedById: userId!, status: "draft",
+            isPaid: false, isPublished: false, urgentSwitch: false, payType: "Flat Rate",
+          } as any);
+          _pendingDraftCards.set(userId!, { draftId: String(job.id), title: job.title, expiresAt: Date.now() + 120_000 });
+          return res.json({
+            success: true,
+            result: { draft_id: String(job.id), job_title: job.title },
+            message: `Draft created: "${job.title}" (job #${job.id}). Want me to open it for review so you can publish?`,
+          });
+        }
+
+        case "edit_job_draft": {
+          const user = await requireUser(); if (!user) return;
+          const { draft_id, title, description, category, price, location } = data as any;
+          if (!draft_id) return res.json({ success: false, error: "draft_id is required." });
+          const job = await storage.getJob(parseInt(String(draft_id)));
+          if (!job) return res.json({ success: false, error: "Job draft not found." });
+          if (job.postedById !== userId) return res.status(403).json({ success: false, error: "That draft doesn't belong to your account." });
+          if (job.status !== "draft") return res.json({ success: false, error: `Job is already ${job.status} and cannot be edited as a draft.` });
+          const updates: any = {};
+          if (title) updates.title = title;
+          if (description) updates.description = description;
+          if (category) updates.category = category;
+          if (price != null) updates.budget = parseFloat(String(price));
+          if (location) {
+            updates.location = location; updates.locationApprox = location;
+            try { const c = await geocodeAddress(location); if (c) { updates.lat = c.lat; updates.lng = c.lng; } } catch {}
+          }
+          const updated = await storage.updateJob(parseInt(String(draft_id)), updates);
+          return res.json({ success: true, result: { draft_id, job_title: updated?.title ?? title }, message: `Draft updated.` });
+        }
+
+        case "publish_job": {
+          const user = await requireUser(); if (!user) return;
+          const { draft_id, confirmed } = data as any;
+          if (!draft_id) return res.json({ success: false, error: "draft_id is required." });
+          const job = await storage.getJob(parseInt(String(draft_id)));
+          if (!job) return res.json({ success: false, error: "Job draft not found." });
+          if (job.postedById !== userId) return res.status(403).json({ success: false, error: "That job doesn't belong to your account." });
+          if (job.status !== "draft") return res.json({ success: false, error: `Job is already ${job.status}.` });
+          if (confirmed !== true) {
+            return res.json({
+              success: false,
+              requires_confirmation: true,
+              draft: { id: job.id, title: job.title, budget: job.budget, category: job.category },
+              message: `Ready to publish "${job.title}" for $${job.budget}. Shall I open it for review and payment?`,
+            });
+          }
+          queueNav("job_detail", `/jobs/${job.id}`);
+          return res.json({
+            success: true,
+            result: { job_id: job.id, review_url: `https://guberapp.com/jobs/${job.id}` },
+            message: `Opening "${job.title}" for review. Tap Publish and complete payment to go live.`,
+          });
+        }
+
+        case "view_my_jobs": {
+          const user = await requireUser(); if (!user) return;
+          const jobs = await storage.getJobsByUser(userId!);
+          const summary = jobs.slice(0, 15).map((j: any) => ({ id: j.id, title: j.title, status: j.status, budget: j.budget }));
+          queueNav("my_jobs", "/my-jobs");
+          return res.json({ success: true, result: summary, message: `You have ${jobs.length} job${jobs.length === 1 ? "" : "s"}.`, nav: "/my-jobs" });
+        }
+
+        // ── MARKETPLACE ──────────────────────────────────────────────────────
+
+        case "search_marketplace": {
+          const { query, category, priceMin, priceMax } = data as any;
+          const items = await storage.getMarketplaceItems({
+            search: query, category, status: "available",
+            priceMin: priceMin != null ? parseFloat(String(priceMin)) : undefined,
+            priceMax: priceMax != null ? parseFloat(String(priceMax)) : undefined,
+          });
+          const summary = items.slice(0, 10).map((i: any) => ({ id: i.id, title: i.title, price: i.price, category: i.category, condition: i.condition }));
+          return res.json({ success: true, result: summary, message: `Found ${summary.length} listing${summary.length === 1 ? "" : "s"}.` });
+        }
+
+        case "view_my_listings": {
+          const user = await requireUser(); if (!user) return;
+          const items = await storage.getMarketplaceItemsBySeller(userId!);
+          const summary = items.slice(0, 15).map((i: any) => ({ id: i.id, title: i.title, price: i.price, status: i.status }));
+          queueNav("marketplace", "/marketplace");
+          return res.json({ success: true, result: summary, message: `You have ${items.length} marketplace listing${items.length === 1 ? "" : "s"}.`, nav: "/marketplace" });
+        }
+
+        case "create_marketplace_draft":
+        case "edit_marketplace_listing":
+        case "publish_marketplace_listing":
+        case "make_offer":
+          return res.json({ success: false, error: "not_yet_available", message: "Marketplace management via JAC is coming soon. Open Marketplace in the app.", nav: "/marketplace" });
+
+        // ── LOAD BOARD ───────────────────────────────────────────────────────
+
+        case "search_loads": {
+          const { transportType } = data as any;
+          const loads = await storage.getLoadBoardListings({ status: "posted", transportType: transportType || undefined });
+          const summary = loads.slice(0, 10).map((l: any) => ({
+            id: l.id, transportType: l.transportType,
+            pickup: `${l.pickupCity}, ${l.pickupState}`, delivery: `${l.deliveryCity}, ${l.deliveryState}`,
+            postedPrice: l.postedPrice, urgent: l.urgent,
+          }));
+          return res.json({ success: true, result: summary, message: `Found ${summary.length} load${summary.length === 1 ? "" : "s"}.` });
+        }
+
+        case "view_my_loads": {
+          const user = await requireUser(); if (!user) return;
+          const loads = await storage.getLoadBoardListingsByPoster(userId!);
+          const summary = loads.slice(0, 15).map((l: any) => ({
+            id: l.id, transportType: l.transportType,
+            pickup: `${l.pickupCity}, ${l.pickupState}`, delivery: `${l.deliveryCity}, ${l.deliveryState}`,
+            status: l.status, postedPrice: l.postedPrice,
+          }));
+          queueNav("load_board", "/load-board");
+          return res.json({ success: true, result: summary, message: `You have ${loads.length} load${loads.length === 1 ? "" : "s"}.`, nav: "/load-board" });
+        }
+
+        case "create_load_draft":
+        case "edit_load_draft":
+        case "publish_load":
+          return res.json({ success: false, error: "not_yet_available", message: "Load board posting via JAC is coming soon. Open the Load Board to post now.", nav: "/load-board" });
+
+        // ── SEE FOR ME ───────────────────────────────────────────────────────
+
+        case "create_see_for_me_draft":
+        case "publish_see_for_me":
+        case "view_see_for_me_requests":
+          queueNav("see_for_me", "/see-for-me");
+          return res.json({ success: false, error: "not_yet_available", message: "See For Me JAC integration is coming soon. Opening the See For Me board now.", nav: "/see-for-me" });
+
+        // ── WANTED BOARD ─────────────────────────────────────────────────────
+
+        case "search_wanted":
+        case "create_wanted_draft":
+        case "publish_wanted":
+          return res.json({ success: false, error: "not_yet_available", message: "The Wanted Board is coming soon to GUBER." });
+
+        // ── MISSIONS ─────────────────────────────────────────────────────────
+
+        case "get_available_missions": {
+          const tplRows = await pool.query(`
+            SELECT id, emoji, title, description, reward_credits, reward_score, category
+            FROM growth_task_templates WHERE is_active = true AND paused = false
+            ORDER BY sort_order ASC, id ASC LIMIT 20
+          `);
+          let completedSet = new Set<number>();
+          if (userId) {
+            const done = await pool.query(
+              `SELECT DISTINCT template_id FROM mission_instances WHERE user_id = $1 AND status = 'approved'`,
+              [userId]
+            );
+            for (const r of done.rows) completedSet.add(r.template_id);
+          }
+          const missions = tplRows.rows
+            .filter((t: any) => t.category === "referral" || !completedSet.has(t.id))
+            .map((t: any) => ({ id: t.id, emoji: t.emoji, title: t.title, reward_credits: t.reward_credits }));
+          queueNav("missions", "/missions");
+          return res.json({ success: true, result: missions, message: `${missions.length} mission${missions.length === 1 ? "" : "s"} available.`, nav: "/missions" });
+        }
+
+        case "get_my_missions": {
+          const user = await requireUser(); if (!user) return;
+          const rows = await pool.query(
+            `SELECT mi.id, mi.status, gt.title, gt.emoji, gt.reward_credits
+             FROM mission_instances mi
+             JOIN growth_task_templates gt ON gt.id = mi.template_id
+             WHERE mi.user_id = $1 AND mi.status NOT IN ('approved','rejected','expired')
+             ORDER BY mi.created_at DESC LIMIT 20`,
+            [userId]
+          );
+          queueNav("missions", "/missions");
+          return res.json({ success: true, result: rows.rows, message: `You have ${rows.rows.length} active mission${rows.rows.length === 1 ? "" : "s"}.`, nav: "/missions" });
+        }
+
+        // ── DAY-1 OG ─────────────────────────────────────────────────────────
+
+        case "get_day1_status": {
+          const user = await requireUser(); if (!user) return;
+          const isOG = !!(user as any).day1OG;
+          return res.json({
+            success: true,
+            result: { isDay1OG: isOG, aiOrNotCredits: (user as any).aiOrNotCredits ?? 0 },
+            message: isOG ? "You're a Day-1 OG — your perks are active." : "You're not yet a Day-1 OG. Visit OG Advantage to join.",
+          });
+        }
+
+        case "show_day1_og": {
+          queueNav("day1_og", "/og-advantage");
+          return res.json({ success: true, result: {}, message: "Opening OG Advantage now.", nav: "/og-advantage" });
+        }
+
+        case "start_day1_og_purchase": {
+          queueNav("day1_og", "/og-advantage");
+          return res.json({ success: false, error: "not_yet_available", message: "Opening OG Advantage — complete the purchase there.", nav: "/og-advantage" });
+        }
+
+        // ── B4UREPO / B4UFORECLOSURE ─────────────────────────────────────────
+
+        case "open_b4urepo":
+        case "start_b4urepo_flow":
+          queueNav("b4urepo", "/b4u-repo");
+          return res.json({ success: true, result: {}, message: "Opening B4UREPO now.", nav: "/b4u-repo" });
+
+        case "open_b4uforeclosure":
+        case "start_b4uforeclosure_flow":
+          queueNav("b4uforeclosure", "/b4u-foreclosure");
+          return res.json({ success: true, result: {}, message: "Opening B4UFORECLOSURE now.", nav: "/b4u-foreclosure" });
+
+        // ── USER / WORKER ─────────────────────────────────────────────────────
+
+        case "get_user_profile": {
+          const user = await requireUser(); if (!user) return;
+          return res.json({
+            success: true,
+            result: {
+              id: user.id,
+              name: `${(user as any).firstName || ""} ${(user as any).lastName || ""}`.trim() || (user as any).username,
+              role: (user as any).role,
+              accountType: (user as any).accountType,
+              serviceRadius: (user as any).serviceRadius ?? 25,
+              zip: (user as any).zipcode,
+              isDay1OG: !!(user as any).day1OG,
+            },
+            message: "Here's your profile.",
+          });
+        }
+
+        case "get_user_capabilities": {
+          const user = await requireUser(); if (!user) return;
+          const quals = await storage.getWorkerQualifications(userId!);
+          return res.json({
+            success: true,
+            result: {
+              capabilitiesDescription: (user as any).capabilitiesDescription ?? "",
+              qualifications: quals.map((q: any) => ({ type: q.type, status: q.status })),
+            },
+            message: "Here are your capabilities and qualifications.",
+          });
+        }
+
+        case "save_user_capabilities": {
+          const user = await requireUser(); if (!user) return;
+          const { capabilities_description } = data as any;
+          if (!capabilities_description) return res.json({ success: false, error: "capabilities_description is required." });
+          await storage.updateUser(userId!, { capabilitiesDescription: capabilities_description } as any);
+          return res.json({ success: true, result: {}, message: "Capabilities saved." });
+        }
+
+        case "get_credit_balance": {
+          const user = await requireUser(); if (!user) return;
+          const balance = await getCreditBalance(userId!);
+          return res.json({
+            success: true,
+            result: { credits: balance },
+            message: `Your credit balance is ${balance.toLocaleString()} credits.`,
+          });
+        }
+
+        case "update_travel_radius": {
+          const user = await requireUser(); if (!user) return;
+          const { radius } = data as any;
+          const clamped = Math.min(Math.max(parseInt(String(radius ?? "25"), 10) || 25, 1), 100);
+          await storage.updateUser(userId!, { serviceRadius: clamped } as any);
+          return res.json({ success: true, result: { serviceRadius: clamped }, message: `Travel radius updated to ${clamped} miles.` });
+        }
+
+        // ── NAVIGATION ────────────────────────────────────────────────────────
+
+        case "open_guber_screen": {
+          const { screen } = data as any;
+          if (!screen) return res.json({ success: false, error: "screen is required." });
+          const route = JAC_SCREEN_ROUTES[screen] ?? `/${String(screen).replace(/_/g, "-")}`;
+          queueNav(screen, route);
+          return res.json({ success: true, result: { screen, route }, message: `Opening ${String(screen).replace(/_/g, " ")} now.`, nav: route });
+        }
+
+        // ── UNKNOWN ───────────────────────────────────────────────────────────
+
+        default:
+          return res.status(400).json({
+            success: false,
+            error: "unknown_action",
+            message: `Action "${action}" is not recognised. Check the guber_action tool docs for supported actions.`,
+          });
+      }
+    } catch (err: any) {
+      console.error("[jac/action] error:", err?.message);
+      return res.status(500).json({ success: false, error: "Action failed", detail: err.message });
+    }
+  });
+
   // POST /api/jac/create-job-draft
   // Creates a job in draft status on behalf of the authenticated GUBER user.
   app.post("/api/jac/create-job-draft", async (req: Request, res: Response) => {
