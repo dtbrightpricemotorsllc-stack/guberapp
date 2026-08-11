@@ -19369,6 +19369,16 @@ CRITICAL — respond with JSON ONLY, no other text:
         status: "draft",
       } as any);
 
+      // Queue a draft card notification so the client chat can show a "Review Draft" card
+      const draftUserId = Number(user_id);
+      if (!isNaN(draftUserId)) {
+        _pendingDraftCards.set(draftUserId, {
+          draftId: String(draft.id),
+          title: draft.title || draft.category || "Job Draft",
+          expiresAt: Date.now() + 120_000,
+        });
+      }
+
       return res.json({
         drafted: true,
         jobId: draft.id,
@@ -19830,6 +19840,11 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
   // key: userId (number), value: { screen, route, expiresAt }
   const _pendingNavActions = new Map<number, { screen: string; route: string; expiresAt: number }>();
 
+  // In-memory store for pending draft-card notifications.
+  // Populated by create-job-draft tool; consumed once by GET /api/jac/pending-draft-card.
+  // key: userId (number), value: { draftId, title, expiresAt }
+  const _pendingDraftCards = new Map<number, { draftId: string; title: string; expiresAt: number }>();
+
   const JAC_SCREEN_ROUTES: Record<string, string> = {
     load_board:      "/load-board",
     marketplace:     "/marketplace",
@@ -19900,6 +19915,14 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       } as any);
 
       console.log(`[jac/create-job-draft] user=${userId} job=${job.id} category=${category}`);
+
+      // Queue a draft-card notification so the client chat shows a "Review Draft" card.
+      // The GET /api/jac/pending-draft-card endpoint consumes this once, fire-and-forget.
+      _pendingDraftCards.set(userId, {
+        draftId: String(job.id),
+        title: job.title || category || "Job Draft",
+        expiresAt: Date.now() + 120_000,
+      });
 
       res.json({
         success: true,
@@ -19999,6 +20022,20 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     }
     _pendingNavActions.delete(userId); // consumed — fire once
     res.json({ pending: true, screen: action.screen, route: action.route });
+  });
+
+  // GET /api/jac/pending-draft-card
+  // Polled by the client when a JAC voice session is active.
+  // Returns and clears any pending "Review Draft" card for the logged-in user.
+  app.get("/api/jac/pending-draft-card", requireAuth, (req: Request, res: Response) => {
+    const userId = req.session.userId!;
+    const card = _pendingDraftCards.get(userId);
+    if (!card || card.expiresAt < Date.now()) {
+      _pendingDraftCards.delete(userId);
+      return res.json({ card: null });
+    }
+    _pendingDraftCards.delete(userId); // consumed — fire once
+    res.json({ card: { draftId: card.draftId, title: card.title } });
   });
 
   // ── JAC Training Admin routes ─────────────────────────────────────────────

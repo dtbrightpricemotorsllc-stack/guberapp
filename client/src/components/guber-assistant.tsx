@@ -2,12 +2,13 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
+import { useJacDraftCardPoll } from "@/hooks/use-jac-draft-card-poll";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Send, Loader2, Mic, Volume2, VolumeX, ChevronRight, X, Navigation, ClipboardList,
-  Target, TrendingUp, Zap,
+  Target, TrendingUp, Zap, FileText,
 } from "lucide-react";
 import { useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
@@ -73,6 +74,7 @@ interface Message {
   ddGoalAmount?: number | null;
   ddDeadline?: string | null;
   ddEarnedSoFar?: number;
+  draftCard?: { draftId: string; title: string };
 }
 
 const DD_GREETING =
@@ -864,6 +866,16 @@ export function GUBERAssistant() {
   const showInitialChips = messages.length === 1 && !sendMutation.isPending;
   const isOnlyGreeting = messages.length === 1;
 
+  // ── Draft card polling — when ElevenLabs creates a job draft via tool call,
+  // inject a tappable "Review Draft" card into the chat so the user can open it.
+  useJacDraftCardPoll(convaiActive, useCallback((card) => {
+    setMessages(prev => [...prev, {
+      role: "assistant" as const,
+      content: `Your "${card.title}" draft is ready to review.`,
+      draftCard: card,
+    }]);
+  }, []));
+
   const handleConvaiPhaseChange = useCallback((phase: ConvaiPhase) => {
     setConvaiPhase(phase);
     if (phase === "error") setConvaiActive(false);
@@ -1167,6 +1179,27 @@ export function GUBERAssistant() {
                 >
                   {msg.content}
                 </div>
+
+                {/* Draft card — shown when JAC creates a job draft by voice */}
+                {msg.role === "assistant" && msg.draftCard && (
+                  <button
+                    onClick={() => { patchStore({ open: false }); navigate(`/jobs/${msg.draftCard!.draftId}`); }}
+                    className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-all active:scale-[0.97] w-full"
+                    style={{
+                      background: "linear-gradient(135deg, hsl(152 100% 44% / 0.12), hsl(270 100% 65% / 0.08))",
+                      border: "1px solid hsl(152 100% 44% / 0.35)",
+                    }}
+                    data-testid={`jac-draft-card-${msg.draftCard.draftId}`}
+                  >
+                    <FileText className="w-4 h-4 flex-shrink-0" style={{ color: "hsl(152 100% 55%)" }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-display font-black tracking-wider uppercase mb-0.5" style={{ color: "hsl(152 100% 55%)" }}>Job Draft Ready</p>
+                      <p className="text-xs font-semibold text-white/90 truncate">{msg.draftCard.title}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Tap to review &amp; publish</p>
+                    </div>
+                    <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />
+                  </button>
+                )}
 
                 {/* Route button */}
                 {msg.role === "assistant" && msg.route && (

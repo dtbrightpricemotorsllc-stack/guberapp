@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Link } from "wouter";
-import { Send, Mic, Volume2, ArrowRight, MessageSquare, Minus, Loader2 } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { Send, Mic, Volume2, ArrowRight, MessageSquare, Minus, Loader2, FileText } from "lucide-react";
 import { JacConvaiVoice } from "@/components/jac/jac-convai-voice";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
 import { ConversationProvider } from "@elevenlabs/react";
 import { JacConvaiSession, prewarmJacSession, type JacConvaiSessionHandle, type ConvaiPhase } from "@/components/jac/jac-convai-session";
+import { useJacDraftCardPoll } from "@/hooks/use-jac-draft-card-poll";
 type ConversationState = "idle" | "listening" | "recording" | "processing" | "speaking";
 import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
@@ -24,6 +25,7 @@ interface JacMsg {
   buttons?: Array<{ label: string; message: string }>;
   signupRoute?: string;
   pendingAction?: JacPendingAction;
+  draftCard?: { draftId: string; title: string };
 }
 
 interface JacJobPrefill {
@@ -355,6 +357,17 @@ export function JacHomepage() {
     });
   }, []);
 
+  // ── Draft card polling — when ElevenLabs creates a job draft via tool call,
+  // inject a "Review Draft" card into the chat so the user can tap to open it.
+  const [, navigate] = useLocation();
+  useJacDraftCardPoll(liveMode, useCallback((card) => {
+    setMessages(prev => [...prev, {
+      role: "assistant" as const,
+      content: `Your "${card.title}" draft is ready to review.`,
+      draftCard: card,
+    }]);
+  }, []));
+
   const handleConvaiError = useCallback((msg: string) => {
     setLiveMode(false);
     setLiveState("idle");
@@ -608,6 +621,9 @@ export function JacHomepage() {
         ].filter((b: any) => b?.label && b?.message).slice(0, 11),
         pendingAction: (data.pendingAction && typeof data.pendingAction === "object" && data.pendingAction.id && data.pendingAction.summary)
           ? { id: data.pendingAction.id, type: data.pendingAction.type, summary: data.pendingAction.summary, status: "pending" }
+          : undefined,
+        draftCard: (data.draftCard && data.draftCard.draftId)
+          ? { draftId: String(data.draftCard.draftId), title: String(data.draftCard.title || "Job Draft") }
           : undefined,
       };
 
@@ -964,6 +980,24 @@ export function JacHomepage() {
 
             {/* ── PHONE CONTENT — contextual GUBER info ── */}
             <div className="flex-1 overflow-y-auto min-h-0 px-3 py-2 space-y-2.5">
+
+              {/* Priority 0: draft card — shown when JAC creates a job draft by voice */}
+              {latestJacMsg?.draftCard && (
+                <button
+                  onClick={() => navigate(`/jobs/${latestJacMsg.draftCard!.draftId}`)}
+                  className="w-full rounded-2xl px-3 py-2.5 text-left transition-all active:scale-[0.98]"
+                  style={{ background: "linear-gradient(135deg, hsl(152 100% 44% / 0.12), hsl(270 100% 65% / 0.08))", border: "1px solid hsl(152 100% 44% / 0.35)" }}
+                  data-testid={`jac-draft-card-${latestJacMsg.draftCard.draftId}`}
+                >
+                  <p className="text-[9px] font-display font-black tracking-widest mb-1" style={{ color: "hsl(152 100% 55%)" }}>JOB DRAFT READY</p>
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "hsl(152 100% 55%)" }} />
+                    <p className="text-[11px] font-semibold text-white/90 flex-1 truncate">{latestJacMsg.draftCard.title}</p>
+                    <ArrowRight className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "hsl(152 100% 55%)" }} />
+                  </div>
+                  <p className="text-[10px] text-white/40 mt-1">Tap to review &amp; publish →</p>
+                </button>
+              )}
 
               {/* Priority 1: pending action */}
               {latestJacMsg?.pendingAction && (
