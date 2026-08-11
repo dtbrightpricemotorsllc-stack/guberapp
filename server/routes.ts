@@ -19227,6 +19227,12 @@ CRITICAL — respond with JSON ONLY, no other text:
         console.warn(`⚠️  ${label}`);
       }
 
+      // Persist to DB for admin voice dashboard (fire-and-forget, never blocks response)
+      pool.query(
+        `INSERT INTO jac_voice_convai_events (event, platform, reason) VALUES ($1, $2, $3)`,
+        [event, platform, reason ?? null]
+      ).catch(() => {}); // silently ignore — telemetry must never block or throw
+
       return res.status(204).end();
     });
   }
@@ -22586,6 +22592,71 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       console.error("[JAC STT] error:", e.message);
       logJacVoiceUsage({ userId: (req.session as any)?.userId ?? null, type: "stt", provider: "openai_transcribe", units: Buffer.byteLength((req.body?.audioBase64 as string) || "", "base64"), success: false, errorMessage: e.message?.slice(0, 200) });
       return res.status(500).json({ message: "STT error" });
+    }
+  });
+
+  // ── JAC ConvAI voice health — admin dashboard stats ─────────────────────────
+  // Returns success rate + per-platform breakdown for the last 24 h and 7 days.
+  app.get("/api/admin/jac/voice-stats", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const [day, week, byPlatform, recent] = await Promise.all([
+        // 24-hour totals
+        pool.query(`
+          SELECT
+            COUNT(*) FILTER (WHERE event = 'connect')::int    AS connects,
+            COUNT(*) FILTER (WHERE event = 'timeout')::int    AS timeouts,
+            COUNT(*) FILTER (WHERE event = 'error')::int      AS errors,
+            COUNT(*) FILTER (WHERE event = 'disconnect')::int AS disconnects,
+            COUNT(*)::int                                      AS total
+          FROM jac_voice_convai_events
+          WHERE created_at > NOW() - INTERVAL '24 hours'
+        `),
+        // 7-day totals
+        pool.query(`
+          SELECT
+            COUNT(*) FILTER (WHERE event = 'connect')::int    AS connects,
+            COUNT(*) FILTER (WHERE event = 'timeout')::int    AS timeouts,
+            COUNT(*) FILTER (WHERE event = 'error')::int      AS errors,
+            COUNT(*) FILTER (WHERE event = 'disconnect')::int AS disconnects,
+            COUNT(*)::int                                      AS total
+          FROM jac_voice_convai_events
+          WHERE created_at > NOW() - INTERVAL '7 days'
+        `),
+        // Per-platform breakdown (7 days)
+        pool.query(`
+          SELECT
+            platform,
+            COUNT(*) FILTER (WHERE event = 'connect')::int AS connects,
+            COUNT(*) FILTER (WHERE event IN ('timeout','error'))::int AS failures,
+            COUNT(*)::int AS total
+          FROM jac_voice_convai_events
+          WHERE created_at > NOW() - INTERVAL '7 days'
+          GROUP BY platform
+          ORDER BY total DESC
+        `),
+        // 20 most recent events
+        pool.query(`
+          SELECT id, event, platform, reason, created_at
+          FROM jac_voice_convai_events
+          ORDER BY created_at DESC
+          LIMIT 20
+        `),
+      ]);
+
+      const d = day.rows[0];
+      const w = week.rows[0];
+      const successRateDay  = d.total > 0 ? Math.round((d.connects / d.total) * 100) : null;
+      const successRateWeek = w.total > 0 ? Math.round((w.connects / w.total) * 100) : null;
+
+      res.json({
+        day:  { ...d,  successRate: successRateDay  },
+        week: { ...w,  successRate: successRateWeek },
+        byPlatform: byPlatform.rows,
+        recentEvents: recent.rows,
+      });
+    } catch (e: any) {
+      console.error("[admin/jac/voice-stats]", e.message);
+      res.status(500).json({ message: "Failed to load voice stats" });
     }
   });
 

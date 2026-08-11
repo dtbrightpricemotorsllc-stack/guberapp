@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Brain, Zap, BookOpen, ListOrdered, Archive, Lightbulb, Trash2, CheckCircle, XCircle, Plus, TrendingUp, RefreshCw, Target } from "lucide-react";
+import { Brain, Zap, BookOpen, ListOrdered, Archive, Lightbulb, Trash2, CheckCircle, XCircle, Plus, TrendingUp, RefreshCw, Target, Mic } from "lucide-react";
 
 const CATEGORIES = ["general", "jobs", "payments", "marketplace", "vi", "load_board", "credits", "safety", "gps", "studio"];
 
@@ -550,6 +550,124 @@ function SuggestionsTab() {
   );
 }
 
+// ── Voice Tab ─────────────────────────────────────────────────────────────────
+function VoiceTab() {
+  const { data, isLoading, refetch } = useQuery<any>({
+    queryKey: ["/api/admin/jac/voice-stats"],
+    refetchInterval: 60_000,
+  });
+
+  if (isLoading) return <div className="text-center py-10 text-muted-foreground">Loading voice stats…</div>;
+
+  const d = data?.day;
+  const w = data?.week;
+  const byPlatform: any[] = data?.byPlatform ?? [];
+  const recent: any[] = data?.recentEvents ?? [];
+
+  const rateColor = (rate: number | null) =>
+    rate === null ? "text-muted-foreground" :
+    rate >= 90 ? "text-green-600" :
+    rate >= 70 ? "text-yellow-600" : "text-red-600";
+
+  const eventBadge = (ev: string) => {
+    if (ev === "connect")    return <span className="text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded">connect</span>;
+    if (ev === "disconnect") return <span className="text-xs font-medium text-blue-700 bg-blue-100 px-2 py-0.5 rounded">disconnect</span>;
+    if (ev === "timeout")    return <span className="text-xs font-medium text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded">timeout</span>;
+    return                          <span className="text-xs font-medium text-red-700 bg-red-100 px-2 py-0.5 rounded">error</span>;
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">JAC ConvAI Voice Health</h2>
+        <button onClick={() => refetch()} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+          <RefreshCw className="h-3 w-3" /> Refresh
+        </button>
+      </div>
+
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "24h Success Rate", value: d?.successRate != null ? `${d.successRate}%` : "—", color: rateColor(d?.successRate) },
+          { label: "24h Connects",     value: d?.connects  ?? "—", color: "text-green-600" },
+          { label: "24h Timeouts",     value: d?.timeouts  ?? "—", color: d?.timeouts  > 0 ? "text-yellow-600" : "text-muted-foreground" },
+          { label: "24h Errors",       value: d?.errors    ?? "—", color: d?.errors    > 0 ? "text-red-600"    : "text-muted-foreground" },
+        ].map(kpi => (
+          <Card key={kpi.label}>
+            <CardContent className="pt-4">
+              <div className={`text-2xl font-bold ${kpi.color}`}>{kpi.value}</div>
+              <div className="text-xs text-muted-foreground mt-1">{kpi.label}</div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* 7-day summary */}
+      {w && (
+        <Card>
+          <CardHeader><CardTitle className="text-sm">7-Day Summary</CardTitle></CardHeader>
+          <CardContent className="flex gap-6 text-sm flex-wrap">
+            <span>Success rate: <b className={rateColor(w.successRate)}>{w.successRate != null ? `${w.successRate}%` : "—"}</b></span>
+            <span>Connects: <b className="text-green-600">{w.connects}</b></span>
+            <span>Timeouts: <b className={w.timeouts > 0 ? "text-yellow-600" : ""}>{w.timeouts}</b></span>
+            <span>Errors: <b className={w.errors > 0 ? "text-red-600" : ""}>{w.errors}</b></span>
+            <span>Total events: <b>{w.total}</b></span>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Per-platform breakdown */}
+      {byPlatform.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-sm">By Platform (7 days)</CardTitle></CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {byPlatform.map((row: any) => {
+                const rate = row.total > 0 ? Math.round((row.connects / row.total) * 100) : null;
+                return (
+                  <div key={row.platform} className="flex items-center gap-3 text-sm">
+                    <span className="w-36 font-mono text-xs text-muted-foreground">{row.platform}</span>
+                    <div className="flex-1 bg-muted rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full ${rate != null && rate >= 90 ? "bg-green-500" : rate != null && rate >= 70 ? "bg-yellow-500" : "bg-red-500"}`}
+                        style={{ width: `${rate ?? 0}%` }}
+                      />
+                    </div>
+                    <span className={`w-10 text-right font-semibold ${rateColor(rate)}`}>{rate != null ? `${rate}%` : "—"}</span>
+                    <span className="text-xs text-muted-foreground">{row.connects}✓ {row.failures}✗</span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recent events */}
+      <Card>
+        <CardHeader><CardTitle className="text-sm">Recent Events</CardTitle></CardHeader>
+        <CardContent>
+          {recent.length === 0
+            ? <p className="text-sm text-muted-foreground text-center py-4">No events yet — events appear after first voice session.</p>
+            : (
+              <div className="space-y-1.5">
+                {recent.map((ev: any) => (
+                  <div key={ev.id} className="flex items-center gap-3 text-xs">
+                    <span className="text-muted-foreground w-32 shrink-0">{new Date(ev.created_at).toLocaleTimeString()}</span>
+                    {eventBadge(ev.event)}
+                    <span className="font-mono text-muted-foreground">{ev.platform}</span>
+                    {ev.reason && <span className="text-muted-foreground truncate">{ev.reason}</span>}
+                  </div>
+                ))}
+              </div>
+            )
+          }
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ── Goals Tab ─────────────────────────────────────────────────────────────────
 function GoalsTab() {
   const { data: stats, isLoading, refetch } = useQuery<any>({ queryKey: ["/api/admin/jac/dd/stats"] });
@@ -689,8 +807,9 @@ export default function AdminJacBrain() {
       </div>
 
       <Tabs defaultValue="stats">
-        <TabsList className="grid grid-cols-6 w-full">
+        <TabsList className="grid grid-cols-7 w-full">
           <TabsTrigger value="stats" data-testid="tab-stats"><Zap className="h-4 w-4 mr-1" />Stats</TabsTrigger>
+          <TabsTrigger value="voice" data-testid="tab-voice"><Mic className="h-4 w-4 mr-1" />Voice</TabsTrigger>
           <TabsTrigger value="knowledge" data-testid="tab-knowledge"><BookOpen className="h-4 w-4 mr-1" />Knowledge</TabsTrigger>
           <TabsTrigger value="intents" data-testid="tab-intents"><ListOrdered className="h-4 w-4 mr-1" />Intents</TabsTrigger>
           <TabsTrigger value="cache" data-testid="tab-cache"><Archive className="h-4 w-4 mr-1" />Cache</TabsTrigger>
@@ -699,6 +818,7 @@ export default function AdminJacBrain() {
         </TabsList>
 
         <TabsContent value="stats" className="mt-6"><StatsTab /></TabsContent>
+        <TabsContent value="voice" className="mt-6"><VoiceTab /></TabsContent>
         <TabsContent value="knowledge" className="mt-6"><KnowledgeTab /></TabsContent>
         <TabsContent value="intents" className="mt-6"><IntentsTab /></TabsContent>
         <TabsContent value="cache" className="mt-6"><CacheTab /></TabsContent>

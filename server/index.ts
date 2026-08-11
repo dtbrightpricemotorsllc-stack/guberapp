@@ -1115,6 +1115,21 @@ app.use((req, res, next) => {
     ALTER TABLE jac_voice_usage_log ADD COLUMN IF NOT EXISTS latency_ms INTEGER;
   `).catch(e => console.error("[migration] jac_voice_usage_log error:", e));
 
+  // JAC ConvAI connection telemetry — persisted for admin voice dashboard.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_voice_convai_events (
+      id          SERIAL PRIMARY KEY,
+      event       TEXT NOT NULL,
+      platform    TEXT NOT NULL DEFAULT 'unknown',
+      reason      TEXT,
+      created_at  TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_voice_convai_events_created
+      ON jac_voice_convai_events(created_at);
+    CREATE INDEX IF NOT EXISTS idx_jac_voice_convai_events_event
+      ON jac_voice_convai_events(event, created_at);
+  `).catch(e => console.error("[migration] jac_voice_convai_events error:", e));
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS jac_feedback_reports (
       id               SERIAL PRIMARY KEY,
