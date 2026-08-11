@@ -33250,7 +33250,7 @@ OUTPUT STYLE:
         return res.status(400).json({ error: "messages array required" });
       }
 
-      const model = process.env.DD_MODEL || "gpt-4o-mini";
+      const model = process.env.DD_MODEL || "gpt-4.1-mini";
 
       const DD_SYSTEM_PROMPT = `You are D.D., Team GUBER's Business Development guide.
 
