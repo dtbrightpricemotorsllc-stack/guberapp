@@ -210,56 +210,25 @@ describe("JacConvaiSession — WebSocket transport guarantee", () => {
 
   // ── Test 1: signed-URL path ─────────────────────────────────────────────────
 
-  it("passes connectionType: 'websocket' when the session returns a signedUrl", async () => {
+  it("passes connectionType: 'websocket' and signedUrl (not agentId) when the session returns a signedUrl", async () => {
     await mountAndBoot();
 
     const params = startSessionSpy.mock.calls[0][0];
-
-  const onErrorSpy = vi.fn();
+    expect(params.connectionType).toBe("websocket");
+    expect(params.signedUrl).toBeTruthy();
+    expect(params.agentId).toBeUndefined();
     expect(params.connectionDelay?.android).toBe(0);
   });
 
-  it("sets connectionDelay.android to 0 on the agentId fallback path (no 3-second delay)", async () => {
+  // ── Test 2: public-agent fallback path (no signedUrl) ───────────────────────
+
+  it("passes connectionType: 'websocket' and agentId (not signedUrl) on the public-agent fallback path", async () => {
     await mountAndBoot({ signedUrl: undefined });
 
     const params = startSessionSpy.mock.calls[0][0];
-
-  const onErrorSpy = vi.fn();
-    expect(params.connectionDelay?.android).toBe(0);
-  });
-
-  it("sets connectionDelay.android to 0 on the agentId fallback path (no 3-second delay)", async () => {
-    await mountAndBoot({ signedUrl: undefined });
-
-    const params = startSessionSpy.mock.calls[0][0];
-
-  const onErrorSpy = vi.fn();
-    expect(params.connectionDelay?.android).toBe(0);
-  });
-
-  it("sets connectionDelay.android to 0 on the agentId fallback path (no 3-second delay)", async () => {
-    await mountAndBoot({ signedUrl: undefined });
-
-    const params = startSessionSpy.mock.calls[0][0];
-
-  const onErrorSpy = vi.fn();
-    expect(params.connectionDelay?.android).toBe(0);
-  });
-
-  it("sets connectionDelay.android to 0 on the agentId fallback path (no 3-second delay)", async () => {
-    await mountAndBoot({ signedUrl: undefined });
-
-    const params = startSessionSpy.mock.calls[0][0];
-
-  const onErrorSpy = vi.fn();
-    expect(params.connectionDelay?.android).toBe(0);
-  });
-
-  it("sets connectionDelay.android to 0 on the agentId fallback path (no 3-second delay)", async () => {
-    await mountAndBoot({ signedUrl: undefined });
-
-    const params = startSessionSpy.mock.calls[0][0];
-
+    expect(params.connectionType).toBe("websocket");
+    expect(params.agentId).toBeTruthy();
+    expect(params.signedUrl).toBeUndefined();
     expect(params.connectionDelay?.android).toBe(0);
   });
 });

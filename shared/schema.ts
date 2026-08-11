@@ -3392,15 +3392,19 @@ export type InsertDigitalProposalRequest = typeof digitalProposalRequests.$infer
 
 // ── JAC Voice Telemetry ───────────────────────────────────────────────────────
 // Persisted telemetry beacon events from the ElevenLabs ConvAI client.
-// One row per event (connect / timeout / error / disconnect). The endpoint
-// rate-limits by IP in memory (DoS guard only); metric counters are stored
-// here so they survive server restarts and Autoscale cold starts.
-// A 1-hour rolling window is enforced via a periodic cleanup cron or by
-// filtering on occurred_at > NOW() - INTERVAL '1 hour' at query time.
-export const jacVoiceTelemetry = pgTable("jac_voice_telemetry", {
-  id:         serial("id").primaryKey(),
-  event:      text("event").notNull(),       // connect | timeout | error | disconnect
-  platform:   text("platform").notNull(),    // web | ios_native | android_native | …
-  reason:     text("reason"),                // sanitised error reason (nullable)
-  occurredAt: timestamp("occurred_at").defaultNow().notNull(),
+// Validated JAC ConvAI voice session telemetry.
+// One row per (cid, event) pair — the partial unique index
+// idx_jac_voice_convai_events_cid_event enforces this at DB level.
+// Only events carrying a valid server-issued HMAC voice token (cid present)
+// are persisted; unauthenticated beacons are discarded before INSERT.
+// Admin queries use DISTINCT ON (cid) to aggregate first-outcome-per-session,
+// so the denominator is always outcome sessions (connect+error+timeout),
+// never diluted by neutral disconnect lifecycle events.
+export const jacVoiceConvaiEvents = pgTable("jac_voice_convai_events", {
+  id:        serial("id").primaryKey(),
+  event:     text("event").notNull(),                           // connect | timeout | error | disconnect
+  platform:  text("platform").notNull().default("unknown"),     // web | ios_native | android_native | …
+  reason:    text("reason"),                                    // sanitised error reason (nullable)
+  cid:       text("cid"),                                       // server-minted conversation id (from HMAC voice token)
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });

@@ -138,10 +138,18 @@ import { unlockAudioContext, setJacConvaiActive, cancelAllJacAudio } from "@/lib
 // Fire-and-forget POST so the server can log connection outcomes without any
 // client-side latency impact. Errors are silently swallowed — telemetry must
 // never break the voice session itself.
-function sendVoiceTelemetry(event: "connect" | "timeout" | "error" | "disconnect", platform: string, reason?: string): void {
+function sendVoiceTelemetry(
+  event: "connect" | "timeout" | "error" | "disconnect",
+  platform: string,
+  reason?: string,
+  voiceToken?: string | null,
+): void {
   try {
     const body: Record<string, string> = { event, platform };
-    if (reason) body.reason = reason.slice(0, 120);
+    if (reason)      body.reason     = reason.slice(0, 120);
+    // Include the server-issued voice token so the server can verify this is a
+    // real session outcome (not a forged beacon from an anonymous caller).
+    if (voiceToken)  body.voiceToken = voiceToken;
     fetch("/api/jac/convai/telemetry", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -314,6 +322,11 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
     // include it in telemetry without relying on a closure over a stale value.
     const platformRef = useRef<string>("unknown");
 
+    // Stores the server-issued voice token once the session fetch resolves.
+    // Passed to sendVoiceTelemetry so the server can verify each beacon is
+    // tied to a real session (not an unauthenticated forged POST).
+    const voiceTokenRef = useRef<string | null>(null);
+
     // Track the active prop in a ref so async callbacks (onDisconnect, timeout)
     // can read the current value without stale closures.
     const activeRef = useRef(active);
@@ -347,7 +360,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         clearConnectTimeout();
         setJacConvaiActive(true);
         cancelAllJacAudio();
-        sendVoiceTelemetry("connect", platformRef.current);
+        sendVoiceTelemetry("connect", platformRef.current, undefined, voiceTokenRef.current);
       },
       onDisconnect: () => {
         // Release audio ownership so text-mode TTS can resume if needed.
@@ -359,14 +372,14 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         // phase calculation below would loop back to "connecting…" forever
         // because active stays true but status goes to "disconnected".
         if (activeRef.current && !cancelRef.current) {
-          sendVoiceTelemetry("disconnect", platformRef.current, "unexpected_disconnect");
+          sendVoiceTelemetry("disconnect", platformRef.current, "unexpected_disconnect", voiceTokenRef.current);
           cbRef.current.onError("Voice disconnected. Tap the mic to retry.");
         }
       },
       onError: (msg: string) => {
         clearConnectTimeout();
         setJacConvaiActive(false);
-        sendVoiceTelemetry("error", platformRef.current, msg || "unknown_error");
+        sendVoiceTelemetry("error", platformRef.current, msg || "unknown_error", voiceTokenRef.current);
         cbRef.current.onError(msg || "Voice connection lost.");
       },
       onMessage: (({ source, message }: { source: "ai" | "user"; message: string }) => {
@@ -495,6 +508,9 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           if (!session) { cbRef.current.onError("Voice session error. Try again."); return; }
           if (cancelRef.current) return;
 
+          // Store the server-issued token so telemetry beacons can be verified.
+          voiceTokenRef.current = session.voiceToken ?? null;
+
           const dynVars: Record<string, string> = {
             [session.dynamicVariableName]: session.voiceToken,
           };
@@ -557,7 +573,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           // retry state.  It is cleared by onConnect / onDisconnect / onError.
           connectTimeoutRef.current = setTimeout(() => {
             if (!cancelRef.current) {
-              sendVoiceTelemetry("timeout", platformRef.current, `no_connect_in_${CONNECTION_TIMEOUT_MS}ms`);
+              sendVoiceTelemetry("timeout", platformRef.current, `no_connect_in_${CONNECTION_TIMEOUT_MS}ms`, voiceTokenRef.current);
               try { endSession(); } catch {}
               cbRef.current.onError("Voice connection timed out. Tap the mic to retry.");
             }

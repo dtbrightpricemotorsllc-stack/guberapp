@@ -1122,6 +1122,7 @@ app.use((req, res, next) => {
       event       TEXT NOT NULL,
       platform    TEXT NOT NULL DEFAULT 'unknown',
       reason      TEXT,
+      cid         TEXT,
       created_at  TIMESTAMP DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_jac_voice_convai_events_created
@@ -1129,6 +1130,15 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_jac_voice_convai_events_event
       ON jac_voice_convai_events(event, created_at);
   `).catch(e => console.error("[migration] jac_voice_convai_events error:", e));
+  // Add cid column + unique constraint to existing tables (idempotent).
+  // The partial unique index on (cid, event) enforces one outcome event per
+  // session per type — prevents replay attacks and double-counting.
+  await pool.query(`
+    ALTER TABLE jac_voice_convai_events ADD COLUMN IF NOT EXISTS cid TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_jac_voice_convai_events_cid_event
+      ON jac_voice_convai_events(cid, event)
+      WHERE cid IS NOT NULL;
+  `).catch(e => console.error("[migration] jac_voice_convai_events cid column error:", e));
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS jac_feedback_reports (
@@ -2167,17 +2177,9 @@ app.use((req, res, next) => {
     ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS preferred_contact_method TEXT;
   `).catch(e => console.error("[migration] business_profiles extended columns error:", e));
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS jac_voice_telemetry (
-      id           SERIAL PRIMARY KEY,
-      event        TEXT NOT NULL,
-      platform     TEXT NOT NULL,
-      reason       TEXT,
-      occurred_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_jac_voice_telemetry_occurred_at ON jac_voice_telemetry (occurred_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_jac_voice_telemetry_event       ON jac_voice_telemetry (event, occurred_at DESC);
-  `).catch(e => console.error("[migration] jac_voice_telemetry table error:", e));
+  // NOTE: jac_voice_telemetry table was superseded by jac_voice_convai_events
+  // (which adds cid, session deduplication, and token-validated writes).
+  // Migration block intentionally removed to avoid creating an unused table.
 
   const shutdown = () => {
     httpServer.close(() => process.exit(0));

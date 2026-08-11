@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import {
   Zap, ShieldAlert, MapPin, TrendingUp, AlertTriangle,
   Check, Copy, Share2, Activity, Users, Award, CreditCard, RefreshCw,
-  CheckCircle2, XCircle, HelpCircle, ChevronDown, ChevronUp,
+  CheckCircle2, XCircle, HelpCircle, ChevronDown, ChevronUp, Mic,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -96,7 +96,7 @@ const STATUS_CFG = {
 
 const GROUP_ICONS: Record<string, React.ComponentType<{className?:string}>> = {
   maps: MapPin, auth: ShieldAlert, payments: CreditCard,
-  notifications: Zap, production: Activity,
+  notifications: Zap, production: Activity, ai: Mic,
 };
 
 function StatusBadge({ status }: { status: HealthCheck["status"] }) {

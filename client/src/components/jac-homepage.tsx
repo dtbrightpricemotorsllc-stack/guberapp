@@ -499,7 +499,7 @@ export function JacHomepage() {
       }
     }
 
-    const opts = { once: true, passive: true } as const;
+    const opts: AddEventListenerOptions = { once: true, passive: true };
     document.addEventListener("click",      startOnGesture, opts);
     document.addEventListener("touchstart", startOnGesture, opts);
     document.addEventListener("keydown",    startOnGesture, opts);

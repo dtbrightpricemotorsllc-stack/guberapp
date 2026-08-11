@@ -7,6 +7,7 @@
 
 import { db } from "../db";
 import { sql } from "drizzle-orm";
+import { getVoiceHealthStats } from "../jac-voice-telemetry";
 
 export type CheckStatus = "healthy" | "warning" | "critical" | "unknown";
 
@@ -575,6 +576,36 @@ async function checkDemoDataIsolation(): Promise<CheckResult> {
   }
 }
 
+function checkJacVoice(): CheckResult {
+  const key = "jac_voice_success_rate";
+  const stats = getVoiceHealthStats();
+
+  // Label the window accurately: restarts reset the counter, so the effective
+  // window is min(time-since-start, 1 h). Task #746 adds persistence.
+  const windowLabel = stats.partialWindow ? "since last restart" : "last 1 h";
+  const name = `JAC Voice (${windowLabel})`;
+
+  if (stats.sessions === 0) {
+    return unk(key, name,
+      `No validated voice sessions recorded ${windowLabel} — rate will appear once sessions start`);
+  }
+
+  const pct = stats.successRate;
+  const detail = `${pct}% success rate — ${stats.connects} connected, ${stats.errors} errors, ${stats.timeouts} timeouts (${stats.sessions} unique sessions ${windowLabel})`;
+
+  if (pct >= 80) {
+    return ok(key, name, `${pct}%`, detail);
+  }
+  if (pct >= 60) {
+    return warn(key, name, `${pct}%`, detail,
+      "Review server logs for ElevenLabs ConvAI errors; check ELEVENLABS_API_KEY and agent ID.",
+      `Voice success rate degraded: ${pct}%`);
+  }
+  return crit(key, name, `${pct}%`, detail,
+    "Check ELEVENLABS_API_KEY, ELEVENLABS_CONVAI_AGENT_ID, and network access to ElevenLabs.",
+    `Voice success rate critical: ${pct}%`);
+}
+
 async function checkBackendConnectivity(): Promise<CheckResult> {
   const key = "backend_connectivity";
   // If this function executes, the backend is reachable by definition.
@@ -625,6 +656,9 @@ export async function runAppHealthChecks(): Promise<AppHealthReport> {
     checkDatabase(), checkDemoDataIsolation(), checkBackendConnectivity(),
   ]);
 
+  // Synchronous — reads from in-memory rolling counter, no I/O.
+  const jacVoice = checkJacVoice();
+
   const groups: AppHealthGroup[] = [
     {
       id: "maps",
@@ -650,6 +684,11 @@ export async function runAppHealthChecks(): Promise<AppHealthReport> {
       id: "production",
       label: "Production Data",
       checks: [connectivity, database, demoIsolation],
+    },
+    {
+      id: "ai",
+      label: "AI / JAC Voice",
+      checks: [jacVoice],
     },
   ];
 

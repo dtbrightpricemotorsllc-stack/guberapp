@@ -623,7 +623,7 @@ function VoiceTab() {
           <CardContent>
             <div className="space-y-2">
               {byPlatform.map((row: any) => {
-                const rate = row.total > 0 ? Math.round((row.connects / row.total) * 100) : null;
+                const rate = row.sessions > 0 ? Math.round((row.connects / row.sessions) * 100) : null;
                 return (
                   <div key={row.platform} className="flex items-center gap-3 text-sm">
                     <span className="w-36 font-mono text-xs text-muted-foreground">{row.platform}</span>

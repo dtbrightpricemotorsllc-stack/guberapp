@@ -57,6 +57,7 @@ import { generateJWT, verifyJWT } from "./jwt";
 import { signMobileCheckoutToken, verifyMobileCheckoutToken, isValidProduct } from "./mobile-checkout-token";
 import { verifyJacVoiceToken, signJacVoiceToken } from "./jac-voice-token";
 import { sanitizeAssistMessages, resolveVoiceToken, newCompletionId, writeOpenAiStream, buildNonStreamCompletion, checkConvaiRateLimit } from "./jac-convai";
+import { recordVoiceEvent } from "./jac-voice-telemetry";
 import { evaluatePayoutMultiFactor } from "./payout-guard";
 import * as assetCustody from "./asset-custody";
 import {
@@ -19241,7 +19242,16 @@ CRITICAL — respond with JSON ONLY, no other text:
         _telemetryRateMap.set(ip, { count: 1, resetAt: now + TELEMETRY_WINDOW_MS });
       }
 
-      // Validate + sanitize inputs — never log raw user-supplied strings verbatim
+      // ── Token validation ──────────────────────────────────────────────────
+      // Require the HMAC-signed voice token issued by /api/jac/convai/session.
+      // Events without a valid, unexpired token are silently accepted (204) but
+      // NOT counted — a public caller must not be able to influence the admin
+      // health gauge. We return 204 in all cases to avoid leaking server state.
+      const rawToken = String(req.body?.voiceToken ?? "").slice(0, 512);
+      const tokenPayload = rawToken ? verifyJacVoiceToken(rawToken) : null;
+      const cid = tokenPayload?.cid ?? null;
+
+      // ── Validate + sanitize inputs ────────────────────────────────────────
       const rawEvent    = String(req.body?.event    ?? "").slice(0, 32);
       const rawPlatform = String(req.body?.platform ?? "").slice(0, 32);
       const rawReason   = String(req.body?.reason   ?? "").slice(0, 120);
@@ -19251,7 +19261,7 @@ CRITICAL — respond with JSON ONLY, no other text:
       // Sanitize reason: strip any token-like strings (long alphanumeric runs)
       const reason   = rawReason.replace(/[A-Za-z0-9_\-]{40,}/g, "[redacted]") || undefined;
 
-      const label = `[jac/convai/telemetry] event=${event} platform=${platform}${reason ? ` reason="${reason}"` : ""}`;
+      const label = `[jac/convai/telemetry] event=${event} platform=${platform}${reason ? ` reason="${reason}"` : ""}${cid ? "" : " (no-token/unverified — not counted)"}`;
       if (event === "connect") {
         console.log(`✅ ${label}`);
       } else if (event === "disconnect") {
@@ -19260,14 +19270,22 @@ CRITICAL — respond with JSON ONLY, no other text:
         console.warn(`⚠️  ${label}`);
       }
 
-      // Persist to DB so counters survive server restarts / Autoscale cold starts.
-      // Fire-and-forget — never block the 204 response on the INSERT.
-      pool.query(
-        `INSERT INTO jac_voice_convai_events (event, platform, reason) VALUES ($1, $2, $3)`,
-        [event, platform, reason ?? null],
-      ).catch((err: Error) => console.error("[jac/convai/telemetry] db insert error:", err.message));
+      // Only persist and count events tied to a valid, server-issued session token.
+      // Unverified beacons are logged above but never reach the DB or the gauge.
+      if (cid) {
+        // Persist to DB so counters survive server restarts / Autoscale cold starts.
+        // The partial unique index on (cid, event) WHERE cid IS NOT NULL makes
+        // ON CONFLICT DO NOTHING deduplicate: one row per (session × event type).
+        // Fire-and-forget — never block the 204 response on the INSERT.
+        pool.query(
+          `INSERT INTO jac_voice_convai_events (event, platform, reason, cid)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (cid, event) WHERE cid IS NOT NULL DO NOTHING`,
+          [event, platform, reason ?? null, cid],
+        ).catch((err: Error) => console.error("[jac/convai/telemetry] db insert error:", err.message));
 
-
+        recordVoiceEvent(event, cid);
+      }
       return res.status(204).end();
     });
   }
@@ -22666,44 +22684,66 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
   // Returns success rate + per-platform breakdown for the last 24 h and 7 days.
   app.get("/api/admin/jac/voice-stats", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const [day, week, byPlatform, recent] = await Promise.all([
-        // 24-hour totals
-        pool.query(`
-          SELECT
-            COUNT(*) FILTER (WHERE event = 'connect')::int    AS connects,
-            COUNT(*) FILTER (WHERE event = 'timeout')::int    AS timeouts,
-            COUNT(*) FILTER (WHERE event = 'error')::int      AS errors,
-            COUNT(*) FILTER (WHERE event = 'disconnect')::int AS disconnects,
-            COUNT(*)::int                                      AS total
+      // All outcome queries use DISTINCT ON (cid) to select the FIRST outcome
+      // event per session. This means: a session that connects then disconnects
+      // counts as one success; a session that never connected (timeout/error)
+      // counts as one failure. Disconnects are tracked separately and never
+      // appear in the denominator. Rows without cid (legacy, pre-validation)
+      // are excluded entirely.
+      const OUTCOME_EVENTS_WINDOW = (interval: string) => `
+        WITH first_outcomes AS (
+          SELECT DISTINCT ON (cid) cid, event, platform
           FROM jac_voice_convai_events
-          WHERE created_at > NOW() - INTERVAL '24 hours'
-        `),
-        // 7-day totals
+          WHERE cid IS NOT NULL
+            AND event IN ('connect', 'error', 'timeout')
+            AND created_at > NOW() - INTERVAL '${interval}'
+          ORDER BY cid, created_at ASC
+        )
+      `;
+
+      const [day, week, byPlatform, disconnects24h, recent] = await Promise.all([
+        // 24-hour outcome totals — one row per session
         pool.query(`
+          ${OUTCOME_EVENTS_WINDOW("24 hours")}
           SELECT
-            COUNT(*) FILTER (WHERE event = 'connect')::int    AS connects,
-            COUNT(*) FILTER (WHERE event = 'timeout')::int    AS timeouts,
-            COUNT(*) FILTER (WHERE event = 'error')::int      AS errors,
-            COUNT(*) FILTER (WHERE event = 'disconnect')::int AS disconnects,
-            COUNT(*)::int                                      AS total
-          FROM jac_voice_convai_events
-          WHERE created_at > NOW() - INTERVAL '7 days'
+            COUNT(*) FILTER (WHERE event = 'connect')::int AS connects,
+            COUNT(*) FILTER (WHERE event = 'timeout')::int AS timeouts,
+            COUNT(*) FILTER (WHERE event = 'error')::int   AS errors,
+            COUNT(*)::int                                   AS sessions
+          FROM first_outcomes
         `),
-        // Per-platform breakdown (7 days)
+        // 7-day outcome totals — one row per session
         pool.query(`
+          ${OUTCOME_EVENTS_WINDOW("7 days")}
+          SELECT
+            COUNT(*) FILTER (WHERE event = 'connect')::int AS connects,
+            COUNT(*) FILTER (WHERE event = 'timeout')::int AS timeouts,
+            COUNT(*) FILTER (WHERE event = 'error')::int   AS errors,
+            COUNT(*)::int                                   AS sessions
+          FROM first_outcomes
+        `),
+        // Per-platform breakdown (7 days) — denominator is outcome sessions only
+        pool.query(`
+          ${OUTCOME_EVENTS_WINDOW("7 days")}
           SELECT
             platform,
-            COUNT(*) FILTER (WHERE event = 'connect')::int AS connects,
-            COUNT(*) FILTER (WHERE event IN ('timeout','error'))::int AS failures,
-            COUNT(*)::int AS total
-          FROM jac_voice_convai_events
-          WHERE created_at > NOW() - INTERVAL '7 days'
+            COUNT(*) FILTER (WHERE event = 'connect')::int             AS connects,
+            COUNT(*) FILTER (WHERE event IN ('timeout','error'))::int  AS failures,
+            COUNT(*)::int                                               AS sessions
+          FROM first_outcomes
           GROUP BY platform
-          ORDER BY total DESC
+          ORDER BY sessions DESC
         `),
-        // 20 most recent events
+        // Disconnects tracked separately (neutral lifecycle events, not failures)
         pool.query(`
-          SELECT id, event, platform, reason, created_at
+          SELECT COUNT(DISTINCT cid)::int AS disconnects
+          FROM jac_voice_convai_events
+          WHERE cid IS NOT NULL AND event = 'disconnect'
+            AND created_at > NOW() - INTERVAL '24 hours'
+        `),
+        // 20 most recent raw events (for manual inspection)
+        pool.query(`
+          SELECT id, event, platform, reason, cid, created_at
           FROM jac_voice_convai_events
           ORDER BY created_at DESC
           LIMIT 20
@@ -22712,12 +22752,13 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
 
       const d = day.rows[0];
       const w = week.rows[0];
-      const successRateDay  = d.total > 0 ? Math.round((d.connects / d.total) * 100) : null;
-      const successRateWeek = w.total > 0 ? Math.round((w.connects / w.total) * 100) : null;
+      // sessions = connects + errors + timeouts (disconnects excluded from denominator)
+      const successRateDay  = d.sessions > 0 ? Math.round((d.connects / d.sessions) * 100) : null;
+      const successRateWeek = w.sessions > 0 ? Math.round((w.connects / w.sessions) * 100) : null;
 
       res.json({
-        day:  { ...d,  successRate: successRateDay  },
-        week: { ...w,  successRate: successRateWeek },
+        day:  { ...d, disconnects: disconnects24h.rows[0]?.disconnects ?? 0, successRate: successRateDay  },
+        week: { ...w, successRate: successRateWeek },
         byPlatform: byPlatform.rows,
         recentEvents: recent.rows,
       });
