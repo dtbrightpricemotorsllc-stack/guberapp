@@ -19126,6 +19126,10 @@ CRITICAL — respond with JSON ONLY, no other text:
   // Value = epoch ms until which the agent is treated as public; 0 = check now.
   const JAC_SIGNED_URL_PUBLIC_TTL_MS = 5 * 60 * 1000; // 5 minutes
   let _jacSignedUrlPublicUntil = 0;
+  // Tracks whether the agent was EVER confirmed private this process lifetime.
+  // Once true, any subsequent public-agent fallback is unexpected and triggers
+  // a system_issues alert so Mission Control and on-call are notified.
+  let _jacAgentLastKnownPrivate = false;
 
   // ── JAC voice session mint — PUBLIC investor variant (no auth) ─────────────
   // Used by the /investors page. Mints an anonymous voice token with CID
@@ -19155,14 +19159,43 @@ CRITICAL — respond with JSON ONLY, no other text:
             const j: any = await signedRes.json().catch(() => ({}));
             signedUrl = j?.signed_url ?? null;
             _jacSignedUrlPublicUntil = 0;
+            _jacAgentLastKnownPrivate = true;
             console.log(`[jac/convai/investor-session] signed-url OK → private-agent mode (signed)`);
           } else {
             _jacSignedUrlPublicUntil = invNow + JAC_SIGNED_URL_PUBLIC_TTL_MS;
             console.log(`[jac/convai/investor-session] signed-url ${signedRes.status} → public-agent mode (cached ${JAC_SIGNED_URL_PUBLIC_TTL_MS / 60000}min)`);
+            if (_jacAgentLastKnownPrivate) {
+              console.warn(`[jac/convai/investor-session] ⚠️  agent previously private, now returning ${signedRes.status} — recording voice-auth degradation`);
+              recordSystemIssue({
+                module: "voice",
+                route: "/api/jac/convai/investor-session",
+                platform: "server",
+                errorMessage: `JAC voice agent unexpectedly entered public-agent mode (HTTP ${signedRes.status}). Agent was previously confirmed private. Check ElevenLabs dashboard agent privacy setting.`,
+                attemptedAction: "mint_investor_convai_session",
+                blocked: false,
+                source: "health_probe",
+                severityFloor: "high",
+                suggestedFix: "Open the ElevenLabs dashboard, locate the GUBER JAC agent, and confirm its Privacy setting is set to Private.",
+              }).catch((e: any) => console.error("[jac/convai/investor-session] failed to record voice-auth issue:", e?.message));
+            }
           }
         } catch (fetchErr: any) {
           _jacSignedUrlPublicUntil = invNow + JAC_SIGNED_URL_PUBLIC_TTL_MS;
           console.warn(`[jac/convai/investor-session] signed-url fetch error: ${fetchErr?.message} → public-agent fallback`);
+          if (_jacAgentLastKnownPrivate) {
+            console.warn(`[jac/convai/investor-session] ⚠️  signed-url fetch failed after agent was confirmed private — recording voice-auth degradation`);
+            recordSystemIssue({
+              module: "voice",
+              route: "/api/jac/convai/investor-session",
+              platform: "server",
+              errorMessage: `JAC voice signed-URL fetch failed (${fetchErr?.message ?? "unknown error"}) after agent was previously confirmed private. Voice falling back to unauthenticated public-agent mode.`,
+              attemptedAction: "mint_investor_convai_session",
+              blocked: false,
+              source: "health_probe",
+              severityFloor: "high",
+              suggestedFix: "Check ElevenLabs API key validity and network connectivity to api.elevenlabs.io.",
+            }).catch((e: any) => console.error("[jac/convai/investor-session] failed to record voice-auth issue:", e?.message));
+          }
         }
       }
 
@@ -19286,17 +19319,49 @@ CRITICAL — respond with JSON ONLY, no other text:
             // Agent is private — clear any stale public cache so future sessions
             // always try to fetch a fresh signed URL.
             _jacSignedUrlPublicUntil = 0;
+            _jacAgentLastKnownPrivate = true;
             console.log(`[jac/convai/session] signed-url OK → private-agent mode (signed)`);
           } else {
             // Agent is public (4xx from signed-url endpoint). Cache for TTL.
             _jacSignedUrlPublicUntil = now + JAC_SIGNED_URL_PUBLIC_TTL_MS;
             console.log(`[jac/convai/session] signed-url ${signedRes.status} → public-agent mode (cached ${JAC_SIGNED_URL_PUBLIC_TTL_MS / 60000}min)`);
+            // If the agent was previously confirmed private, this is an unexpected
+            // regression (e.g. someone accidentally set it to public in the dashboard).
+            // Record a system issue so Mission Control / on-call are alerted.
+            if (_jacAgentLastKnownPrivate) {
+              console.warn(`[jac/convai/session] ⚠️  agent previously private, now returning ${signedRes.status} — recording voice-auth degradation`);
+              recordSystemIssue({
+                module: "voice",
+                route: "/api/jac/convai/session",
+                platform: "server",
+                errorMessage: `JAC voice agent unexpectedly entered public-agent mode (HTTP ${signedRes.status}). Agent was previously confirmed private. Check ElevenLabs dashboard agent privacy setting.`,
+                attemptedAction: "mint_convai_session",
+                blocked: false,
+                source: "health_probe",
+                severityFloor: "high",
+                suggestedFix: "Open the ElevenLabs dashboard, locate the GUBER JAC agent, and confirm its Privacy setting is set to Private.",
+              }).catch((e: any) => console.error("[jac/convai/session] failed to record voice-auth issue:", e?.message));
+            }
           }
         } catch (fetchErr: any) {
           // Network/timeout error — treat as public for the TTL to avoid blocking sessions,
           // but log clearly so on-call can distinguish from a genuine config change.
           _jacSignedUrlPublicUntil = now + JAC_SIGNED_URL_PUBLIC_TTL_MS;
           console.warn(`[jac/convai/session] signed-url fetch error: ${fetchErr?.message} → public-agent fallback (cached ${JAC_SIGNED_URL_PUBLIC_TTL_MS / 60000}min)`);
+          if (_jacAgentLastKnownPrivate) {
+            console.warn(`[jac/convai/session] ⚠️  signed-url fetch failed after agent was confirmed private — recording voice-auth degradation`);
+            recordSystemIssue({
+              module: "voice",
+              route: "/api/jac/convai/session",
+              platform: "server",
+              errorMessage: `JAC voice signed-URL fetch failed (${fetchErr?.message ?? "unknown error"}) after agent was previously confirmed private. Voice falling back to unauthenticated public-agent mode.`,
+              attemptedAction: "mint_convai_session",
+              blocked: false,
+              source: "health_probe",
+              severityFloor: "high",
+              suggestedFix: "Check ElevenLabs API key validity and network connectivity to api.elevenlabs.io.",
+            }).catch((e: any) => console.error("[jac/convai/session] failed to record voice-auth issue:", e?.message));
+          }
         }
       } else {
         console.log(`[jac/convai/session] skipping signed-url check — public-agent cache valid for ${Math.round((_jacSignedUrlPublicUntil - now) / 1000)}s more`);
