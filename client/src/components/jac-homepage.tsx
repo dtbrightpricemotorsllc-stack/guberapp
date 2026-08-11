@@ -112,7 +112,7 @@ const OPENING_OPTIONS = [
 
 const GREETING: JacMsg = {
   role: "assistant",
-  content: "To talk to me, tap the mic button! 🎤",
+  content: "Hey! I'm JAC 👋 I'm here to help you find work, post jobs, or answer any questions about GUBER.",
   buttons: OPENING_OPTIONS,
 };
 
@@ -382,28 +382,20 @@ export function JacHomepage() {
   const handleConvaiError = useCallback((msg: string) => {
     setLiveMode(false);
     setLiveState("idle");
+    liveModeRef.current = false;
     if (msg === "IAB_NO_VOICE") {
-      // IAB browsers block WebRTC/mic — switch to text-only with a clear message.
-      setMessages(prev =>
-        prev.length === 1 && prev[0] === GREETING
-          ? [IAB_GREETING]
-          : prev
-      );
+      // IAB browsers — already in text-only mode, no change needed.
       return;
     }
-    // For every other error (connection timeout, unexpected disconnect, mic
-    // denied, network failure, etc.) inject a brief assistant bubble so the
-    // user knows what happened and that they can tap the mic button to retry.
-    // Mic-denied errors get their own wording; everything else is generic.
-    const isMicDenied =
-      msg.toLowerCase().includes("mic") ||
-      msg.toLowerCase().includes("microphone") ||
-      msg.toLowerCase().includes("denied") ||
-      msg.toLowerCase().includes("notallowed");
-    const bubble = isMicDenied
-      ? "Microphone access was blocked. Please allow mic permission in your browser settings, then tap the mic button to try again."
-      : "Voice couldn't connect. Tap the mic button to try again.";
-    setMessages(prev => [...prev, { role: "assistant" as const, content: bubble }]);
+    // Mic blocked or connection failure: fall back silently to text mode.
+    // JAC speaks the greeting via TTS so the user still hears a welcome —
+    // no error bubble, no instruction to dig into browser settings.
+    greetingSpokenRef.current = false; // allow TTS to fire
+    jacSpeak(
+      "Hey! I'm JAC. I can help you find work, post jobs, or answer questions. Just type below — or tap the mic if you'd like to talk.",
+      { muted: mutedRef.current }
+    );
+    greetingSpokenRef.current = true;
   }, []);
 
   function stopLiveMode() {
@@ -485,32 +477,38 @@ export function JacHomepage() {
   // (user types before tapping mic) and toggleLiveMode (user taps mic first).
   const greetingSpokenRef = useRef(false);
 
-  // Unlock AudioContext on first user gesture — do NOT speak via text-TTS.
-  // ElevenLabs ConvAI is the sole voice; it will play its configured greeting
-  // automatically once the session connects (when the user taps the mic button).
-  // The greeting text is always shown on screen regardless of voice mode.
+  // Auto-start ConvAI on the user's first gesture anywhere on the page.
+  // This means JAC fires up and talks the moment they interact — no mic button tap needed.
+  // If mic is blocked or ConvAI fails, handleConvaiError falls back silently to TTS.
+  // IAB browsers are excluded (text-only already).
   useEffect(() => {
     if (mode !== "chat") return;
-    if (greetingSpokenRef.current) return;
+    if (isIAB) return;
 
-    function unlockOnGesture() {
-      if (greetingSpokenRef.current) return;
-      greetingSpokenRef.current = true;
+    function startOnGesture() {
       unlockAudioContext();
-      // No speak() call — ConvAI voices the greeting when the mic is tapped
+      if (liveModeRef.current) return; // already started
+      greetingSpokenRef.current = true; // prevent double-speak if ConvAI connects
+      liveModeRef.current = true;
+      cancelAllJacAudio();
+      setLiveMode(true);
+      setLiveState("listening");
+      if (!micHintDone) {
+        setMicHintDone(true);
+        try { localStorage.setItem(JAC_MIC_HINT_KEY, "1"); } catch {}
+      }
     }
 
     const opts = { once: true, passive: true } as const;
-    const cleanup = () => {
-      document.removeEventListener("click",      unlockOnGesture, opts);
-      document.removeEventListener("touchstart", unlockOnGesture, opts);
-      document.removeEventListener("keydown",    unlockOnGesture, opts);
+    document.addEventListener("click",      startOnGesture, opts);
+    document.addEventListener("touchstart", startOnGesture, opts);
+    document.addEventListener("keydown",    startOnGesture, opts);
+    return () => {
+      document.removeEventListener("click",      startOnGesture, opts);
+      document.removeEventListener("touchstart", startOnGesture, opts);
+      document.removeEventListener("keydown",    startOnGesture, opts);
     };
-    document.addEventListener("click",      unlockOnGesture, opts);
-    document.addEventListener("touchstart", unlockOnGesture, opts);
-    document.addEventListener("keydown",    unlockOnGesture, opts);
-    return cleanup;
-  }, [mode]);
+  }, [mode, isIAB, micHintDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // CRT power-on: plays once for first-time visitors only.
   // Mark as seen in localStorage so subsequent visits skip straight to "done".
