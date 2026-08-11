@@ -5296,6 +5296,33 @@ export async function registerRoutes(
           } else {
             console.log(`[GUBER][webhook/main] asset_protection_founders: session ${session.id} alreadyDone=${fres.alreadyDone}`);
           }
+        } else if (metadata?.type === "dd_launch") {
+          // D.D. Business Launch — one-time $9.99 unlock. Idempotent: if the user
+          // already has dd_launch_unlocked=true we log and skip so retries are safe.
+          const ddUserId = metadata.userId ? parseInt(metadata.userId) : null;
+          if (!ddUserId) {
+            console.warn(`[GUBER][webhook/main] dd_launch: missing userId in metadata for session ${session.id}`);
+          } else {
+            const ddUser = await storage.getUser(ddUserId);
+            if (!ddUser) {
+              console.warn(`[GUBER][webhook/main] dd_launch: user ${ddUserId} not found for session ${session.id}`);
+            } else if (ddUser.ddLaunchUnlocked) {
+              console.log(`[GUBER][webhook/main] dd_launch: user ${ddUserId} already unlocked — skipping duplicate (session ${session.id})`);
+            } else {
+              await db.update(users).set({
+                ddLaunchUnlocked: true,
+                ddUnlockedAt: new Date(),
+                ddStripeSessionId: session.id,
+              }).where(eq(users.id, ddUserId));
+              await storage.createNotification({
+                userId: ddUserId,
+                title: "D.D. Business Launch unlocked!",
+                body: "Your access to D.D., Team GUBER's Business Development guide, is ready. Open D.D. anytime from the app.",
+                type: "system",
+              }).catch(() => {});
+              console.log(`[GUBER][webhook/main] dd_launch: user ${ddUserId} unlocked (session ${session.id})`);
+            }
+          }
         } else {
           console.log(`[GUBER][webhook/main] checkout.session.completed: unhandled session type "${metadata?.type || "none"}" — ignored`);
         }
@@ -17723,6 +17750,12 @@ GUBER stands for Global Unlimited Business & Employment Resources. Community ide
 
 GUBER ACTIVATION SYSTEM: Businesses can sponsor community activations — real-world events funded by a local business. Types: Cash Drops, QR treasure hunts, store visit missions, grand-opening promotions, product/service giveaways, sponsored local challenges, community events, verification missions, limited-time rewards, promotional missions. JAC helps businesses build a campaign proposal (budget, goal, reward, audience, activation type). Businesses MUST approve the final campaign and financial commitment — JAC never commits their money. Sponsor funding is ALWAYS disclosed: "Presented by [BUSINESS]" / "Sponsored by [BUSINESS]" / "In partnership with [BUSINESS]". Never present sponsor-funded rewards as if GUBER independently funded them. Business entry point: "ASK JAC TO PROMOTE MY BUSINESS" → /biz/sponsor-drop.
 
+D.D. BUSINESS LAUNCH — TEAM GUBER BUSINESS DEVELOPMENT SPECIALIST:
+D.D. is a Team GUBER specialist, not a general assistant. D.D. helps people start, form, and register a legitimate business — step by step, one question at a time. D.D. covers: business structure, business name, state formation/registration, EIN, state tax registration, county/city requirements, licenses and permits, registered agent, banking readiness, insurance considerations, payment/bookkeeping readiness, and GUBER Business onboarding when appropriate. D.D. uses Guided Chat (not voice) because business setup involves official links, prices, forms, and deadlines users need to look back at. D.D. costs $9.99 one-time — permanent access for that GUBER account. D.D. is not an attorney, CPA, or licensed professional.
+
+WHEN TO INTRODUCE D.D.:
+If someone says "I want to start a business", "how do I start an LLC", "how do I get an EIN", "I want to make my business official", "what licenses do I need", "how do I open a trucking company / detailing business / cleaning company" or similar — this is D.D.'s department. JAC should NOT try to walk through the full startup flow itself. Instead say: "Sounds like you're trying to turn this into a real business. That's D.D.'s department. D.D. is Team GUBER's Business Development guide and can walk you through what you need, what it may cost, what you can do today, and the official places to get everything done." Then offer to open D.D. (route: /dd). If the user already owns D.D., say D.D. is ready for them — do NOT prompt payment.
+
 JAC / GUBEE / TEAM GUBER MODEL:
 - JAC = conversation + coordination. JAC gathers information, builds proposals, guides users, and hands off to the right action.
 - Gubee = GUBER's visual mascot representing progress. Gubee made a drop. Gubee is on the move. Gubee found someone nearby. (Physical actions are always done by real Team GUBER members, not AI.)
@@ -18957,6 +18990,10 @@ GUBER ACTIVATIONS / PROMOTE MY BUSINESS → route: /biz/sponsor-drop [business-f
 When a business owner asks about promoting or advertising, say: "JAC can build a campaign proposal around your budget. What's your goal — more foot traffic, a grand opening, a giveaway?" Then collect: budget, goal, location, reward type. Route to /biz/sponsor-drop once they're ready.
 Sponsorship transparency rule: always remind them their brand will appear as "Presented by [their business name]" on the activation — never disguised.
 
+D.D. BUSINESS LAUNCH → route: /dd [business-startup-intent-only]
+"start a business" / "start an LLC" / "start an S-corp" / "how do I get an EIN" / "make my business official" / "register my business" / "what licenses do I need" / "open a trucking company" / "open a cleaning business" / "start a detailing business" / "business formation" / "sole proprietor" / "how do I start a business in [state]" / "DBA" / "registered agent" / "business license" / "business bank account" / "do I need to register my business"
+D.D. is Team GUBER's Business Development guide — a separate specialist (not JAC). Do NOT try to walk through the full business-startup flow yourself. Instead say: "Sounds like you're trying to turn this into a real business. That's D.D.'s department. D.D. is Team GUBER's Business Development guide and can walk you through what you need, what it may cost, what you can do today, and the official places to get everything done." Then set route: /dd with HIGH confidence. D.D. costs $9.99 one-time — JAC should mention this naturally ("there's a small one-time unlock") but not hard-sell it. If the user already has D.D. unlocked, just say D.D. is ready and route there.
+
 CAR WASH / DETAILING (MEDIUM confidence — always ask follow-up):
 "car washed" / "detail my car" / "wash my truck" / "mobile detail"
 Ask: "Do you want someone mobile to come to you, or looking for a nearby shop?"
@@ -19911,7 +19948,18 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
 
   function jacToolAuth(req: Request, res: Response): boolean {
     const secret = process.env.GUBER_SHARED_SECRET;
-    if (!secret) return true;
+    if (!secret) {
+      // In production, a missing GUBER_SHARED_SECRET is a misconfiguration —
+      // fail-closed so the tool gateway is never accidentally open.
+      // In development (NODE_ENV !== "production"), allow through so local
+      // testing works without configuring the secret.
+      if (process.env.NODE_ENV === "production") {
+        console.error("[jac/tool] GUBER_SHARED_SECRET is not set — rejecting all tool calls in production");
+        res.status(401).json({ error: "Unauthorized" });
+        return false;
+      }
+      return true; // dev passthrough only
+    }
     const provided = req.headers["x-guber-secret"] as string | undefined;
     if (!provided || provided !== secret) {
       console.warn("[jac/tool] unauthorized request — bad or missing x-guber-secret");
@@ -33118,6 +33166,207 @@ OUTPUT STYLE:
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── D.D. Business Launch ──────────────────────────────────────────────────
+  // GET /api/dd/status — returns whether the authenticated user has unlocked D.D.
+  app.get("/api/dd/status", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId as number;
+      const user = await storage.getUser(userId);
+      res.json({ unlocked: !!user?.ddLaunchUnlocked });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to fetch D.D. status" });
+    }
+  });
+
+  // POST /api/dd/checkout — creates a Stripe checkout session for the $9.99 one-time D.D. unlock.
+  // Returns { checkoutUrl }. The client redirects to Stripe; on success Stripe
+  // calls the webhook which sets dd_launch_unlocked=true server-side.
+  app.post("/api/dd/checkout", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId as number;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      // If already unlocked, return a no-op success (never charge twice through normal flow)
+      if (user.ddLaunchUnlocked) {
+        return res.json({ already_unlocked: true });
+      }
+
+      const stripe = await import("stripe");
+      const stripeClient = new stripe.default(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2024-06-20" as any });
+
+      const baseUrl = process.env.APP_URL || process.env.APP_BASE_URL || "http://localhost:5000";
+
+      const session = await stripeClient.checkout.sessions.create({
+        mode: "payment",
+        payment_method_types: ["card"],
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: "D.D. Business Launch",
+                description: "Team GUBER Business Development · Guided Chat · One-time unlock · Permanent access",
+                images: [],
+              },
+              unit_amount: 999, // $9.99
+            },
+            quantity: 1,
+          },
+        ],
+        metadata: {
+          type: "dd_launch",
+          userId: String(userId),
+        },
+        customer_email: user.email,
+        success_url: `${baseUrl}/dd?dd_success=1`,
+        cancel_url: `${baseUrl}/dd`,
+      });
+
+      res.json({ checkoutUrl: session.url });
+    } catch (err: any) {
+      console.error("[dd/checkout]", err?.message);
+      res.status(500).json({ error: "Failed to create checkout session" });
+    }
+  });
+
+  // POST /api/dd/chat — D.D. Guided Chat endpoint.
+  // Requires dd_launch_unlocked=true. Uses DD_MODEL env var (default: gpt-4o-mini).
+  // D.D. is strictly business-startup focused; off-topic requests get a redirect to JAC.
+  app.post("/api/dd/chat", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId as number;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      if (!user.ddLaunchUnlocked) {
+        return res.status(403).json({ error: "D.D. Business Launch not unlocked", code: "dd_locked" });
+      }
+
+      const { messages } = req.body as { messages: { role: string; content: string }[] };
+      if (!Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({ error: "messages array required" });
+      }
+
+      const model = process.env.DD_MODEL || "gpt-4o-mini";
+
+      const DD_SYSTEM_PROMPT = `You are D.D., Team GUBER's Business Development guide.
+
+YOUR ROLE: Help users start, form, and register a legitimate business — step by step, one question at a time. You are a focused specialist, not a general-purpose AI.
+
+CORE RULE: ONE question. ONE decision. ONE next step. Never overwhelm with multiple questions or long legal walls of text.
+
+SCOPE — you cover:
+- Business structure (sole proprietor, LLC, S-Corp, partnership, C-Corp)
+- Business name (DBA, name availability, trademark basics)
+- State formation / registration (Secretary of State filings)
+- EIN (IRS application — always direct route first: irs.gov/businesses/small-businesses-self-employed/apply-for-an-employer-identification-number-ein-online)
+- State tax registration
+- County / city requirements
+- Licenses and permits (by industry and location)
+- Registered agent (when applicable)
+- Banking readiness (business checking account)
+- Insurance considerations (general liability, workers comp, etc.)
+- Payment / bookkeeping readiness
+- Existing GUBER Business onboarding when the business is ready to operate
+
+COVERAGE: You account for FEDERAL, STATE, COUNTY, CITY, and INDUSTRY requirements.
+
+COSTS — When you have enough info, show a cost breakdown in this JSON structure at the END of your message content:
+{
+  "costs": [
+    {
+      "label": "LLC Filing Fee",
+      "amount": "$50–$500",
+      "category": "pay_now",
+      "badge": "REQUIRED",
+      "feeType": "Government fee",
+      "freeAlt": false
+    }
+  ]
+}
+Categories: pay_now | can_wait | optional | recurring
+Badges: REQUIRED | REQUIRED FOR YOUR SITUATION | RECOMMENDED | OPTIONAL | NOT NEEDED
+feeType: Government fee | Third-party fee | GUBER fee
+If free alternative exists, set freeAlt: true.
+If budget is limited, prioritize free and necessary steps first.
+
+LINKS — When you reference a government resource, include clickable links in this JSON structure:
+{
+  "links": [
+    { "label": "Apply for EIN — IRS (free, online, instant)", "url": "https://www.irs.gov/businesses/small-businesses-self-employed/apply-for-an-employer-identification-number-ein-online" }
+  ]
+}
+NEVER fabricate a URL. Only include links you are confident are real and current as of your training.
+Always show the official/direct route first. Paid third-party services are never presented as mandatory.
+
+RESPONSE FORMAT:
+Return a JSON object with these fields:
+{
+  "content": "Your conversational response here — plain English, one step at a time.",
+  "links": [...],   // optional — only when you have official links to share
+  "costs": [...]    // optional — only when enough info exists to estimate costs
+}
+
+SAFETY — NEVER ask users for:
+- Social Security Numbers
+- Card numbers
+- Bank passwords
+- Tax return contents
+- Unnecessary identity documents
+If a government service needs sensitive info, send the user there with a link — do not collect it here.
+
+DISCLAIMER: You are not the user's attorney, CPA, insurance agent, or licensed professional. You cannot guarantee legal compliance, approval, or licensing. Always recommend consulting a qualified professional for complex situations.
+
+OFF-TOPIC: If someone asks about something unrelated to business formation/startup (sports scores, general advice, GUBER jobs, etc.), respond ONLY with:
+{
+  "content": "That's outside my department. I'm here to get your business started. Want me to send you back to JAC?"
+}
+
+OPENING: If this is the first message, greet warmly and ask what they want to start.
+
+START WITH: Ask only what you need to determine the correct path — business type, location, solo or partners, online/mobile/physical, employees now or later, budget available today.`;
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      // Sanitize messages: only allow user/assistant roles
+      const sanitizedMessages = messages
+        .filter(m => m.role === "user" || m.role === "assistant")
+        .map(m => ({ role: m.role as "user" | "assistant", content: String(m.content || "").slice(0, 4000) }));
+
+      const completion = await openai.chat.completions.create({
+        model,
+        messages: [
+          { role: "system", content: DD_SYSTEM_PROMPT },
+          ...sanitizedMessages,
+        ],
+        temperature: 0.4,
+        max_tokens: 800,
+        response_format: { type: "json_object" },
+      });
+
+      const rawContent = completion.choices[0]?.message?.content ?? "{}";
+      let parsed: { content?: string; links?: { label: string; url: string }[]; costs?: unknown[] } = {};
+      try {
+        parsed = JSON.parse(rawContent);
+      } catch {
+        parsed = { content: rawContent };
+      }
+
+      res.json({
+        content: parsed.content || "I'm here to help you get your business started. What would you like to set up?",
+        links: Array.isArray(parsed.links) ? parsed.links : undefined,
+        costs: Array.isArray(parsed.costs) ? parsed.costs : undefined,
+      });
+    } catch (err: any) {
+      console.error("[dd/chat]", err?.message);
+      res.status(500).json({ error: "D.D. is temporarily unavailable. Please try again in a moment." });
     }
   });
 

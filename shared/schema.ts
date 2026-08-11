@@ -248,6 +248,15 @@ export const users = pgTable("users", {
   // "marketing_manager" = full Campaign Lab access minus admin controls.
   // Admin (role="admin") always has full access regardless of this column.
   campaignLabRole: text("campaign_lab_role"),
+  // ── D.D. Business Launch (one-time $9.99 unlock) ──────────────────────────
+  // ddLaunchUnlocked: true once the Stripe checkout.session.completed webhook
+  // confirms payment for metadata.type === "dd_launch". Never set client-side.
+  // ddUnlockedAt: timestamp of first successful unlock (for analytics/support).
+  // ddStripeSessionId: the Stripe checkout session ID — non-card reference
+  // kept for audit, idempotency, and support. No card data is stored.
+  ddLaunchUnlocked: boolean("dd_launch_unlocked").default(false),
+  ddUnlockedAt: timestamp("dd_unlocked_at"),
+  ddStripeSessionId: text("dd_stripe_session_id"),
 });
 
 export const categories = pgTable("categories", {

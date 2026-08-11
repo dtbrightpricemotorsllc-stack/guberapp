@@ -1343,6 +1343,13 @@ app.use((req, res, next) => {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone TEXT;
   `).catch(e => console.error("[migration] users.timezone error:", e));
 
+  // D.D. Business Launch — one-time $9.99 unlock per GUBER account
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS dd_launch_unlocked BOOLEAN DEFAULT FALSE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS dd_unlocked_at TIMESTAMP;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS dd_stripe_session_id TEXT;
+  `).catch(e => console.error("[migration] users.dd_launch error:", e));
+
   // Add deleted_at to jobs (soft-delete; used by raw SQL in briefing/context queries)
   await pool.query(`
     ALTER TABLE jobs ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;

@@ -43,3 +43,22 @@ Worker (hostUserId on cashDrop) accepts mission → PICKUP → TRAVEL → DROP �
 ## Known Gap
 
 Worker photo proof stored in cashDrop.hostLogo (reused field). A dedicated `placementProofPhotoUrl` column on cashDrops would be cleaner — add in a future migration.
+
+## D.D. Business Launch ($9.99 one-time)
+
+D.D. is Team GUBER's Business Development specialist — strictly business-startup focused. NOT a general assistant. Separated from the existing "D.D." = Destination Determination (money-goal planner) which already existed. Naming collision: new feature uses `dd_launch_unlocked` / `dd_launch` type in Stripe metadata to stay distinct.
+
+**What was built:**
+- `shared/schema.ts`: `ddLaunchUnlocked`, `ddUnlockedAt`, `ddStripeSessionId` columns on users table
+- `server/index.ts`: startup migration for the 3 new columns (`IF NOT EXISTS`)
+- `server/routes.ts`: `GET /api/dd/status`, `POST /api/dd/checkout`, `POST /api/dd/chat` + Stripe webhook handler for `metadata.type === "dd_launch"`
+- `client/src/pages/dd-launch.tsx`: paywall → Guided Chat page (step counter, cost cards, clickable links, Back to JAC)
+- `client/src/App.tsx`: `/dd` route (ProtectedRoute)
+- JAC onboard + in-app prompts updated: D.D. introduction script, intent triggers (LLC, EIN, business formation, etc.), route: /dd
+- `DD_MODEL` env var controls the OpenAI model (default: gpt-4o-mini). Never hardcoded.
+
+**Security fix (same session):** `jacToolAuth` was fail-open when `GUBER_SHARED_SECRET` unset. Now fails-closed in `NODE_ENV=production`; dev passthrough preserved.
+
+**Stripe:** `metadata.type = "dd_launch"` in checkout session → webhook sets `ddLaunchUnlocked=true`. Double-charge protected: `already_unlocked` early-return on `/api/dd/checkout` + idempotent webhook check.
+
+**Why Guided Chat:** Business setup involves official links, deadlines, and costs users need to look back at — not suitable for voice-first.
