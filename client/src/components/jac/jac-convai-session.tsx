@@ -81,8 +81,9 @@ if (typeof window !== "undefined") {
       e.stopImmediatePropagation();
     }
   };
+  window.addEventListener("error", _jacElevenLabsGuard, true);
 
-type MicLostToken = { cb: (() => void) | null };
+  if (navigator.mediaDevices) {
     const _origGUM = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     navigator.mediaDevices.getUserMedia = async function (constraints: MediaStreamConstraints) {
       console.log("[JAC MIC DIAG] getUserMedia called — constraints:", JSON.stringify(constraints));
@@ -171,7 +172,7 @@ function sendVoiceTelemetry(
 
 // ── Test 1: Mic input diagnostic helper ──────────────────────────────────────
 //
-// Logs track metadata + measures audio levels via AnalyserNode for 600 ms.
+// Logs track metadata + measures audio levels via AnalyserNode for 150 ms.
 // Treated as a separate test from Test 2 (JAC audio output / ElevenLabs TTS).
 //
 // Does NOT stop the stream — caller is responsible for .stop().
@@ -212,7 +213,7 @@ async function diagnoseMicStream(stream: MediaStream, platform: string): Promise
       src.connect(analyser);
       const buf = new Uint8Array(analyser.frequencyBinCount);
       let maxRMS = 0;
-      const deadline = Date.now() + 600;
+      const deadline = Date.now() + 150;
 
       const tick = () => {
         analyser.getByteTimeDomainData(buf);
@@ -307,6 +308,10 @@ export type ConvaiPhase =
 export interface JacConvaiSessionHandle {
   toggleMute(): void;
   reconnect(): void;
+  /** true when the ElevenLabs WebSocket is fully connected */
+  readonly connected: boolean;
+  /** true when the mic is currently muted */
+  readonly isMuted: boolean;
 }
 
 interface Props {
@@ -573,16 +578,17 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           if (session.signedUrl) params.signedUrl = session.signedUrl;
           else                   params.agentId   = session.agentId;
 
-          // firstMessage is overridden so ElevenLabs TTS says "Jack" (not "J-A-C" from the
-          // dashboard-configured greeting which uses all-caps "JAC" — TTS spells it out as letters).
+          // Always suppress ElevenLabs' firstMessage so JAC never speaks a greeting
+          // when a new WebSocket session starts.  The greeting is shown immediately as
+          // static text in the React UI on page load — ElevenLabs re-speaking it on
+          // every mic tap / reconnect would sound like JAC is restarting the conversation
+          // from scratch, which is exactly the complaint we are fixing.
+          //
           // NOTE: overrides.agent only accepts { prompt, firstMessage, language } in SDK v1.9.0.
           // The `turn` field (turn_timeout, mode) is NOT in the SDK type and is silently dropped
           // by constructOverrides() — it never reaches ElevenLabs.  Do not add it here.
-          const jacFirstMessage = suppressFirstMessage
-            ? ""
-            : "Hey, I'm Jack — GUBER's opportunity assistant. What can I help you with today?";
           params.overrides = {
-            agent: { firstMessage: jacFirstMessage },
+            agent: { firstMessage: "" },
           };
 
           // Skip the SDK's built-in Android audio-mode delay (3 s).  That delay
@@ -668,6 +674,8 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         try { endSession(); } catch {}
         setTimeout(() => bootRef.current?.(), 350);
       },
+      connected,
+      isMuted,
     }), [connected, isMuted, setMuted, endSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return null;

@@ -112,12 +112,13 @@ const OPENING_OPTIONS = [
 
 const GREETING: JacMsg = {
   role: "assistant",
-  content: "Team GUBER!! 👋 Welcome to GUBER, America's AI-Powered Super App. I'm JAC, your Job Assistance Coordinator. Team GUBER is all about handling business. If it affects your money, your business, your time, or something you need done, I'm here to help. What are we getting done today?",
+  content: "Welcome to Team GUBER!! I'm JAC, your Job Assistance Coordinator. If it affects your money, your business, your time, or something you need handled, I'm here to help. What are we getting done today?",
   buttons: OPENING_OPTIONS,
 };
 
-// TTS-safe version of the greeting — no emojis, no double punctuation
-const GREETING_TTS = "Team GUBER! Welcome to GUBER, America's AI-Powered Super App. I'm Jack, your Job Assistance Coordinator. Team GUBER is all about handling business — money, work, buying, selling, time, or anything that needs doing. What are we getting done today?";
+// Kept for reference — the greeting is shown as text only, never spoken by TTS.
+// ElevenLabs firstMessage is always suppressed so voice never replays the greeting.
+const _GREETING_TTS_UNUSED = "";
 
 function toSpeechText(text: string): string {
   return text.replace(/GUBER/g, "Goober").replace(/Guber/g, "Goober").replace(/guber/g, "goober");
@@ -342,9 +343,13 @@ export function JacHomepage() {
   useEffect(() => { liveModeRef.current = liveMode; }, [liveMode]);
 
   const handleConvaiPhaseChange = useCallback((phase: ConvaiPhase) => {
-    if (phase === "error") { setLiveMode(false); setLiveState("idle"); return; }
+    // "error" is never emitted by the phase-derivation effect in JacConvaiSession;
+    // errors arrive via onError → handleConvaiError instead.  Skip this branch
+    // so a stale or future "error" phase doesn't silently kill the session.
     if (phase === "speaking") setLiveState("speaking");
     else if (phase === "listening") setLiveState("recording");
+    else if (phase === "muted") setLiveState("listening");
+    else if (phase === "connecting") setLiveState("listening"); // show "listening" not "connecting" while warming up
     else setLiveState("listening");
   }, []);
 
@@ -381,12 +386,19 @@ export function JacHomepage() {
     setLiveMode(false);
     setLiveState("idle");
     liveModeRef.current = false;
-    // Mic blocked, timeout, or connection failure: fall back silently.
-    // JAC speaks via TTS so the user still hears a welcome — no scary error bubble.
-    // If we detected an IAB-like browser, surface a soft "Open GUBER for full voice" hint.
-    greetingSpokenRef.current = false; // allow TTS to fire
-    jacSpeak(GREETING_TTS, { muted: mutedRef.current });
-    greetingSpokenRef.current = true;
+    // Do NOT replay the greeting — the user already sees it as text.
+    // Show a short, non-intrusive assistant message so they know what happened
+    // and that they can still type or tap mic to retry.
+    const isMicDenied = /denied|permission|blocked|NotAllowed/i.test(msg);
+    const errText = isMicDenied
+      ? "Mic access was blocked — check your browser permissions. You can still type below."
+      : "Voice is having trouble connecting. You can still type to me — or tap the mic to try again.";
+    setMessages(prev => {
+      // Only add the error note if the last message isn't already an identical one.
+      const last = prev[prev.length - 1];
+      if (last?.role === "assistant" && last.content === errText) return prev;
+      return [...prev, { role: "assistant" as const, content: errText }];
+    });
     if (isIAB) setShowOpenInBrowser(true);
   }, [isIAB]);
 
@@ -396,22 +408,35 @@ export function JacHomepage() {
   }
 
   function toggleLiveMode() {
-    if (liveMode) { stopLiveMode(); return; }
+    if (liveMode) {
+      // If the session is already connected, toggle mute rather than ending the
+      // session.  This lets users pause/resume mic mid-conversation without a
+      // cold reconnect — and critically without ElevenLabs replaying a greeting
+      // (firstMessage is always suppressed, so reconnect is silent anyway, but
+      // avoiding the cold reconnect latency is better UX).
+      if (convaiSessionRef.current?.connected) {
+        convaiSessionRef.current.toggleMute();
+        // liveState updates via handleConvaiPhaseChange when the SDK's isMuted flag changes.
+        return;
+      }
+      // Session exists but is still connecting or errored — stop it.
+      stopLiveMode();
+      return;
+    }
+    // ── Start a new voice session ────────────────────────────────────────────
     unlockAudioContext();
     cancelSpeech();
     cancelAllJacAudio();
     if (listening) stopListening();
     // Block text-TTS greeting immediately (sync) so the 120ms deferred speak()
-    // call from the touchstart listener no-ops — liveModeRef must be true before
-    // that timeout fires, but useEffect only runs after a re-render (too slow).
+    // call from any pending listener no-ops — liveModeRef must be true before
+    // that timeout fires; useEffect only runs after a re-render (too slow).
     greetingSpokenRef.current = true;
     liveModeRef.current = true;   // sync guard — speak() checks this ref directly
     setLiveMode(true);
     setLiveState("listening");
     // Do NOT bump convaiKey here — that remounts the component and wastes ~100ms.
-    // The active prop change alone restarts the session correctly.
-    // (Key only changes on explicit reconnect after an error.)
-    // Mark mic hint done on first use
+    // The active prop change alone triggers a new boot() run in JacConvaiSession.
     if (!micHintDone) {
       setMicHintDone(true);
       try { localStorage.setItem(JAC_MIC_HINT_KEY, "1"); } catch {}
@@ -469,37 +494,15 @@ export function JacHomepage() {
   // (user types before tapping mic) and toggleLiveMode (user taps mic first).
   const greetingSpokenRef = useRef(false);
 
-  // Auto-start ConvAI on the user's first gesture anywhere on the page.
-  // This means JAC fires up and talks the moment they interact — no mic button tap needed.
-  // If mic is blocked or ConvAI fails, handleConvaiError falls back silently to TTS.
-  // IAB browsers are excluded (text-only already).
-  useEffect(() => {
-    if (mode !== "chat") return;
-
-    function startOnGesture() {
-      unlockAudioContext();
-      if (liveModeRef.current) return; // already started
-      greetingSpokenRef.current = true; // prevent double-speak if ConvAI connects
-      liveModeRef.current = true;
-      cancelAllJacAudio();
-      setLiveMode(true);
-      setLiveState("listening");
-      if (!micHintDone) {
-        setMicHintDone(true);
-        try { localStorage.setItem(JAC_MIC_HINT_KEY, "1"); } catch {}
-      }
-    }
-
-    const opts: AddEventListenerOptions = { once: true, passive: true };
-    document.addEventListener("click",      startOnGesture, opts);
-    document.addEventListener("touchstart", startOnGesture, opts);
-    document.addEventListener("keydown",    startOnGesture, opts);
-    return () => {
-      document.removeEventListener("click",      startOnGesture, opts);
-      document.removeEventListener("touchstart", startOnGesture, opts);
-      document.removeEventListener("keydown",    startOnGesture, opts);
-    };
-  }, [mode, micHintDone]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Voice ONLY starts on explicit mic button tap (toggleLiveMode).
+  //
+  // Auto-start-on-gesture was removed because:
+  //  1. Any click — including focusing the text input — triggered a voice connection attempt.
+  //  2. When that attempt failed (mic permission denied, network, IAB browser), handleConvaiError
+  //     was called which previously replayed the TTS greeting — a confusing double-greeting.
+  //  3. The user explicitly wants: text = ready immediately, voice = explicit mic tap only.
+  //
+  // AudioContext is still unlocked on any gesture via the prewarm effect above.
 
   // CRT power-on: plays once for first-time visitors only.
   // Mark as seen in localStorage so subsequent visits skip straight to "done".
