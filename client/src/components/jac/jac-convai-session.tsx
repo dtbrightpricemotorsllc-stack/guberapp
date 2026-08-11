@@ -455,22 +455,39 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
             ? String(session.userContext.userId)
             : "anon";
 
-          const params: Record<string, any> = { dynamicVariables: dynVars };
+          const params: Record<string, any> = {
+            dynamicVariables: dynVars,
+            // Force WebSocket for every session regardless of whether we have a
+            // signedUrl or fall back to agentId (public-agent mode).
+            //
+            // Without this, the SDK infers the connection type: signedUrl → WebSocket,
+            // agentId-only → WebRTC.  WebRTC requires LiveKit ICE negotiation which
+            // hangs indefinitely on Samsung Internet (and some other Android browsers)
+            // without ever calling onConnect or onError, leaving JAC stuck on
+            // "connecting…" forever.  WebSocket is reliable across all browsers and
+            // is the correct transport for ElevenLabs ConvAI.
+            connectionType: "websocket",
+          };
           if (session.signedUrl) params.signedUrl = session.signedUrl;
           else                   params.agentId   = session.agentId;
 
-          // Always apply overrides — target ~500ms silence → end of turn (default is ~2-3s).
-          // firstMessage is always overridden so ElevenLabs TTS says "Jack" (not "J-A-C" from the
+          // firstMessage is overridden so ElevenLabs TTS says "Jack" (not "J-A-C" from the
           // dashboard-configured greeting which uses all-caps "JAC" — TTS spells it out as letters).
+          // NOTE: overrides.agent only accepts { prompt, firstMessage, language } in SDK v1.9.0.
+          // The `turn` field (turn_timeout, mode) is NOT in the SDK type and is silently dropped
+          // by constructOverrides() — it never reaches ElevenLabs.  Do not add it here.
           const jacFirstMessage = suppressFirstMessage
             ? ""
             : "Hey, I'm Jack — GUBER's opportunity assistant. What can I help you with today?";
           params.overrides = {
-            agent: {
-              firstMessage: jacFirstMessage,
-              turn: { turn_timeout: 0.5, mode: "turn" },
-            },
-          } as any;
+            agent: { firstMessage: jacFirstMessage },
+          };
+
+          // Skip the SDK's built-in Android audio-mode delay (3 s).  That delay
+          // was added for WebRTC/LiveKit which needs the Android AudioManager to
+          // switch modes.  We force WebSocket above, so the delay is unnecessary
+          // and only makes the "connecting…" state feel sluggish on Android.
+          params.connectionDelay = { default: 0, android: 0, ios: 0 };
 
           // AudioContext was already unlocked above — start session immediately.
           if (cancelRef.current) return;
