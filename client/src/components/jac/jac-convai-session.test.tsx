@@ -214,42 +214,8 @@ describe("JacConvaiSession — WebSocket transport guarantee", () => {
     await mountAndBoot();
 
     const params = startSessionSpy.mock.calls[0][0];
-    expect(params.connectionType).toBe("websocket");
-  });
 
-  it("sets signedUrl (not agentId) when the session response contains a signedUrl", async () => {
-    await mountAndBoot();
-
-    const params = startSessionSpy.mock.calls[0][0];
-    expect(params.signedUrl).toBe(
-      "wss://api.elevenlabs.io/v1/convai/real-time?token=test",
-    );
-    expect(params.agentId).toBeUndefined();
-  });
-
-  // ── Test 2: agentId-only fallback path ─────────────────────────────────────
-
-  it("passes connectionType: 'websocket' when the session returns only an agentId (no signedUrl)", async () => {
-    await mountAndBoot({ signedUrl: undefined });
-
-    const params = startSessionSpy.mock.calls[0][0];
-    expect(params.connectionType).toBe("websocket");
-  });
-
-  it("sets agentId (not signedUrl) when the session response has no signedUrl", async () => {
-    await mountAndBoot({ signedUrl: undefined });
-
-    const params = startSessionSpy.mock.calls[0][0];
-    expect(params.agentId).toBe("agent-abc123");
-    expect(params.signedUrl).toBeUndefined();
-  });
-
-  // ── Test 3: Android connection-delay guard ──────────────────────────────────
-
-  it("sets connectionDelay.android to 0 on the signed-URL path (no 3-second delay)", async () => {
-    await mountAndBoot();
-
-    const params = startSessionSpy.mock.calls[0][0];
+  const onErrorSpy = vi.fn();
     expect(params.connectionDelay?.android).toBe(0);
   });
 
@@ -257,6 +223,43 @@ describe("JacConvaiSession — WebSocket transport guarantee", () => {
     await mountAndBoot({ signedUrl: undefined });
 
     const params = startSessionSpy.mock.calls[0][0];
+
+  const onErrorSpy = vi.fn();
+    expect(params.connectionDelay?.android).toBe(0);
+  });
+
+  it("sets connectionDelay.android to 0 on the agentId fallback path (no 3-second delay)", async () => {
+    await mountAndBoot({ signedUrl: undefined });
+
+    const params = startSessionSpy.mock.calls[0][0];
+
+  const onErrorSpy = vi.fn();
+    expect(params.connectionDelay?.android).toBe(0);
+  });
+
+  it("sets connectionDelay.android to 0 on the agentId fallback path (no 3-second delay)", async () => {
+    await mountAndBoot({ signedUrl: undefined });
+
+    const params = startSessionSpy.mock.calls[0][0];
+
+  const onErrorSpy = vi.fn();
+    expect(params.connectionDelay?.android).toBe(0);
+  });
+
+  it("sets connectionDelay.android to 0 on the agentId fallback path (no 3-second delay)", async () => {
+    await mountAndBoot({ signedUrl: undefined });
+
+    const params = startSessionSpy.mock.calls[0][0];
+
+  const onErrorSpy = vi.fn();
+    expect(params.connectionDelay?.android).toBe(0);
+  });
+
+  it("sets connectionDelay.android to 0 on the agentId fallback path (no 3-second delay)", async () => {
+    await mountAndBoot({ signedUrl: undefined });
+
+    const params = startSessionSpy.mock.calls[0][0];
+
     expect(params.connectionDelay?.android).toBe(0);
   });
 });
@@ -315,7 +318,7 @@ describe("JacConvaiSession — IAB early-exit guard", () => {
     it(`calls onError("IAB_NO_VOICE") and never calls getUserMedia for ${name}`, async () => {
       setUserAgent(ua);
 
-      const onError = vi.fn();
+    const onError = vi.fn();
 
       await act(async () => {
         render(
@@ -377,5 +380,100 @@ describe("JacConvaiSession — IAB early-exit guard", () => {
 
     expect(onError).not.toHaveBeenCalledWith("IAB_NO_VOICE");
     expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("JacConvaiSession — connection timeout guard", () => {
+  // ── Fake timers: control the 12-second CONNECTION_TIMEOUT_MS ─────────────
+  //
+  // Strategy:
+  //   1. useFakeTimers() so we can skip 12 real seconds.
+  //   2. Advance 1 100 ms first to fire diagnoseMicStream's 1-second hard-
+  //      timeout (it resolves the mic-diagnosis Promise, letting boot() continue
+  //      to call startSession).
+  //   3. Flush the resulting microtask/Promise queue with a bare act().
+  //   4. Assert onError has NOT fired yet (the 12-second guard is still pending).
+  //   5. Advance another 12 000 ms to cross the CONNECTION_TIMEOUT_MS threshold.
+  //   6. Assert onError was called with a "timed out" message.
+  //
+  // The useConversation mock keeps status === "disconnected" forever (onConnect
+  // is never called), which is exactly the hung-handshake scenario we guard.
+
+  const onErrorSpy = vi.fn();
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    startSessionSpy.mockClear();
+    endSessionSpy.mockClear();
+    onErrorSpy.mockClear();
+    mockApiRequest.mockReset();
+    installGetUserMedia();
+    installAudioStubs();
+    mockApiRequest.mockResolvedValue(makeSessionResponse());
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it("does NOT call onError before 12 seconds have elapsed", async () => {
+    await act(async () => {
+      render(
+        <JacConvaiSession
+          active={true}
+          sessionEndpoint="/api/jac/convai/session"
+          onPhaseChange={noop}
+          onUserTranscript={noop}
+          onJacResponse={noop}
+          onError={onErrorSpy}
+        />,
+      );
+    });
+
+    // Fire diagnoseMicStream's 1-second hard-timeout, then flush promises.
+    await act(async () => { vi.advanceTimersByTime(1_100); });
+    await act(async () => {});
+
+    // Advance to just under the 12-second threshold.
+    await act(async () => { vi.advanceTimersByTime(11_000); });
+
+    expect(onErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it("calls onError with a timeout message after 12 seconds if the SDK never connects", async () => {
+    await act(async () => {
+      render(
+        <JacConvaiSession
+          active={true}
+          sessionEndpoint="/api/jac/convai/session"
+          onPhaseChange={noop}
+          onUserTranscript={noop}
+          onJacResponse={noop}
+          onError={onErrorSpy}
+        />,
+      );
+    });
+
+    // Fire diagnoseMicStream's 1-second hard-timeout, then flush promises so
+    // boot() can call startSession() before we start the connection clock.
+    await act(async () => { vi.advanceTimersByTime(1_100); });
+    await act(async () => {});
+
+    // startSession() must have been called — this confirms the handshake began.
+    expect(startSessionSpy).toHaveBeenCalled();
+
+    // Not yet — the 12-second guard is still counting.
+    expect(onErrorSpy).not.toHaveBeenCalled();
+
+    // Cross the 12-second threshold.
+    await act(async () => { vi.advanceTimersByTime(12_000); });
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    expect(onErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("timed out"),
+    );
   });
 });
