@@ -479,8 +479,22 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
   });
 
   const acceptMutation = useMutation({
-    mutationFn: ({ waiverAccepted, categoryWaiverAccepted, availableFrom: af, availableTo: at }: { waiverAccepted: boolean; categoryWaiverAccepted: boolean; availableFrom: string; availableTo: string }) =>
-      apiRequest("POST", `/api/jobs/${jobId}/accept`, {
+    mutationFn: async ({ waiverAccepted, categoryWaiverAccepted, availableFrom: af, availableTo: at }: { waiverAccepted: boolean; categoryWaiverAccepted: boolean; availableFrom: string; availableTo: string }) => {
+      // Best-effort GPS: the server proximity gate needs the worker's
+      // coordinates for ASAP / urgent / On-Demand jobs. If GPS is denied,
+      // timed out, or otherwise unavailable the request is sent without coords
+      // and the server fails-open — the worker is never blocked solely because
+      // GPS was unavailable on their device.
+      let workerLat: number | undefined;
+      let workerLng: number | undefined;
+      try {
+        const pos = await gpsGetCurrentPosition({ enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 });
+        workerLat = pos.coords.latitude;
+        workerLng = pos.coords.longitude;
+      } catch {
+        // GPS unavailable — proceed without coordinates
+      }
+      return apiRequest("POST", `/api/jobs/${jobId}/accept`, {
         waiverAccepted,
         categoryWaiverAccepted,
         availableFrom: af,
@@ -488,7 +502,9 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         // Always send the worker's IANA timezone so the server validates
         // "same day" checks in the worker's local time, not UTC.
         timezone: (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return undefined; } })(),
-      }),
+        ...(workerLat != null && workerLng != null ? { workerLat, workerLng } : {}),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
       setShowWaiverModal(false);

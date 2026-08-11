@@ -220,6 +220,7 @@ async function creditReferrer(referredUserId: number) {
 }
 
 import { notifyNearbyAvailableWorkers } from "./notify-helpers";
+import { checkProximityGate } from "./job-accept-proximity";
 
 function computeProofConfidence(user: any): { score: number; level: string } {
   const completed = Math.max(user.jobsCompleted || 0, 1);
@@ -10368,6 +10369,20 @@ export async function registerRoutes(
 
       if (!isDemo && helper.stripeAccountStatus !== "active") {
         return res.status(403).json({ message: "STRIPE_CONNECT_REQUIRED", detail: "You must complete payment setup before accepting jobs." });
+      }
+
+      // ── 20-mile proximity gate ─────────────────────────────────────────────
+      // ASAP / urgent-switch / On-Demand Help jobs require the worker to be
+      // within 20 miles. Scheduled / appointment jobs are unconditionally
+      // exempt so a specialist who pre-books a future slot is never blocked.
+      // Gate is skipped when either party has no GPS coordinates (fail-open).
+      const proximityErr = checkProximityGate(
+        job as any,
+        req.body.workerLat ?? null,
+        req.body.workerLng ?? null,
+      );
+      if (proximityErr) {
+        return res.status(403).json(proximityErr);
       }
 
       const userTierIdx = TIER_ORDER.indexOf(helper.tier);
