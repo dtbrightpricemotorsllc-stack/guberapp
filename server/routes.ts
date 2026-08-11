@@ -19180,6 +19180,57 @@ CRITICAL — respond with JSON ONLY, no other text:
     }
   });
 
+  // ── JAC voice telemetry beacon ────────────────────────────────────────────
+  // Fire-and-forget POST from the client reporting connection outcomes (connect,
+  // timeout, error, disconnect). No auth required. Rate-limited to 20 req/min
+  // per IP. Logs only non-PII metadata: event, platform, reason.
+  {
+    const _telemetryRateMap = new Map<string, { count: number; resetAt: number }>();
+    const TELEMETRY_RATE_LIMIT = 20;
+    const TELEMETRY_WINDOW_MS  = 60_000;
+    const ALLOWED_EVENTS       = new Set(["connect", "timeout", "error", "disconnect"]);
+    const ALLOWED_PLATFORMS    = new Set([
+      "web", "ios_native", "android_native", "ios_safari", "android_chrome",
+      "pwa", "facebook_iab", "instagram_iab", "tiktok_iab", "linkedin_iab", "unknown",
+    ]);
+
+    app.post("/api/jac/convai/telemetry", (req: Request, res: Response) => {
+      // Rate limit by IP
+      const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+      const now = Date.now();
+      const bucket = _telemetryRateMap.get(ip);
+      if (bucket && now < bucket.resetAt) {
+        if (bucket.count >= TELEMETRY_RATE_LIMIT) {
+          return res.status(429).json({ ok: false });
+        }
+        bucket.count++;
+      } else {
+        _telemetryRateMap.set(ip, { count: 1, resetAt: now + TELEMETRY_WINDOW_MS });
+      }
+
+      // Validate + sanitize inputs — never log raw user-supplied strings verbatim
+      const rawEvent    = String(req.body?.event    ?? "").slice(0, 32);
+      const rawPlatform = String(req.body?.platform ?? "").slice(0, 32);
+      const rawReason   = String(req.body?.reason   ?? "").slice(0, 120);
+
+      const event    = ALLOWED_EVENTS.has(rawEvent)       ? rawEvent    : "unknown";
+      const platform = ALLOWED_PLATFORMS.has(rawPlatform) ? rawPlatform : "unknown";
+      // Sanitize reason: strip any token-like strings (long alphanumeric runs)
+      const reason   = rawReason.replace(/[A-Za-z0-9_\-]{40,}/g, "[redacted]") || undefined;
+
+      const label = `[jac/convai/telemetry] event=${event} platform=${platform}${reason ? ` reason="${reason}"` : ""}`;
+      if (event === "connect") {
+        console.log(`✅ ${label}`);
+      } else if (event === "disconnect") {
+        console.log(`🔌 ${label}`);
+      } else {
+        console.warn(`⚠️  ${label}`);
+      }
+
+      return res.status(204).end();
+    });
+  }
+
   // ── JAC voice session mint (ElevenLabs Conversational AI) ─────────────────
   // Authenticated + voice_pipeline_v2-gated. Returns a short-lived signed URL
   // for the PRIVATE ElevenLabs agent PLUS a per-conversation HMAC identity token

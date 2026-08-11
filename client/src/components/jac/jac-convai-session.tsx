@@ -134,6 +134,25 @@ import { useConversation } from "@elevenlabs/react";
 import { apiRequest } from "@/lib/queryClient";
 import { unlockAudioContext, setJacConvaiActive, cancelAllJacAudio } from "@/lib/jac-tts";
 
+// ── Voice telemetry beacon ────────────────────────────────────────────────────
+// Fire-and-forget POST so the server can log connection outcomes without any
+// client-side latency impact. Errors are silently swallowed — telemetry must
+// never break the voice session itself.
+function sendVoiceTelemetry(event: "connect" | "timeout" | "error" | "disconnect", platform: string, reason?: string): void {
+  try {
+    const body: Record<string, string> = { event, platform };
+    if (reason) body.reason = reason.slice(0, 120);
+    fetch("/api/jac/convai/telemetry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    // swallow — telemetry must never throw
+  }
+}
+
 // ── Test 1: Mic input diagnostic helper ──────────────────────────────────────
 //
 // Logs track metadata + measures audio levels via AnalyserNode for 600 ms.
@@ -291,6 +310,10 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
       cbRef.current = { onPhaseChange, onUserTranscript, onJacResponse, onError };
     });
 
+    // Platform ref — written by boot() so onConnect/onError/onDisconnect can
+    // include it in telemetry without relying on a closure over a stale value.
+    const platformRef = useRef<string>("unknown");
+
     // Track the active prop in a ref so async callbacks (onDisconnect, timeout)
     // can read the current value without stale closures.
     const activeRef = useRef(active);
@@ -324,6 +347,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         clearConnectTimeout();
         setJacConvaiActive(true);
         cancelAllJacAudio();
+        sendVoiceTelemetry("connect", platformRef.current);
       },
       onDisconnect: () => {
         // Release audio ownership so text-mode TTS can resume if needed.
@@ -335,12 +359,14 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         // phase calculation below would loop back to "connecting…" forever
         // because active stays true but status goes to "disconnected".
         if (activeRef.current && !cancelRef.current) {
+          sendVoiceTelemetry("disconnect", platformRef.current, "unexpected_disconnect");
           cbRef.current.onError("Voice disconnected. Tap the mic to retry.");
         }
       },
       onError: (msg: string) => {
         clearConnectTimeout();
         setJacConvaiActive(false);
+        sendVoiceTelemetry("error", platformRef.current, msg || "unknown_error");
         cbRef.current.onError(msg || "Voice connection lost.");
       },
       onMessage: (({ source, message }: { source: "ai" | "user"; message: string }) => {
@@ -400,6 +426,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         try {
           unlockAudioContext();
           const platform = detectJacPlatform();
+          platformRef.current = platform; // capture for use by onConnect/onError/onDisconnect
           const isIAB = /iab/.test(platform); // facebook_iab, instagram_iab, etc.
 
           // In-app browsers (Facebook, Instagram, Messenger, TikTok, LinkedIn)
@@ -530,6 +557,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           // retry state.  It is cleared by onConnect / onDisconnect / onError.
           connectTimeoutRef.current = setTimeout(() => {
             if (!cancelRef.current) {
+              sendVoiceTelemetry("timeout", platformRef.current, `no_connect_in_${CONNECTION_TIMEOUT_MS}ms`);
               try { endSession(); } catch {}
               cbRef.current.onError("Voice connection timed out. Tap the mic to retry.");
             }
