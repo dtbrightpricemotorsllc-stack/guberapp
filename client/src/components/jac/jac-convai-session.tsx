@@ -9,6 +9,18 @@
  * Must be rendered inside a <ConversationProvider>.
  */
 
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  Component,
+} from "react";
+import type { ReactNode } from "react";
+import { useConversation } from "@elevenlabs/react";
+import { apiRequest } from "@/lib/queryClient";
+import { unlockAudioContext, setJacConvaiActive, cancelAllJacAudio } from "@/lib/jac-tts";
+
 // ── RTCDataChannel monkey-patch — must run at IMPORT TIME before the SDK ──────
 //
 // The ElevenLabs SDK's _WebRTCConnection.onMessage crashes with:
@@ -69,25 +81,8 @@ if (typeof window !== "undefined") {
       e.stopImmediatePropagation();
     }
   };
-  window.addEventListener("error", _jacElevenLabsGuard, true);
-}
 
-// ── Mic + WebRTC diagnostic patches ──────────────────────────────────────────
-//
-// These patches intercept EVERY getUserMedia call (including ElevenLabs SDK
-// internal ones) and EVERY RTCPeerConnection.addTrack call, so we can trace
-// the complete microphone flow end-to-end in adb logcat / browser console.
-//
-// Idempotent — guarded by __guberMicDiagInstalled so hot-reloads don't
-// double-wrap.  Only installed in a browser context.
-//
-// Test 1: permission-check stream (our getUserMedia call in boot())
-// Test 2: ElevenLabs internal stream (SDK's own getUserMedia + addTrack)
-if (typeof window !== "undefined" && !(window as any).__guberMicDiagInstalled) {
-  (window as any).__guberMicDiagInstalled = true;
-
-  // Patch navigator.mediaDevices.getUserMedia ──────────────────────────────
-  if (navigator?.mediaDevices?.getUserMedia) {
+type MicLostToken = { cb: (() => void) | null };
     const _origGUM = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     navigator.mediaDevices.getUserMedia = async function (constraints: MediaStreamConstraints) {
       console.log("[JAC MIC DIAG] getUserMedia called — constraints:", JSON.stringify(constraints));
@@ -100,6 +95,17 @@ if (typeof window !== "undefined" && !(window as any).__guberMicDiagInstalled) {
             `[JAC MIC DIAG] audio track[${i}]: label="${t.label}" ` +
             `enabled=${t.enabled} muted=${t.muted} readyState="${t.readyState}"`
           );
+          // ── Mid-session mic revocation guard ──────────────────────────────
+          t.addEventListener("ended", () => {
+            console.warn(`[JAC ConvAI] Mic track[${i}] ended mid-session — signalling mic-lost`);
+            _fireMicLost();
+          });
+          t.addEventListener("mute", () => {
+            console.warn(
+              `[JAC ConvAI] Mic track[${i}] muted mid-session — readyState="${t.readyState}"`
+            );
+            _fireMicLost();
+          });
         });
         return stream;
       } catch (err: any) {
@@ -110,7 +116,8 @@ if (typeof window !== "undefined" && !(window as any).__guberMicDiagInstalled) {
   }
 
   // Patch RTCPeerConnection.addTrack ───────────────────────────────────────
-  // Fires when ElevenLabs SDK feeds the mic stream into the WebRTC peer.
+  // Belt-and-suspenders: also attaches _fireMicLost() listeners at the WebRTC
+  // layer so revocation is caught even if the WebSocket transport switches paths.
   if (typeof RTCPeerConnection !== "undefined") {
     const _origAddTrack = RTCPeerConnection.prototype.addTrack;
     RTCPeerConnection.prototype.addTrack = function (
@@ -122,22 +129,23 @@ if (typeof window !== "undefined" && !(window as any).__guberMicDiagInstalled) {
           `[JAC MIC DIAG] RTCPeerConnection.addTrack — kind=audio ` +
           `label="${track.label}" enabled=${track.enabled} muted=${track.muted} readyState="${track.readyState}"`
         );
+        track.addEventListener("ended", () => {
+          console.warn("[JAC ConvAI] Mic track ended mid-session — signalling mic-lost");
+          _fireMicLost();
+        });
+        track.addEventListener("mute", () => {
+          console.warn(
+            `[JAC ConvAI] Mic track muted mid-session — readyState="${track.readyState}"`
+          );
+          _fireMicLost();
+        });
       }
       return _origAddTrack.call(this, track, ...streams);
     };
   }
 }
 
-import { Component, forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import type { ReactNode } from "react";
-import { useConversation } from "@elevenlabs/react";
-import { apiRequest } from "@/lib/queryClient";
-import { unlockAudioContext, setJacConvaiActive, cancelAllJacAudio } from "@/lib/jac-tts";
-
-// ── Voice telemetry beacon ────────────────────────────────────────────────────
-// Fire-and-forget POST so the server can log connection outcomes without any
-// client-side latency impact. Errors are silently swallowed — telemetry must
-// never break the voice session itself.
+// ── Voice telemetry ───────────────────────────────────────────────────────────
 function sendVoiceTelemetry(
   event: "connect" | "timeout" | "error" | "disconnect",
   platform: string,
@@ -345,6 +353,19 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
       }
     }
 
+    // Mic-lost flag — set to true by the arm callback before it calls endSession()
+    // so onDisconnect (which fires shortly after) can suppress its own second error.
+    // Using a dedicated ref instead of cancelRef.current means the normal retry path
+    // (active → false → true via tap) still works: cancelRef is reset at the top of
+    // the active=true effect, but micLostRef is only ever set/cleared here.
+    const micLostRef = useRef(false);
+
+    // Per-instance token for the _micLostRegistry.  Created when the guard is
+    // armed (after startSession), removed when the session tears down.  Storing
+    // it in a ref means each render/effect closure always touches the same token,
+    // and cleanup of THIS instance never touches another instance's token.
+    const micLostTokenRef = useRef<MicLostToken | null>(null);
+
     const {
       startSession,
       endSession,
@@ -366,6 +387,12 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         // Release audio ownership so text-mode TTS can resume if needed.
         clearConnectTimeout();
         setJacConvaiActive(false);
+        // Disarm this instance's mic-lost token — session is intentionally gone.
+        if (micLostTokenRef.current) { _disarmToken(micLostTokenRef.current); micLostTokenRef.current = null; }
+        // If micLostRef is set, this disconnect was triggered by our own
+        // mic-lost teardown — the caller already surfaced "Mic lost" to the
+        // user, so suppress the second "Voice disconnected" bubble here.
+        if (micLostRef.current) { micLostRef.current = false; return; }
         // If the session ended while active is still true (i.e. NOT because
         // the user tapped the mic button off), this is an unexpected disconnect
         // (network drop, ElevenLabs timeout, etc.).  Without this error, the
@@ -379,6 +406,9 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
       onError: (msg: string) => {
         clearConnectTimeout();
         setJacConvaiActive(false);
+        // Disarm this instance's mic-lost token so a track "ended" event that
+        // arrives after the ElevenLabs error callback doesn't fire redundantly.
+        if (micLostTokenRef.current) { _disarmToken(micLostTokenRef.current); micLostTokenRef.current = null; }
         sendVoiceTelemetry("error", platformRef.current, msg || "unknown_error", voiceTokenRef.current);
         cbRef.current.onError(msg || "Voice connection lost.");
       },
@@ -565,6 +595,40 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           if (cancelRef.current) return;
           startSession(params as any);
 
+          // ── Mid-session mic-lost guard ──────────────────────────────────────
+          // Create a per-instance token and add it to the _micLostRegistry AFTER
+          // startSession() so the getUserMedia / addTrack patches have a handler
+          // to call when Samsung Internet / Android WebView revokes the mic track
+          // (e.g. screen lock or backgrounding mid-session).
+          // We delay one tick so cancelRef has a chance to flip true if the
+          // effect cleanup runs synchronously (fast un-mount edge case).
+          // Using a per-instance token (not a module-global singleton) ensures
+          // that two simultaneous JacConvaiSession mounts (homepage + assistant
+          // sheet) own independent tokens — unmounting one never disarms the other.
+          setTimeout(() => {
+            if (cancelRef.current) return;
+            const token: MicLostToken = { cb: null };
+            micLostTokenRef.current = token;
+            _micLostRegistry.add(token);
+            token.cb = () => {
+              if (cancelRef.current) return; // deliberate teardown already in progress
+              console.warn("[JAC ConvAI] Mic lost mid-session — tearing down and surfacing error");
+              // self-disarm (_fireMicLost already cleared token.cb, but be explicit)
+              token.cb = null;
+              _micLostRegistry.delete(token);
+              if (micLostTokenRef.current === token) micLostTokenRef.current = null;
+              // Signal onDisconnect to suppress its own error bubble — we are
+              // about to surface "Mic lost" ourselves.  We use a dedicated ref
+              // rather than setting cancelRef.current so the normal retry path
+              // (active → false → true on the next mic tap) is not blocked:
+              // cancelRef is reset at the top of the active=true effect run,
+              // so keeping it false here ensures boot() can start a fresh session.
+              micLostRef.current = true;
+              try { endSession(); } catch {}
+              cbRef.current.onError("Mic lost — tap the mic to reconnect.");
+            };
+          }, 0);
+
           // Guard against an indefinite "connecting…" state.  If the SDK's
           // webSessionSetup or WebSocket handshake hangs (network timeout,
           // STUN failure, slow ElevenLabs response, etc.), the status never
@@ -591,6 +655,10 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
       return () => {
         cancelRef.current = true;
         clearConnectTimeout();
+        // Disarm THIS instance's mic-lost token — does not affect any other
+        // mounted instance's token (e.g. guber-assistant sheet still open).
+        if (micLostTokenRef.current) { _disarmToken(micLostTokenRef.current); micLostTokenRef.current = null; }
+        micLostRef.current = false;
       };
     }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -620,4 +688,35 @@ export class ConvaiCrashBoundary extends Component<
   }
   reset() { this.setState({ crashed: false }); }
   render() { return this.state.crashed ? null : this.props.children; }
+}
+
+/**
+ * Test-only escape hatch — fires _fireMicLost() directly so unit tests can
+ * simulate a mid-session mic revocation without having to fake a real
+ * MediaStreamTrack "ended" event from inside jsdom.
+ *
+ * @internal — never import or call this in production code.
+ */
+export function _testOnlyFireMicLost(): void {
+  _fireMicLost();
+}
+
+/** Fire every armed token in the registry (then self-disarm them). */
+function _fireMicLost(): void {
+  for (const token of [..._micLostRegistry]) {
+    if (token.cb) {
+      const cb = token.cb;
+      token.cb = null;
+      _micLostRegistry.delete(token);
+      cb();
+    }
+  }
+}
+
+const _micLostRegistry = new Set<MicLostToken>();
+
+/** Remove a specific instance's token without affecting others. */
+function _disarmToken(token: MicLostToken): void {
+  token.cb = null;
+  _micLostRegistry.delete(token);
 }

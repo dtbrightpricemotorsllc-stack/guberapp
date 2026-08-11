@@ -1,22 +1,19 @@
 // @vitest-environment jsdom
 //
-// Unit test: JAC voice WebSocket transport guarantee.
+// Unit tests: JAC voice session controller.
 //
-// The Samsung Internet "connecting…" hang was caused by the ElevenLabs SDK
-// silently falling back to WebRTC/LiveKit ICE negotiation when no signedUrl was
-// present. The fix (force `connectionType: "websocket"`) must survive future
-// refactors of the params-construction block.
-//
-// Verifies:
-//   1. startSession() receives connectionType: "websocket" when the session
-//      server returns a signedUrl (standard signed-URL path).
-//   2. startSession() receives connectionType: "websocket" when the session
-//      server returns only an agentId (public-agent fallback path).
-//      — signedUrl must be absent, agentId must be set in this case.
-//   3. connectionDelay.android === 0 in both cases (the 3-second WebRTC/LiveKit
-//      Android audio-mode delay must not be re-introduced for WebSocket sessions).
+// Covers:
+//   1. WebSocket transport guarantee — startSession() must always receive
+//      connectionType: "websocket" (WebRTC/LiveKit caused Samsung Internet hangs).
+//   2. IAB early-exit guard — Facebook, Instagram, TikTok, LinkedIn in-app
+//      browsers must never reach getUserMedia (it hangs indefinitely there).
+//   3. Connection timeout guard — onError fires after 12 s if the SDK never
+//      reaches "connected" (prevents the UI from being stuck on "connecting…").
+//   4. Mic-lost recovery — Samsung Internet / Android WebView mid-session
+//      mic revocation must tear the session down cleanly with exactly one error,
+//      using a per-instance token registry so two simultaneous mounts are isolated.
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
 import { render, act, cleanup, waitFor } from "@testing-library/react";
 import React from "react";
 
@@ -25,16 +22,27 @@ import React from "react";
 const startSessionSpy = vi.hoisted(() => vi.fn());
 const endSessionSpy   = vi.hoisted(() => vi.fn());
 
+// Captured by the useConversation mock so tests can fire onDisconnect manually
+// to verify it does NOT emit a second error after mic-lost teardown.
+let _capturedConvaiHandlers: {
+  onConnect?: () => void;
+  onDisconnect?: () => void;
+  onError?: (msg: string) => void;
+} = {};
+
 vi.mock("@elevenlabs/react", () => ({
-  useConversation: vi.fn(() => ({
-    startSession: startSessionSpy,
-    endSession:   endSessionSpy,
-    status:       "disconnected",
-    isSpeaking:   false,
-    isListening:  false,
-    isMuted:      false,
-    setMuted:     vi.fn(),
-  })),
+  useConversation: vi.fn((handlers: any) => {
+    _capturedConvaiHandlers = handlers ?? {};
+    return {
+      startSession: startSessionSpy,
+      endSession:   endSessionSpy,
+      status:       "disconnected",
+      isSpeaking:   false,
+      isListening:  false,
+      isMuted:      false,
+      setMuted:     vi.fn(),
+    };
+  }),
 }));
 
 // ── Mock apiRequest (session endpoint) ────────────────────────────────────────
@@ -55,7 +63,7 @@ vi.mock("@/lib/jac-tts", () => ({
 
 // ── Import component AFTER all mocks are registered ──────────────────────────
 
-import { JacConvaiSession } from "./jac-convai-session";
+import { JacConvaiSession, _testOnlyFireMicLost } from "./jac-convai-session";
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
 
@@ -126,9 +134,6 @@ function installAudioStubs() {
 
   // Call the callback once so the sampling path runs normally, then switch
   // to a no-op for subsequent rAF calls so the loop doesn't recurse forever.
-  // After one tick, Date.now() is still inside the 600 ms window, so tick
-  // calls rAF again — which hits the no-op and stops, leaving the
-  // 1-second hard-timeout to resolve the promise.
   let rAFCallCount = 0;
   (globalThis as any).requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
     if (rAFCallCount === 0) {
@@ -180,10 +185,6 @@ describe("JacConvaiSession — WebSocket transport guarantee", () => {
     cleanup();
   });
 
-  // ── Helper: render the session controller and wait for boot() to call startSession ─
-  //
-  // Uses real timers throughout.  diagnoseMicStream resolves after its 1-second
-  // hard-timeout; waitFor polls (up to 3 s) until startSession has been called.
   async function mountAndBoot(sessionOverrides: Record<string, any> = {}) {
     mockApiRequest.mockResolvedValue(makeSessionResponse(sessionOverrides));
 
@@ -200,34 +201,28 @@ describe("JacConvaiSession — WebSocket transport guarantee", () => {
       );
     });
 
-    // diagnoseMicStream has a 1-second hard-timeout.  waitFor polls until
-    // startSession is called (which happens synchronously once boot() resumes).
     await waitFor(
       () => expect(startSessionSpy).toHaveBeenCalled(),
       { timeout: 3000, interval: 50 },
     );
   }
 
-  // ── Test 1: signed-URL path ─────────────────────────────────────────────────
-
   it("passes connectionType: 'websocket' and signedUrl (not agentId) when the session returns a signedUrl", async () => {
     await mountAndBoot();
 
     const params = startSessionSpy.mock.calls[0][0];
     expect(params.connectionType).toBe("websocket");
-    expect(params.signedUrl).toBeTruthy();
+    expect(params.signedUrl).toBe("wss://api.elevenlabs.io/v1/convai/real-time?token=test");
     expect(params.agentId).toBeUndefined();
     expect(params.connectionDelay?.android).toBe(0);
   });
-
-  // ── Test 2: public-agent fallback path (no signedUrl) ───────────────────────
 
   it("passes connectionType: 'websocket' and agentId (not signedUrl) on the public-agent fallback path", async () => {
     await mountAndBoot({ signedUrl: undefined });
 
     const params = startSessionSpy.mock.calls[0][0];
     expect(params.connectionType).toBe("websocket");
-    expect(params.agentId).toBeTruthy();
+    expect(params.agentId).toBe("agent-abc123");
     expect(params.signedUrl).toBeUndefined();
     expect(params.connectionDelay?.android).toBe(0);
   });
@@ -236,7 +231,6 @@ describe("JacConvaiSession — WebSocket transport guarantee", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("JacConvaiSession — IAB early-exit guard", () => {
-  // Save and restore navigator.userAgent so tests don't leak into each other.
   const originalUA = navigator.userAgent;
 
   function setUserAgent(ua: string) {
@@ -253,7 +247,6 @@ describe("JacConvaiSession — IAB early-exit guard", () => {
     mockApiRequest.mockReset();
     installGetUserMedia();
     installAudioStubs();
-    // Ensure Capacitor is absent so detectJacPlatform() reaches the UA checks.
     delete (window as any).Capacitor;
   });
 
@@ -261,8 +254,6 @@ describe("JacConvaiSession — IAB early-exit guard", () => {
     cleanup();
     setUserAgent(originalUA);
   });
-
-  // ── IAB patterns that must trigger the early-exit ──────────────────────────
 
   const IAB_CASES = [
     {
@@ -287,7 +278,7 @@ describe("JacConvaiSession — IAB early-exit guard", () => {
     it(`calls onError("IAB_NO_VOICE") and never calls getUserMedia for ${name}`, async () => {
       setUserAgent(ua);
 
-    const onError = vi.fn();
+      const onError = vi.fn();
 
       await act(async () => {
         render(
@@ -302,21 +293,15 @@ describe("JacConvaiSession — IAB early-exit guard", () => {
         );
       });
 
-      // The early-exit fires synchronously inside boot() so it resolves quickly.
       await waitFor(
         () => expect(onError).toHaveBeenCalledWith("IAB_NO_VOICE"),
         { timeout: 2000, interval: 25 },
       );
 
-      // getUserMedia must never be called — hanging on it is the bug we prevent.
       expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
-
-      // ElevenLabs SDK must not be started.
       expect(startSessionSpy).not.toHaveBeenCalled();
     });
   }
-
-  // ── Non-IAB path must NOT trigger the early-exit ──────────────────────────
 
   it("does NOT call onError(IAB_NO_VOICE) for a standard desktop Chrome UA", async () => {
     setUserAgent(
@@ -341,7 +326,6 @@ describe("JacConvaiSession — IAB early-exit guard", () => {
       );
     });
 
-    // A normal browser completes the boot flow and calls startSession.
     await waitFor(
       () => expect(startSessionSpy).toHaveBeenCalled(),
       { timeout: 3000, interval: 50 },
@@ -353,30 +337,17 @@ describe("JacConvaiSession — IAB early-exit guard", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Connection timeout guard — 12-second hang-at-connect watchdog
+// ─────────────────────────────────────────────────────────────────────────────
 
 describe("JacConvaiSession — connection timeout guard", () => {
-  // ── Fake timers: control the 12-second CONNECTION_TIMEOUT_MS ─────────────
-  //
-  // Strategy:
-  //   1. useFakeTimers() so we can skip 12 real seconds.
-  //   2. Advance 1 100 ms first to fire diagnoseMicStream's 1-second hard-
-  //      timeout (it resolves the mic-diagnosis Promise, letting boot() continue
-  //      to call startSession).
-  //   3. Flush the resulting microtask/Promise queue with a bare act().
-  //   4. Assert onError has NOT fired yet (the 12-second guard is still pending).
-  //   5. Advance another 12 000 ms to cross the CONNECTION_TIMEOUT_MS threshold.
-  //   6. Assert onError was called with a "timed out" message.
-  //
-  // The useConversation mock keeps status === "disconnected" forever (onConnect
-  // is never called), which is exactly the hung-handshake scenario we guard.
-
-  const onErrorSpy = vi.fn();
+  let onErrorSpy: Mock<(msg: string) => void>;
 
   beforeEach(() => {
     vi.useFakeTimers();
     startSessionSpy.mockClear();
     endSessionSpy.mockClear();
-    onErrorSpy.mockClear();
+    onErrorSpy = vi.fn<(msg: string) => void>();
     mockApiRequest.mockReset();
     installGetUserMedia();
     installAudioStubs();
@@ -402,11 +373,8 @@ describe("JacConvaiSession — connection timeout guard", () => {
       );
     });
 
-    // Fire diagnoseMicStream's 1-second hard-timeout, then flush promises.
     await act(async () => { vi.advanceTimersByTime(1_100); });
     await act(async () => {});
-
-    // Advance to just under the 12-second threshold.
     await act(async () => { vi.advanceTimersByTime(11_000); });
 
     expect(onErrorSpy).not.toHaveBeenCalled();
@@ -426,23 +394,162 @@ describe("JacConvaiSession — connection timeout guard", () => {
       );
     });
 
-    // Fire diagnoseMicStream's 1-second hard-timeout, then flush promises so
-    // boot() can call startSession() before we start the connection clock.
     await act(async () => { vi.advanceTimersByTime(1_100); });
     await act(async () => {});
 
-    // startSession() must have been called — this confirms the handshake began.
     expect(startSessionSpy).toHaveBeenCalled();
-
-    // Not yet — the 12-second guard is still counting.
     expect(onErrorSpy).not.toHaveBeenCalled();
 
-    // Cross the 12-second threshold.
     await act(async () => { vi.advanceTimersByTime(12_000); });
 
     expect(onErrorSpy).toHaveBeenCalledTimes(1);
     expect(onErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining("timed out"),
     );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mic-lost recovery — Samsung Internet / Android WebView mid-session revocation
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("JacConvaiSession — mic-lost recovery", () => {
+  let onErrorSpy: Mock<(msg: string) => void>;
+
+  beforeEach(() => {
+    startSessionSpy.mockClear();
+    endSessionSpy.mockClear();
+    _capturedConvaiHandlers = {};
+    onErrorSpy = vi.fn<(msg: string) => void>();
+    mockApiRequest.mockReset();
+    installGetUserMedia();
+    installAudioStubs();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  /** Render + wait for startSession, then wait one extra tick for the
+   *  setTimeout(0) that arms _micLostCallback. */
+  async function mountAndBootWithErrorSpy() {
+    mockApiRequest.mockResolvedValue(makeSessionResponse());
+
+    let unmount!: () => void;
+    await act(async () => {
+      const result = render(
+        <JacConvaiSession
+          active={true}
+          sessionEndpoint="/api/jac/convai/session"
+          onPhaseChange={noop}
+          onUserTranscript={noop}
+          onJacResponse={noop}
+          onError={onErrorSpy}
+        />,
+      );
+      unmount = result.unmount;
+    });
+
+    await waitFor(
+      () => expect(startSessionSpy).toHaveBeenCalled(),
+      { timeout: 3000, interval: 50 },
+    );
+
+    // Wait one extra tick for the setTimeout(0) that arms the token.
+    await new Promise<void>((r) => setTimeout(r, 10));
+
+    return { unmount };
+  }
+
+  it("fires onError exactly once with the mic-lost message when the mic track ends", async () => {
+    await mountAndBootWithErrorSpy();
+
+    _testOnlyFireMicLost();
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    expect(onErrorSpy.mock.calls[0][0]).toBe("Mic lost — tap the mic to reconnect.");
+    expect(endSessionSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("fires onError exactly once with the mic-lost message when the mic track is muted", async () => {
+    await mountAndBootWithErrorSpy();
+
+    _testOnlyFireMicLost();
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    expect(onErrorSpy.mock.calls[0][0]).toBe("Mic lost — tap the mic to reconnect.");
+  });
+
+  it("does not emit a second error when the SDK's onDisconnect fires after mic-lost teardown", async () => {
+    await mountAndBootWithErrorSpy();
+
+    _testOnlyFireMicLost();
+
+    // SDK calls onDisconnect after endSession(); micLostRef suppresses the duplicate.
+    _capturedConvaiHandlers.onDisconnect?.();
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fire onError when the component is unmounted before the track event fires", async () => {
+    const { unmount } = await mountAndBootWithErrorSpy();
+
+    await act(async () => { unmount(); });
+
+    _testOnlyFireMicLost();
+
+    expect(onErrorSpy).not.toHaveBeenCalled();
+    expect(endSessionSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not clear a second instance's mic-lost handler when the first instance unmounts", async () => {
+    // Mount instance A
+    const onErrorA = vi.fn<(msg: string) => void>();
+    let unmountA!: () => void;
+    mockApiRequest.mockResolvedValue(makeSessionResponse());
+    await act(async () => {
+      const r = render(
+        <JacConvaiSession
+          active={true}
+          sessionEndpoint="/api/jac/convai/session"
+          onPhaseChange={noop}
+          onUserTranscript={noop}
+          onJacResponse={noop}
+          onError={onErrorA}
+        />,
+      );
+      unmountA = r.unmount;
+    });
+    await waitFor(() => expect(startSessionSpy).toHaveBeenCalledTimes(1), { timeout: 3000, interval: 50 });
+    await new Promise<void>((r) => setTimeout(r, 10));
+
+    // Mount instance B
+    const onErrorB = vi.fn<(msg: string) => void>();
+    startSessionSpy.mockClear();
+    mockApiRequest.mockResolvedValue(makeSessionResponse());
+    await act(async () => {
+      render(
+        <JacConvaiSession
+          active={true}
+          sessionEndpoint="/api/jac/convai/session"
+          onPhaseChange={noop}
+          onUserTranscript={noop}
+          onJacResponse={noop}
+          onError={onErrorB}
+        />,
+      );
+    });
+    await waitFor(() => expect(startSessionSpy).toHaveBeenCalledTimes(1), { timeout: 3000, interval: 50 });
+    await new Promise<void>((r) => setTimeout(r, 10));
+
+    // Unmount A — must NOT disarm B's token.
+    await act(async () => { unmountA(); });
+
+    // Fire mic-lost — only B's handler should fire (A is unmounted/disarmed).
+    _testOnlyFireMicLost();
+
+    expect(onErrorA).not.toHaveBeenCalled();
+    expect(onErrorB).toHaveBeenCalledTimes(1);
+    expect(onErrorB.mock.calls[0][0]).toBe("Mic lost — tap the mic to reconnect.");
   });
 });
