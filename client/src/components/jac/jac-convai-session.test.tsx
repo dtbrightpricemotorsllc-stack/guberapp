@@ -260,3 +260,122 @@ describe("JacConvaiSession — WebSocket transport guarantee", () => {
     expect(params.connectionDelay?.android).toBe(0);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("JacConvaiSession — IAB early-exit guard", () => {
+  // Save and restore navigator.userAgent so tests don't leak into each other.
+  const originalUA = navigator.userAgent;
+
+  function setUserAgent(ua: string) {
+    Object.defineProperty(globalThis.navigator, "userAgent", {
+      configurable: true,
+      writable: true,
+      value: ua,
+    });
+  }
+
+  beforeEach(() => {
+    startSessionSpy.mockClear();
+    endSessionSpy.mockClear();
+    mockApiRequest.mockReset();
+    installGetUserMedia();
+    installAudioStubs();
+    // Ensure Capacitor is absent so detectJacPlatform() reaches the UA checks.
+    delete (window as any).Capacitor;
+  });
+
+  afterEach(() => {
+    cleanup();
+    setUserAgent(originalUA);
+  });
+
+  // ── IAB patterns that must trigger the early-exit ──────────────────────────
+
+  const IAB_CASES = [
+    {
+      name: "Facebook (FBAN)",
+      ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FBAN/FBIOS FBDV/iPhone15,2 FBMD/iPhone FBSN/iOS FBSV/17.0 FBSS/3",
+    },
+    {
+      name: "Instagram",
+      ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 310.0.0.34.109",
+    },
+    {
+      name: "TikTok",
+      ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 TikTok/26.0.0",
+    },
+    {
+      name: "LinkedIn (LinkedInApp)",
+      ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 LinkedInApp/9.21.400",
+    },
+  ];
+
+  for (const { name, ua } of IAB_CASES) {
+    it(`calls onError("IAB_NO_VOICE") and never calls getUserMedia for ${name}`, async () => {
+      setUserAgent(ua);
+
+      const onError = vi.fn();
+
+      await act(async () => {
+        render(
+          <JacConvaiSession
+            active={true}
+            sessionEndpoint="/api/jac/convai/session"
+            onPhaseChange={noop}
+            onUserTranscript={noop}
+            onJacResponse={noop}
+            onError={onError}
+          />,
+        );
+      });
+
+      // The early-exit fires synchronously inside boot() so it resolves quickly.
+      await waitFor(
+        () => expect(onError).toHaveBeenCalledWith("IAB_NO_VOICE"),
+        { timeout: 2000, interval: 25 },
+      );
+
+      // getUserMedia must never be called — hanging on it is the bug we prevent.
+      expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+
+      // ElevenLabs SDK must not be started.
+      expect(startSessionSpy).not.toHaveBeenCalled();
+    });
+  }
+
+  // ── Non-IAB path must NOT trigger the early-exit ──────────────────────────
+
+  it("does NOT call onError(IAB_NO_VOICE) for a standard desktop Chrome UA", async () => {
+    setUserAgent(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    );
+
+    mockApiRequest.mockResolvedValue(makeSessionResponse());
+
+    const onError = vi.fn();
+
+    await act(async () => {
+      render(
+        <JacConvaiSession
+          active={true}
+          sessionEndpoint="/api/jac/convai/session"
+          onPhaseChange={noop}
+          onUserTranscript={noop}
+          onJacResponse={noop}
+          onError={onError}
+        />,
+      );
+    });
+
+    // A normal browser completes the boot flow and calls startSession.
+    await waitFor(
+      () => expect(startSessionSpy).toHaveBeenCalled(),
+      { timeout: 3000, interval: 50 },
+    );
+
+    expect(onError).not.toHaveBeenCalledWith("IAB_NO_VOICE");
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled();
+  });
+});
