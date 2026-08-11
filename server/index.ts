@@ -1333,7 +1333,6 @@ app.use((req, res, next) => {
   // Tool costs and brand/campaign seeds are loaded lazily by setupCampaignLabRoutes (non-blocking).
 
 
-
   // Add new JAC preference columns to jac_user_profile (idempotent)
   await pool.query(`
     ALTER TABLE jac_user_profile
@@ -2167,6 +2166,18 @@ app.use((req, res, next) => {
     ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS photo_urls JSONB;
     ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS preferred_contact_method TEXT;
   `).catch(e => console.error("[migration] business_profiles extended columns error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_voice_telemetry (
+      id           SERIAL PRIMARY KEY,
+      event        TEXT NOT NULL,
+      platform     TEXT NOT NULL,
+      reason       TEXT,
+      occurred_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_voice_telemetry_occurred_at ON jac_voice_telemetry (occurred_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_jac_voice_telemetry_event       ON jac_voice_telemetry (event, occurred_at DESC);
+  `).catch(e => console.error("[migration] jac_voice_telemetry table error:", e));
 
   const shutdown = () => {
     httpServer.close(() => process.exit(0));

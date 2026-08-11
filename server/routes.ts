@@ -19227,11 +19227,13 @@ CRITICAL — respond with JSON ONLY, no other text:
         console.warn(`⚠️  ${label}`);
       }
 
-      // Persist to DB for admin voice dashboard (fire-and-forget, never blocks response)
+      // Persist to DB so counters survive server restarts / Autoscale cold starts.
+      // Fire-and-forget — never block the 204 response on the INSERT.
       pool.query(
         `INSERT INTO jac_voice_convai_events (event, platform, reason) VALUES ($1, $2, $3)`,
-        [event, platform, reason ?? null]
-      ).catch(() => {}); // silently ignore — telemetry must never block or throw
+        [event, platform, reason ?? null],
+      ).catch((err: Error) => console.error("[jac/convai/telemetry] db insert error:", err.message));
+
 
       return res.status(204).end();
     });

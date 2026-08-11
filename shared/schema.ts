@@ -3389,3 +3389,18 @@ export const digitalProposalRequests = pgTable("digital_proposal_requests", {
 });
 export type DigitalProposalRequest = typeof digitalProposalRequests.$inferSelect;
 export type InsertDigitalProposalRequest = typeof digitalProposalRequests.$inferInsert;
+
+// ── JAC Voice Telemetry ───────────────────────────────────────────────────────
+// Persisted telemetry beacon events from the ElevenLabs ConvAI client.
+// One row per event (connect / timeout / error / disconnect). The endpoint
+// rate-limits by IP in memory (DoS guard only); metric counters are stored
+// here so they survive server restarts and Autoscale cold starts.
+// A 1-hour rolling window is enforced via a periodic cleanup cron or by
+// filtering on occurred_at > NOW() - INTERVAL '1 hour' at query time.
+export const jacVoiceTelemetry = pgTable("jac_voice_telemetry", {
+  id:         serial("id").primaryKey(),
+  event:      text("event").notNull(),       // connect | timeout | error | disconnect
+  platform:   text("platform").notNull(),    // web | ios_native | android_native | …
+  reason:     text("reason"),                // sanitised error reason (nullable)
+  occurredAt: timestamp("occurred_at").defaultNow().notNull(),
+});
