@@ -446,6 +446,13 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           if (session.userContext?.role)      dynVars["user_role"]        = session.userContext.role;
           if (session.userContext?.platform)  dynVars["user_platform"]    = platform; // actual detected platform
           if (session.userContext?.jac_mode)  dynVars["jac_mode"]         = session.userContext.jac_mode;
+          // Pass the user's numeric ID (or "anon" for public sessions) so JAC tool
+          // calls (create_job_draft, publish_job, open_guber_screen) can resolve
+          // the caller without a separate auth lookup. ElevenLabs injects this into
+          // every tool call payload automatically via the dynamic variable.
+          dynVars["user_id"] = session.userContext?.userId != null
+            ? String(session.userContext.userId)
+            : "anon";
 
           const params: Record<string, any> = { dynamicVariables: dynVars };
           if (session.signedUrl) params.signedUrl = session.signedUrl;

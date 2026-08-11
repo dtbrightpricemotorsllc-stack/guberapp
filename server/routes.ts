@@ -19017,7 +19017,7 @@ CRITICAL — respond with JSON ONLY, no other text:
         ...(signedUrl ? { signedUrl } : {}),
         voiceToken,
         dynamicVariableName: "secret__jac_voice_token",
-        userContext: { firstName: "there", role: "anon", platform: "web", jac_mode: "investor" },
+        userContext: { firstName: "there", role: "anon", platform: "web", jac_mode: "investor", userId: "anon" },
       });
     } catch (err: any) {
       console.error("[jac/convai/investor-session]", err?.message);
@@ -19098,6 +19098,7 @@ CRITICAL — respond with JSON ONLY, no other text:
           role,
           platform,
           jac_mode: convaiMode,
+          userId: user.id,
         },
       });
     } catch (err: any) {
