@@ -17483,7 +17483,7 @@ Never expose API keys, private user data, other investor conversations, or confi
         _jacOnboardRL.set(ip, { count: 1, reset: now + 60_000 });
       }
 
-      const { messages, mode } = req.body as { messages?: any[]; mode?: string };
+      const { messages, mode, guest_session_id: onboardGuestSessionId } = req.body as { messages?: any[]; mode?: string; guest_session_id?: string };
       const jacMode: "homepage" | "investor" | "app" | "admin" =
         mode === "investor" ? "investor" : mode === "admin" ? "admin" : mode === "app" ? "app" : "homepage";
 
@@ -18237,18 +18237,61 @@ Once you've gathered enough detail through natural conversation for one of these
 When ready, set:
 "proposedAction": {"type":"post_job|marketplace_listing|transport_request|vi_request","fields":{...all known fields...}}
 
-Tell the user in your reply that you've prepared it and they'll see a summary to confirm before anything is posted or charged — e.g. "I've got everything I need — I'll show you a quick summary to confirm before this goes live." Do NOT say it's already posted. Only include proposedAction once, when fields are genuinely complete — do not repeat it identically every turn once the user has already seen the confirmation card (wait for them to respond).` : `This user is NOT logged in — never propose an action. Route them to /signup instead.`}
+Tell the user in your reply that you've prepared it and they'll see a summary to confirm before anything is posted or charged — e.g. "I've got everything I need — I'll show you a quick summary to confirm before this goes live." Do NOT say it's already posted. Only include proposedAction once, when fields are genuinely complete — do not repeat it identically every turn once the user has already seen the confirmation card (wait for them to respond).` : `This user is NOT logged in. You have TWO modes for unauthenticated visitors:
+
+GUEST DRAFT MODE (powerful — use it):
+When the user has shared enough detail to create a real draft (job post, worker profile, or business onboarding), do NOT just say "sign up first". Instead:
+1. Summarize exactly what you'll save: "I've got your draft ready — you just need a free account to keep it."
+2. Set confidence="high", route="/signup?intent=<intent>" 
+3. Include a "guestDraft" field with the draft type and all collected fields so it can be saved as soon as they create an account.
+
+Guest draft types and required fields:
+- type="job": title, category, description (partial ok), price (optional), location (optional)
+- type="worker_profile": capabilities_description (what they can do)
+- type="business_onboarding": business_name, business_type, what_you_provide, what_you_need (partial ok)
+
+BUSINESS ONBOARDING MODE:
+If the user signals they own a business, manage staff, or run a company ("I own a business", "I'm the manager", "we hire often", "I'm an employer"), shift into business mode:
+1. Ask one question at a time conversationally: business name → type/industry → what they provide for staff → what they need from GUBER
+2. Build the "business_onboarding" guestDraft incrementally
+3. Final CTA: "I've saved your business profile draft — sign up to get GUBER Business access."
+
+Never propose an action (proposedAction always null). Route guests to /signup instead.`}
+
+═══════════════════════════════════
+PSYCHOLOGICAL PERSUASION LAYER — INTERNALIZE THESE PRINCIPLES
+═══════════════════════════════════
+
+These 14 principles are invisible to the user. Weave them naturally — never name them.
+
+1. RECIPROCITY — Give value first (a tip, a price range, useful info). People feel compelled to reciprocate engagement.
+2. COMMITMENT & CONSISTENCY — Small "yes" moments compound. Get one small agreement early ("That's what you're looking for, right?") to make the next step feel natural.
+3. SOCIAL PROOF — Reference real activity naturally: "Workers in your area take jobs like this all the time" or "Thousands of people earn on GUBER this way."
+4. AUTHORITY — Speak with confident expertise about the domain (vehicles, electronics, home repair, gigs). Earn trust before pitching.
+5. LIKING — Match the user's energy. Be warm when they're warm; be efficient when they're direct. Don't overcorrect.
+6. SCARCITY — Only when genuinely true: "Founding member spots are limited" / "Day-1 OG slots are closing." Never manufacture scarcity.
+7. UNITY (in-group identity) — "Team GUBER" framing. Once they've shared a goal, they're already one of us: "That's exactly the kind of work Team GUBER was built for."
+8. LOSS AVERSION — Frame inaction as a cost, not just a missed gain: "Every day without a GUBER profile is a day someone else took that job."
+9. CURIOSITY GAP — Leave one useful detail just out of reach: "There's one more thing that makes GUBER Marketplace listings sell faster — want to know?" → they engage → then answer.
+10. EFFORT JUSTIFICATION — When they've shared a lot of detail, acknowledge it: "You've given me everything I need to make this a great listing." They're now invested.
+11. MOMENTUM — Keep micro-agreements flowing. After each answer, confirm and advance: "Perfect. Now — do you need pickup-only or can you deliver?"
+12. CONCRETENESS — Replace abstractions with specifics. Not "you can earn money" but "based on what you described, that's a $150–$200 job in your area."
+13. IDENTITY ALIGNMENT — "You sound like exactly the kind of reliable worker GUBER is built for." People act to be consistent with their stated identity.
+14. SOFT LANDING — The moment before the CTA, lower friction: "It takes 90 seconds to sign up — no credit card, no commitment." Then the button.
+
+WHEN TO DEPLOY: Use reciprocity and authority early. Use commitment + consistency mid-conversation. Use scarcity and loss aversion only near the decision moment — never early. Always close with soft landing.
 
 ═══════════════════════════════════
 RESPOND WITH JSON ONLY — NO OTHER TEXT
 ═══════════════════════════════════
-{"reply":"<75 words max>","confidence":"high|medium|low","route":null,"actions":[],"options":[],"tracking":{},"feedbackDraft":null,"proposedAction":null}
+{"reply":"<75 words max>","confidence":"high|medium|low","route":null,"actions":[],"options":[],"tracking":{},"feedbackDraft":null,"proposedAction":null,"guestDraft":null}
 - route: URL string when HIGH, null otherwise
 - actions: [{label,message}] x2-4 for MEDIUM, [] otherwise
 - options: [{label,message}] x3-11 for LOW or opening question, [] otherwise
 - tracking: always present, all fields included
 - feedbackDraft: null normally; {"ready":true,"category":"<type>","description":"<summary>"} when capturing issue
-- proposedAction: null normally; {"type":"...","fields":{...}} only when a real workflow is ready to be staged for user confirmation (see EXECUTE WORKFLOWS section)`;
+- proposedAction: null normally (always null for guests); {"type":"...","fields":{...}} only for logged-in users with a complete workflow ready
+- guestDraft: null normally; {"type":"job|worker_profile|business_onboarding","cta":"Sign up free to keep your draft →","data":{...all collected fields...}} when enough info gathered for a guest draft (NOT logged-in users only)`;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
@@ -18268,15 +18311,19 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
         { label: "I'm retired", message: "I'm retired" },
         { label: "I'm just exploring", message: "I'm just exploring" },
       ];
-      type JacR = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[]; tracking?: any; feedbackDraft?: { ready: boolean; category: string; description: string } | null; pendingAction?: { id: number; type: string; summary: string } | null };
+      type JacGuestDraft = { type: string; cta: string; data: Record<string, any> };
+      type JacR = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[]; tracking?: any; feedbackDraft?: { ready: boolean; category: string; description: string } | null; pendingAction?: { id: number; type: string; summary: string } | null; guestDraft?: JacGuestDraft | null };
       let parsed: JacR = {
         reply: "What brings you to GUBER today?",
-        confidence: "low", route: null, actions: [], options: FALLBACK_OPTIONS, tracking: {}, feedbackDraft: null,
+        confidence: "low", route: null, actions: [], options: FALLBACK_OPTIONS, tracking: {}, feedbackDraft: null, guestDraft: null,
       };
       let proposedAction: { type?: string; fields?: Record<string, any> } | null = null;
       try {
         const j = JSON.parse(raw);
         if (typeof j.reply === "string" && j.reply.trim()) {
+          const guestDraftRaw = (!onboardUserId && j.guestDraft && typeof j.guestDraft === "object" && typeof j.guestDraft.type === "string")
+            ? { type: j.guestDraft.type, cta: j.guestDraft.cta || "Sign up free to keep your draft →", data: j.guestDraft.data || {} }
+            : null;
           parsed = {
             reply: j.reply.trim(),
             confidence: ["high", "medium", "low"].includes(j.confidence) ? j.confidence : "medium",
@@ -18287,9 +18334,21 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
             feedbackDraft: (j.feedbackDraft?.ready === true && typeof j.feedbackDraft?.category === "string")
               ? { ready: true, category: j.feedbackDraft.category, description: j.feedbackDraft.description ?? "" }
               : null,
+            guestDraft: guestDraftRaw,
           };
           if (j.proposedAction && typeof j.proposedAction === "object" && isValidActionType(j.proposedAction.type)) {
             proposedAction = { type: j.proposedAction.type, fields: j.proposedAction.fields ?? {} };
+          }
+
+          // Auto-save guest draft to in-memory guest session when one is present
+          if (guestDraftRaw && onboardGuestSessionId && typeof onboardGuestSessionId === "string" && onboardGuestSessionId.length === 36) {
+            try {
+              const gs = ensureGuestSession(onboardGuestSessionId);
+              const idx = gs.drafts.findIndex(d => d.type === guestDraftRaw.type);
+              const entry = { type: guestDraftRaw.type, data: guestDraftRaw.data, savedAt: Date.now() };
+              if (idx >= 0) gs.drafts[idx] = entry; else gs.drafts.push(entry);
+              console.log(`[jac/onboard] auto-saved guest draft type=${guestDraftRaw.type} session=${onboardGuestSessionId.slice(0, 8)}…`);
+            } catch {}
           }
         }
       } catch { /* use fallback */ }
@@ -18571,7 +18630,17 @@ VOICE RULES (CRITICAL — enforce every reply):
 
     const baseSystemPrompt = mode === "investor"
       ? JAC_INVESTOR_PROMPT + VOICE_RULES
-      : `You are JAC — the voice of Team GUBER. GUBER (Global Unlimited Business & Employment Resources) is a US-only local platform where workers earn money doing local jobs and hirers post tasks. Features: job posting, Marketplace, Verify & Inspect, Load Board, GUBER Studio, Credits/Missions. Slogan: "Create Value In Yourself." You speak with visitors who have NOT signed up yet. Be warm, confident, and direct. Never dead-end a conversation — always move forward.${VOICE_RULES}`;
+      : `You are JAC — the confident voice of Team GUBER. GUBER (Global Unlimited Business & Employment Resources) is a US-only local platform where workers earn on local jobs, hirers post tasks, and businesses find verified workers. Features: Jobs, Marketplace, Verify & Inspect, Load Board, GUBER Studio, Credits/Missions, Cash Drops. Slogan: "Create Value In Yourself." Community identity: Team GUBER.
+
+You speak with visitors who may or may not be signed in yet. Your goal: understand who they are and what they need, give real value first, then move them naturally toward GUBER action.
+
+GUEST MODE (not signed in): You can build a draft with them through conversation. When you've gathered enough — "I've put your draft together. Sign up free and I'll keep it for you. Takes 90 seconds, no credit card." Then guide them to create an account.
+
+BUSINESS MODE: If they own a business or manage a team, ask one question at a time — business name → type/industry → what they provide for workers → what they need from GUBER. Build their business profile through natural conversation.
+
+PERSUASION (invisible — weave naturally): Give real value first (reciprocity). Small agreements compound. Reference real social activity. Speak with domain expertise. Match their energy. Frame inaction as cost when near the decision: "Every day without a profile is a day someone else took that job." Near the CTA: lower friction — "Takes 90 seconds, no commitment."
+
+AGE POLICY: Adults 18+ only. If someone mentions a minor, tell them GUBER is an adults-only platform.${VOICE_RULES}`;
 
     const systemContent = multiSourceSection
       ? baseSystemPrompt + multiSourceSection
@@ -19845,6 +19914,119 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
   // key: userId (number), value: { draftId, title, expiresAt }
   const _pendingDraftCards = new Map<number, { draftId: string; title: string; expiresAt: number }>();
 
+  // ── Guest session store (in-memory, 24h TTL) ─────────────────────────────
+  // Anonymous JAC visitors accumulate drafts here. On login/signup the client
+  // calls POST /api/jac/guest-transfer which migrates them to the real account.
+  interface _GuestDraftEntry { type: string; data: Record<string, any>; savedAt: number; }
+  interface _GuestSession { id: string; drafts: _GuestDraftEntry[]; createdAt: number; expiresAt: number; }
+  const _guestSessions = new Map<string, _GuestSession>();
+  const GUEST_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+  // Sweep expired sessions every hour (in-process only — ephemeral by design)
+  setInterval(() => {
+    const n = Date.now();
+    for (const [k, v] of _guestSessions) if (v.expiresAt < n) _guestSessions.delete(k);
+  }, 60 * 60 * 1000);
+  function ensureGuestSession(id: string): _GuestSession {
+    const s = _guestSessions.get(id);
+    if (s && s.expiresAt > Date.now()) return s;
+    const ns: _GuestSession = { id, drafts: [], createdAt: Date.now(), expiresAt: Date.now() + GUEST_TTL_MS };
+    _guestSessions.set(id, ns);
+    return ns;
+  }
+
+  // POST /api/jac/guest-session — create or revalidate a guest session
+  app.post("/api/jac/guest-session", (req: Request, res: Response) => {
+    const { guest_session_id } = req.body || {};
+    const id = (typeof guest_session_id === "string" && guest_session_id.length === 36)
+      ? guest_session_id
+      : crypto.randomUUID();
+    const s = ensureGuestSession(id);
+    res.json({ guest_session_id: s.id, expiresAt: s.expiresAt, draftsCount: s.drafts.length });
+  });
+
+  // POST /api/jac/guest-draft — save a draft to the guest session
+  app.post("/api/jac/guest-draft", (req: Request, res: Response) => {
+    const { guest_session_id, type, data } = req.body || {};
+    if (!guest_session_id || typeof guest_session_id !== "string") return res.status(400).json({ error: "guest_session_id required" });
+    if (!type) return res.status(400).json({ error: "type required" });
+    const s = ensureGuestSession(guest_session_id);
+    // Replace an existing draft of the same type (keep the latest)
+    const idx = s.drafts.findIndex(d => d.type === type);
+    const entry: _GuestDraftEntry = { type, data: data || {}, savedAt: Date.now() };
+    if (idx >= 0) s.drafts[idx] = entry; else s.drafts.push(entry);
+    console.log(`[jac/guest-draft] session=${guest_session_id.slice(0,8)}… type=${type} total=${s.drafts.length}`);
+    res.json({ success: true, draftsCount: s.drafts.length });
+  });
+
+  // POST /api/jac/guest-transfer — migrate guest drafts into the authenticated user's account.
+  // Called by auth-context after a successful login or signup.
+  app.post("/api/jac/guest-transfer", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { guest_session_id } = req.body || {};
+      if (!guest_session_id || typeof guest_session_id !== "string") {
+        return res.json({ success: true, transferred: 0 });
+      }
+      const session = _guestSessions.get(guest_session_id);
+      if (!session || session.expiresAt < Date.now()) {
+        return res.json({ success: true, transferred: 0, message: "Session not found or expired." });
+      }
+
+      const results: Array<{ type: string; id?: number; error?: string }> = [];
+
+      for (const draft of session.drafts) {
+        try {
+          if (draft.type === "job") {
+            const { title, category, price, location, description } = draft.data;
+            let lat: number | null = null, lng: number | null = null;
+            if (location) { try { const c = await geocodeAddress(location); if (c) { lat = c.lat; lng = c.lng; } } catch {} }
+            const job = await storage.createJob({
+              title: title || `${category || "General"} needed`,
+              description: description || null,
+              category: category || "General Labor",
+              budget: price != null ? parseFloat(String(price)) : 0,
+              location: location || null, locationApprox: location || null,
+              zip: null, lat, lng, postedById: userId, status: "draft",
+              isPaid: false, isPublished: false, urgentSwitch: false, payType: "Flat Rate",
+            } as any);
+            _pendingDraftCards.set(userId, { draftId: String(job.id), title: job.title, expiresAt: Date.now() + 120_000 });
+            results.push({ type: "job", id: job.id });
+          } else if (draft.type === "worker_profile") {
+            const { capabilities_description } = draft.data;
+            if (capabilities_description) await storage.updateUser(userId, { capabilitiesDescription: capabilities_description } as any);
+            results.push({ type: "worker_profile" });
+          } else if (draft.type === "business_onboarding") {
+            const { business_name, business_type, what_you_provide, what_you_need } = draft.data;
+            const capDesc = [
+              business_name && `Business: ${business_name}`,
+              business_type && `Type: ${business_type}`,
+              what_you_provide && `Provides: ${what_you_provide}`,
+              what_you_need && `Needs: ${what_you_need}`,
+            ].filter(Boolean).join(". ");
+            if (capDesc) await storage.updateUser(userId, { capabilitiesDescription: capDesc } as any);
+            results.push({ type: "business_onboarding" });
+          } else {
+            // marketplace, load_board, see_for_me — store as capabilities note
+            results.push({ type: draft.type });
+          }
+        } catch (e: any) {
+          results.push({ type: draft.type, error: e.message });
+        }
+      }
+
+      _guestSessions.delete(guest_session_id);
+      const transferred = results.filter(r => !r.error).length;
+      console.log(`[jac/guest-transfer] userId=${userId} transferred=${transferred}/${session.drafts.length}`);
+      return res.json({
+        success: true, transferred, results,
+        message: transferred > 0 ? "Your drafts have been saved to your account." : "Nothing to transfer.",
+      });
+    } catch (err: any) {
+      console.error("[jac/guest-transfer] error:", err?.message);
+      return res.status(500).json({ error: "Transfer failed", detail: err.message });
+    }
+  });
+
   const JAC_SCREEN_ROUTES: Record<string, string> = {
     load_board:      "/load-board",
     marketplace:     "/marketplace",
@@ -20213,6 +20395,47 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
           const route = JAC_SCREEN_ROUTES[screen] ?? `/${String(screen).replace(/_/g, "-")}`;
           queueNav(screen, route);
           return res.json({ success: true, result: { screen, route }, message: `Opening ${String(screen).replace(/_/g, " ")} now.`, nav: route });
+        }
+
+        // ── GUEST DRAFT ACTIONS ───────────────────────────────────────────────
+        // Used by the guest mode flow: ElevenLabs or text JAC stores a draft into
+        // the in-memory guest session so it survives until the user signs up.
+
+        case "business_onboarding_draft": {
+          const { guest_session_id: gsid, business_name, business_type, what_you_provide, what_you_need } = data as any;
+          if (!gsid) return res.json({ success: false, error: "guest_session_id is required for guest drafts." });
+          const gs = ensureGuestSession(String(gsid));
+          const entry = {
+            type: "business_onboarding",
+            data: {
+              business_name: business_name || null,
+              business_type: business_type || null,
+              what_you_provide: what_you_provide || null,
+              what_you_need: what_you_need || null,
+            },
+            savedAt: Date.now(),
+          };
+          const idx = gs.drafts.findIndex(d => d.type === "business_onboarding");
+          if (idx >= 0) gs.drafts[idx] = entry; else gs.drafts.push(entry);
+          return res.json({
+            success: true,
+            result: { guest_session_id: gsid, type: "business_onboarding" },
+            message: `Business profile saved. Create a free GUBER account to get full business access — it takes 90 seconds, no credit card.`,
+          });
+        }
+
+        case "worker_profile_draft": {
+          const { guest_session_id: gsid, capabilities_description } = data as any;
+          if (!gsid) return res.json({ success: false, error: "guest_session_id is required for guest drafts." });
+          const gs = ensureGuestSession(String(gsid));
+          const entry = { type: "worker_profile", data: { capabilities_description: capabilities_description || "" }, savedAt: Date.now() };
+          const idx = gs.drafts.findIndex(d => d.type === "worker_profile");
+          if (idx >= 0) gs.drafts[idx] = entry; else gs.drafts.push(entry);
+          return res.json({
+            success: true,
+            result: { guest_session_id: gsid, type: "worker_profile" },
+            message: `Worker profile draft saved. Sign up to activate it and start getting job offers.`,
+          });
         }
 
         // ── UNKNOWN ───────────────────────────────────────────────────────────

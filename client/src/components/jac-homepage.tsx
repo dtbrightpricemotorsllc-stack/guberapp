@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Link, useLocation } from "wouter";
-import { Send, Mic, Volume2, ArrowRight, MessageSquare, Minus, Loader2, FileText } from "lucide-react";
+import { Send, Mic, Volume2, ArrowRight, MessageSquare, Minus, Loader2, FileText, Sparkles } from "lucide-react";
 import { JacConvaiVoice } from "@/components/jac/jac-convai-voice";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
 import { ConversationProvider } from "@elevenlabs/react";
 import { JacConvaiSession, prewarmJacSession, type JacConvaiSessionHandle, type ConvaiPhase } from "@/components/jac/jac-convai-session";
 import { useJacDraftCardPoll } from "@/hooks/use-jac-draft-card-poll";
+import { useGuestJacSession } from "@/hooks/use-guest-jac-session";
 type ConversationState = "idle" | "listening" | "recording" | "processing" | "speaking";
 import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
@@ -19,6 +20,12 @@ interface JacPendingAction {
   resultMessage?: string;
 }
 
+interface JacGuestDraft {
+  type: string;
+  cta: string;
+  data: Record<string, any>;
+}
+
 interface JacMsg {
   role: "user" | "assistant";
   content: string;
@@ -26,6 +33,7 @@ interface JacMsg {
   signupRoute?: string;
   pendingAction?: JacPendingAction;
   draftCard?: { draftId: string; title: string };
+  guestDraft?: JacGuestDraft;
 }
 
 interface JacJobPrefill {
@@ -357,6 +365,9 @@ export function JacHomepage() {
     });
   }, []);
 
+  // ── Guest session — persisted UUID for anonymous JAC drafts ─────────────
+  const { guestSessionId, saveGuestDraft } = useGuestJacSession();
+
   // ── Draft card polling — when ElevenLabs creates a job draft via tool call,
   // inject a "Review Draft" card into the chat so the user can tap to open it.
   const [, navigate] = useLocation();
@@ -599,7 +610,11 @@ export function JacHomepage() {
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "homepage", messages: next.map(m => ({ role: m.role, content: m.content })) }),
+        body: JSON.stringify({
+          mode: "homepage",
+          messages: next.map(m => ({ role: m.role, content: m.content })),
+          guest_session_id: guestSessionId,
+        }),
       });
       const data = await res.json();
 
@@ -609,6 +624,12 @@ export function JacHomepage() {
       }
       if (data.feedbackDraft?.ready) {
         feedbackDraftRef.current = data.feedbackDraft;
+      }
+
+      // If the LLM produced a guest draft (not logged in), also persist it client-side
+      // so the signup redirect can reference it via the hook.
+      if (data.guestDraft && typeof data.guestDraft.type === "string") {
+        saveGuestDraft(data.guestDraft.type, data.guestDraft.data || {}).catch(() => {});
       }
 
       const aMsg: JacMsg = {
@@ -624,6 +645,9 @@ export function JacHomepage() {
           : undefined,
         draftCard: (data.draftCard && data.draftCard.draftId)
           ? { draftId: String(data.draftCard.draftId), title: String(data.draftCard.title || "Job Draft") }
+          : undefined,
+        guestDraft: (data.guestDraft && typeof data.guestDraft.type === "string")
+          ? data.guestDraft as JacGuestDraft
           : undefined,
       };
 
@@ -1020,8 +1044,49 @@ export function JacHomepage() {
                 </div>
               )}
 
-              {/* Priority 2: CTA card */}
-              {latestJacMsg?.signupRoute && ctaLabel(latestJacMsg.signupRoute) && (
+              {/* Priority 2a: Guest draft card — shown when JAC has built a draft for an anonymous visitor */}
+              {latestJacMsg?.guestDraft && (
+                <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid hsl(152 100% 44% / 0.45)", background: "hsl(152 60% 4%)" }}>
+                  <div className="px-3 py-1.5 flex items-center gap-1.5" style={{ background: "hsl(152 60% 6%)", borderBottom: "1px solid hsl(152 100% 44% / 0.15)" }}>
+                    <Sparkles className="w-3 h-3 flex-shrink-0" style={{ color: "hsl(152 100% 55%)" }} />
+                    <span className="text-[9px] font-display font-black tracking-widest" style={{ color: "hsl(152 100% 65%)" }}>
+                      {latestJacMsg.guestDraft.type === "job" ? "JOB DRAFT READY"
+                        : latestJacMsg.guestDraft.type === "business_onboarding" ? "BUSINESS PROFILE READY"
+                        : latestJacMsg.guestDraft.type === "worker_profile" ? "WORKER PROFILE READY"
+                        : "DRAFT READY"}
+                    </span>
+                  </div>
+                  <div className="px-3 py-2 space-y-1.5">
+                    {/* Show key fields from the draft */}
+                    {latestJacMsg.guestDraft.data.title && (
+                      <p className="text-[11px] font-semibold text-white">{latestJacMsg.guestDraft.data.title}</p>
+                    )}
+                    {latestJacMsg.guestDraft.data.business_name && (
+                      <p className="text-[11px] font-semibold text-white">{latestJacMsg.guestDraft.data.business_name}</p>
+                    )}
+                    {latestJacMsg.guestDraft.data.category && (
+                      <p className="text-[10px]" style={{ color: "hsl(152 100% 55%)" }}>{latestJacMsg.guestDraft.data.category}</p>
+                    )}
+                    {latestJacMsg.guestDraft.data.capabilities_description && (
+                      <p className="text-[10px] text-white/60 leading-relaxed line-clamp-2">{latestJacMsg.guestDraft.data.capabilities_description}</p>
+                    )}
+                    <p className="text-[9px] text-white/35">Sign up free — your draft is saved and ready to post</p>
+                    <Link
+                      href={`/signup?intent=${latestJacMsg.guestDraft.type}&gsid=${encodeURIComponent(guestSessionId)}`}
+                      className="flex items-center justify-center gap-1.5 w-full rounded-xl py-2 text-[11px] font-display font-black no-underline transition-all active:scale-95"
+                      style={{ background: "linear-gradient(135deg, hsl(152 100% 44%), hsl(152 80% 36%))", color: "hsl(152 60% 4%)" }}
+                      data-testid="jac-guest-draft-cta"
+                      onClick={() => logInteraction(messages, { converted: true })}
+                    >
+                      <ArrowRight className="w-3 h-3" />
+                      {latestJacMsg.guestDraft.cta || "Create free account to keep this →"}
+                    </Link>
+                  </div>
+                </div>
+              )}
+
+              {/* Priority 2b: CTA card */}
+              {latestJacMsg?.signupRoute && ctaLabel(latestJacMsg.signupRoute) && !latestJacMsg.guestDraft && (
                 <Link
                   href={latestJacMsg.signupRoute}
                   className="flex items-center gap-2.5 rounded-2xl px-3 py-2.5 no-underline transition-all active:scale-95"
