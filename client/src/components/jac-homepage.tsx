@@ -382,15 +382,28 @@ export function JacHomepage() {
   const handleConvaiError = useCallback((msg: string) => {
     setLiveMode(false);
     setLiveState("idle");
-    // When the IAB early-exit fires, inject a text bubble so the user knows
-    // they're in text-only mode. Don't do anything for other error codes.
     if (msg === "IAB_NO_VOICE") {
+      // IAB browsers block WebRTC/mic — switch to text-only with a clear message.
       setMessages(prev =>
         prev.length === 1 && prev[0] === GREETING
           ? [IAB_GREETING]
           : prev
       );
+      return;
     }
+    // For every other error (connection timeout, unexpected disconnect, mic
+    // denied, network failure, etc.) inject a brief assistant bubble so the
+    // user knows what happened and that they can tap the mic button to retry.
+    // Mic-denied errors get their own wording; everything else is generic.
+    const isMicDenied =
+      msg.toLowerCase().includes("mic") ||
+      msg.toLowerCase().includes("microphone") ||
+      msg.toLowerCase().includes("denied") ||
+      msg.toLowerCase().includes("notallowed");
+    const bubble = isMicDenied
+      ? "Microphone access was blocked. Please allow mic permission in your browser settings, then tap the mic button to try again."
+      : "Voice couldn't connect. Tap the mic button to try again.";
+    setMessages(prev => [...prev, { role: "assistant" as const, content: bubble }]);
   }, []);
 
   function stopLiveMode() {

@@ -291,6 +291,24 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
       cbRef.current = { onPhaseChange, onUserTranscript, onJacResponse, onError };
     });
 
+    // Track the active prop in a ref so async callbacks (onDisconnect, timeout)
+    // can read the current value without stale closures.
+    const activeRef = useRef(active);
+    useEffect(() => { activeRef.current = active; });
+
+    // Connection-timeout handle — cleared on connect, disconnect, or error.
+    // If JAC never reaches "connected" within CONNECTION_TIMEOUT_MS, we fire
+    // onError so the UI never stays stuck on "connecting…" indefinitely.
+    const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const CONNECTION_TIMEOUT_MS = 12_000;
+
+    function clearConnectTimeout() {
+      if (connectTimeoutRef.current !== null) {
+        clearTimeout(connectTimeoutRef.current);
+        connectTimeoutRef.current = null;
+      }
+    }
+
     const {
       startSession,
       endSession,
@@ -303,14 +321,25 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
       onConnect: () => {
         // ElevenLabs ConvAI now owns audio — cancel any in-flight text-TTS
         // and block jacSpeak() for the duration of this session.
+        clearConnectTimeout();
         setJacConvaiActive(true);
         cancelAllJacAudio();
       },
       onDisconnect: () => {
-        // Release audio ownership so text-mode TTS can resume if needed
+        // Release audio ownership so text-mode TTS can resume if needed.
+        clearConnectTimeout();
         setJacConvaiActive(false);
+        // If the session ended while active is still true (i.e. NOT because
+        // the user tapped the mic button off), this is an unexpected disconnect
+        // (network drop, ElevenLabs timeout, etc.).  Without this error, the
+        // phase calculation below would loop back to "connecting…" forever
+        // because active stays true but status goes to "disconnected".
+        if (activeRef.current && !cancelRef.current) {
+          cbRef.current.onError("Voice disconnected. Tap the mic to retry.");
+        }
       },
       onError: (msg: string) => {
+        clearConnectTimeout();
         setJacConvaiActive(false);
         cbRef.current.onError(msg || "Voice connection lost.");
       },
@@ -492,7 +521,22 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           // AudioContext was already unlocked above — start session immediately.
           if (cancelRef.current) return;
           startSession(params as any);
+
+          // Guard against an indefinite "connecting…" state.  If the SDK's
+          // webSessionSetup or WebSocket handshake hangs (network timeout,
+          // STUN failure, slow ElevenLabs response, etc.), the status never
+          // reaches "connected" and onConnect never fires — leaving the UI
+          // stuck.  This timeout fires onError so the parent can show a
+          // retry state.  It is cleared by onConnect / onDisconnect / onError.
+          connectTimeoutRef.current = setTimeout(() => {
+            if (!cancelRef.current) {
+              try { endSession(); } catch {}
+              cbRef.current.onError("Voice connection timed out. Tap the mic to retry.");
+            }
+          }, CONNECTION_TIMEOUT_MS);
+
         } catch (err: any) {
+          clearConnectTimeout();
           if (!cancelRef.current) cbRef.current.onError(err?.message || "Could not start JAC voice.");
         }
       }
@@ -500,7 +544,10 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
       bootRef.current = boot;
       boot();
 
-      return () => { cancelRef.current = true; };
+      return () => {
+        cancelRef.current = true;
+        clearConnectTimeout();
+      };
     }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useImperativeHandle(ref, () => ({
