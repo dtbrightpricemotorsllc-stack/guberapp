@@ -19120,6 +19120,13 @@ CRITICAL — respond with JSON ONLY, no other text:
       return parsed;
   }
 
+  // ── JAC signed-URL public-agent cache ─────────────────────────────────────
+  // Shared by both session endpoints below. TTL is 5 minutes so a dashboard
+  // change from public→private is reflected without a restart.
+  // Value = epoch ms until which the agent is treated as public; 0 = check now.
+  const JAC_SIGNED_URL_PUBLIC_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  let _jacSignedUrlPublicUntil = 0;
+
   // ── JAC voice session mint — PUBLIC investor variant (no auth) ─────────────
   // Used by the /investors page. Mints an anonymous voice token with CID
   // prefixed "investor_" so the convai/llm adapter routes to JAC_INVESTOR_PROMPT.
@@ -19132,8 +19139,13 @@ CRITICAL — respond with JSON ONLY, no other text:
       const cid = "investor_" + randomBytes(8).toString("hex");
       const voiceToken = signJacVoiceToken({ userId: null, role: "anon", platform: "web", cid });
 
+      // Reuse the same TTL-based public-agent cache as the authenticated session
+      // endpoint so a dashboard change from public→private is reflected within
+      // JAC_SIGNED_URL_PUBLIC_TTL_MS (5 min) on both surfaces.
+      const invNow = Date.now();
+      const invAgentKnownPublic = _jacSignedUrlPublicUntil > invNow;
       let signedUrl: string | null = null;
-      if (!_jacSignedUrlKnownPublic) {
+      if (!invAgentKnownPublic) {
         try {
           const signedRes = await fetch(
             `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
@@ -19142,13 +19154,19 @@ CRITICAL — respond with JSON ONLY, no other text:
           if (signedRes.ok) {
             const j: any = await signedRes.json().catch(() => ({}));
             signedUrl = j?.signed_url ?? null;
+            _jacSignedUrlPublicUntil = 0;
+            console.log(`[jac/convai/investor-session] signed-url OK → private-agent mode (signed)`);
           } else {
-            _jacSignedUrlKnownPublic = true;
+            _jacSignedUrlPublicUntil = invNow + JAC_SIGNED_URL_PUBLIC_TTL_MS;
+            console.log(`[jac/convai/investor-session] signed-url ${signedRes.status} → public-agent mode (cached ${JAC_SIGNED_URL_PUBLIC_TTL_MS / 60000}min)`);
           }
-        } catch { _jacSignedUrlKnownPublic = true; }
+        } catch (fetchErr: any) {
+          _jacSignedUrlPublicUntil = invNow + JAC_SIGNED_URL_PUBLIC_TTL_MS;
+          console.warn(`[jac/convai/investor-session] signed-url fetch error: ${fetchErr?.message} → public-agent fallback`);
+        }
       }
 
-      console.log(`[jac/convai/investor-session] cid=${cid} mode=investor`);
+      console.log(`[jac/convai/investor-session] cid=${cid} mode=investor signedUrl=${signedUrl ? "yes" : "no"}`);
       return res.json({
         agentId,
         ...(signedUrl ? { signedUrl } : {}),
@@ -19169,10 +19187,6 @@ CRITICAL — respond with JSON ONLY, no other text:
   // ElevenLabs forwards that to our adapter as the x-jac-voice-token header
   // (never to the model). The ElevenLabs API key stays server-side. Because the
   // flag defaults OFF, this returns 403 to everyone in prod → pipeline is inert.
-  // Module-level: once we confirm the agent is public (signed URL returns 4xx),
-  // skip the round-trip on every subsequent request to save ~1-2s latency.
-  let _jacSignedUrlKnownPublic = false;
-
   app.post("/api/jac/convai/session", requireAuth, async (req: Request, res: Response) => {
     const t0 = Date.now();
     try {
@@ -19195,9 +19209,13 @@ CRITICAL — respond with JSON ONLY, no other text:
         : agentId.slice(0, 4) + "…";
       console.log(`[jac/convai/session] userId=${user.id} platform=${platform} agent=${maskedAgent}`);
 
-      // Try signed URL only if we haven't already confirmed this is a public agent.
+      // Try signed URL unless the agent is cached as public and the TTL hasn't expired.
+      // TTL re-check ensures that if the agent is switched from public→private in the
+      // ElevenLabs dashboard the server picks it up within 5 minutes without a restart.
+      const now = Date.now();
+      const agentKnownPublic = _jacSignedUrlPublicUntil > now;
       let signedUrl: string | null = null;
-      if (!_jacSignedUrlKnownPublic) {
+      if (!agentKnownPublic) {
         try {
           const signedRes = await fetch(
             `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
@@ -19206,14 +19224,23 @@ CRITICAL — respond with JSON ONLY, no other text:
           if (signedRes.ok) {
             const signedJson: any = await signedRes.json().catch(() => ({}));
             signedUrl = signedJson?.signed_url ?? null;
+            // Agent is private — clear any stale public cache so future sessions
+            // always try to fetch a fresh signed URL.
+            _jacSignedUrlPublicUntil = 0;
+            console.log(`[jac/convai/session] signed-url OK → private-agent mode (signed)`);
           } else {
-            console.log(`[jac/convai/session] signed-url ${signedRes.status} → public-agent mode (caching)`);
-            _jacSignedUrlKnownPublic = true;
+            // Agent is public (4xx from signed-url endpoint). Cache for TTL.
+            _jacSignedUrlPublicUntil = now + JAC_SIGNED_URL_PUBLIC_TTL_MS;
+            console.log(`[jac/convai/session] signed-url ${signedRes.status} → public-agent mode (cached ${JAC_SIGNED_URL_PUBLIC_TTL_MS / 60000}min)`);
           }
         } catch (fetchErr: any) {
-          console.log(`[jac/convai/session] signed-url error: ${fetchErr?.message} → public-agent mode (caching)`);
-          _jacSignedUrlKnownPublic = true;
+          // Network/timeout error — treat as public for the TTL to avoid blocking sessions,
+          // but log clearly so on-call can distinguish from a genuine config change.
+          _jacSignedUrlPublicUntil = now + JAC_SIGNED_URL_PUBLIC_TTL_MS;
+          console.warn(`[jac/convai/session] signed-url fetch error: ${fetchErr?.message} → public-agent fallback (cached ${JAC_SIGNED_URL_PUBLIC_TTL_MS / 60000}min)`);
         }
+      } else {
+        console.log(`[jac/convai/session] skipping signed-url check — public-agent cache valid for ${Math.round((_jacSignedUrlPublicUntil - now) / 1000)}s more`);
       }
 
       const ms = Date.now() - t0;
