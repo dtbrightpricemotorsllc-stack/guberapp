@@ -442,15 +442,17 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           platformRef.current = platform; // capture for use by onConnect/onError/onDisconnect
           const isIAB = /iab/.test(platform); // facebook_iab, instagram_iab, etc.
 
-          // In-app browsers (Facebook, Instagram, Messenger, TikTok, LinkedIn)
-          // block WebRTC mic access and ElevenLabs WebSockets. Attempting
-          // getUserMedia hangs indefinitely instead of rejecting, so JAC would
-          // stay in "connecting…" forever. Abort immediately and fall back to
-          // text-only mode with a clear message.
-          if (isIAB) {
-            cbRef.current.onError("IAB_NO_VOICE");
-            return;
-          }
+          // Capability-test getUserMedia with a timeout so browsers that hang
+          // the call indefinitely (some IAB environments) resolve within 7 s
+          // rather than blocking forever. A timeout rejection is treated the
+          // same as an explicit denial: JAC falls back gracefully via onError.
+          const getUserMediaWithTimeout = (constraints: MediaStreamConstraints, ms = 7000) =>
+            Promise.race([
+              navigator.mediaDevices.getUserMedia(constraints),
+              new Promise<MediaStream>((_, rej) =>
+                setTimeout(() => rej(new Error("getUserMedia timed out after " + ms + "ms")), ms)
+              ),
+            ]);
 
           // Run mic permission + session fetch in parallel.
           // Use the pre-warmed session promise if available (avoids a round-trip
@@ -464,7 +466,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
                });
 
           const [micResult, sessionResult] = await Promise.allSettled([
-            navigator.mediaDevices.getUserMedia({ audio: true }),
+            getUserMediaWithTimeout({ audio: true }),
             sessionFetch,
           ]);
           if (cancelRef.current) return;
@@ -477,11 +479,9 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
               `[JAC MIC TEST 1] getUserMedia FAILED: ${micErr?.name ?? "unknown"} — ${micErr?.message ?? "(no message)"}`
             );
             cbRef.current.onError(
-              isIAB
-                ? "Open this page in Chrome or Safari to use JAC voice — in-app browsers block the mic."
-                : platform === "android_native"
+              platform === "android_native"
                 ? `Microphone blocked on Android (${micErr?.name ?? "unknown error"}). Grant mic permission in App Settings.`
-                : "Mic access denied — allow mic in your browser settings."
+                : "Mic access denied."
             );
             return;
           }

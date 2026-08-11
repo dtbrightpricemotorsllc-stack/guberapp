@@ -112,15 +112,12 @@ const OPENING_OPTIONS = [
 
 const GREETING: JacMsg = {
   role: "assistant",
-  content: "Hey! I'm JAC 👋 I'm here to help you find work, post jobs, or answer any questions about GUBER.",
+  content: "Team GUBER!! 👋 Welcome to GUBER, America's AI-Powered Super App. I'm JAC, your Job Assistance Coordinator. Team GUBER is all about handling business. If it affects your money, your business, your time, or something you need done, I'm here to help. What are we getting done today?",
   buttons: OPENING_OPTIONS,
 };
 
-const IAB_GREETING: JacMsg = {
-  role: "assistant",
-  content: "Hi! I'm JAC 👋 Voice isn't available in this browser, but I can still help! Tap an option or type your question below.",
-  buttons: OPENING_OPTIONS,
-};
+// TTS-safe version of the greeting — no emojis, no double punctuation
+const GREETING_TTS = "Team GUBER! Welcome to GUBER, America's AI-Powered Super App. I'm Jack, your Job Assistance Coordinator. Team GUBER is all about handling business — money, work, buying, selling, time, or anything that needs doing. What are we getting done today?";
 
 function toSpeechText(text: string): string {
   return text.replace(/GUBER/g, "Goober").replace(/Guber/g, "Goober").replace(/guber/g, "goober");
@@ -298,13 +295,14 @@ export function JacHomepage() {
   // "intro"  = minimized chip selector (reached via minimize button)
   const [mode, setMode] = useState<"splash" | "intro" | "chat">("chat");
 
-  // Detect in-app browsers (Facebook, Instagram, Messenger, TikTok, LinkedIn).
-  // These block WebRTC/getUserMedia so voice is impossible — we fall back to
-  // text-only mode automatically without ever attempting to connect.
+  // Detect in-app browsers for post-failure "Open GUBER for full voice" hint only.
+  // This does NOT block voice — we attempt voice on every platform and fall back
+  // gracefully via capability detection if mic or audio is unavailable.
   const isIAB = typeof navigator !== "undefined" &&
     /FBAN|FBAV|FB_IAB|FBIOS|FB4A|Instagram|Messenger|TikTok|LinkedInApp/i.test(navigator.userAgent);
 
-  const [messages, setMessages] = useState<JacMsg[]>([isIAB ? IAB_GREETING : GREETING]);
+  const [messages, setMessages] = useState<JacMsg[]>([GREETING]);
+  const [showOpenInBrowser, setShowOpenInBrowser] = useState(false);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const [showFloatHint, setShowFloatHint] = useState(() => {
@@ -383,20 +381,14 @@ export function JacHomepage() {
     setLiveMode(false);
     setLiveState("idle");
     liveModeRef.current = false;
-    if (msg === "IAB_NO_VOICE") {
-      // IAB browsers — already in text-only mode, no change needed.
-      return;
-    }
-    // Mic blocked or connection failure: fall back silently to text mode.
-    // JAC speaks the greeting via TTS so the user still hears a welcome —
-    // no error bubble, no instruction to dig into browser settings.
+    // Mic blocked, timeout, or connection failure: fall back silently.
+    // JAC speaks via TTS so the user still hears a welcome — no scary error bubble.
+    // If we detected an IAB-like browser, surface a soft "Open GUBER for full voice" hint.
     greetingSpokenRef.current = false; // allow TTS to fire
-    jacSpeak(
-      "Hey! I'm JAC. I can help you find work, post jobs, or answer questions. Just type below — or tap the mic if you'd like to talk.",
-      { muted: mutedRef.current }
-    );
+    jacSpeak(GREETING_TTS, { muted: mutedRef.current });
     greetingSpokenRef.current = true;
-  }, []);
+    if (isIAB) setShowOpenInBrowser(true);
+  }, [isIAB]);
 
   function stopLiveMode() {
     setLiveMode(false);
@@ -436,7 +428,7 @@ export function JacHomepage() {
   // taps the mic — eliminates the biggest startup latency (~500-1500 ms).
   // Skip in in-app browsers: voice is disabled there so the token is never used.
   useEffect(() => {
-    if (!isIAB) prewarmJacSession("/api/jac/convai/investor-session");
+    prewarmJacSession("/api/jac/convai/investor-session");
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -483,7 +475,6 @@ export function JacHomepage() {
   // IAB browsers are excluded (text-only already).
   useEffect(() => {
     if (mode !== "chat") return;
-    if (isIAB) return;
 
     function startOnGesture() {
       unlockAudioContext();
@@ -508,7 +499,7 @@ export function JacHomepage() {
       document.removeEventListener("touchstart", startOnGesture, opts);
       document.removeEventListener("keydown",    startOnGesture, opts);
     };
-  }, [mode, isIAB, micHintDone]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mode, micHintDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // CRT power-on: plays once for first-time visitors only.
   // Mark as seen in localStorage so subsequent visits skip straight to "done".
@@ -849,7 +840,7 @@ export function JacHomepage() {
 
               {/* Primary CTAs */}
               <div className="flex flex-wrap gap-3 justify-center md:justify-start mb-5">
-                {!isIAB && <JacConvaiVoice />}
+                <JacConvaiVoice />
                 <button
                   onClick={() => openChat()}
                   className="flex items-center gap-2 h-11 px-6 rounded-xl text-sm font-display font-black tracking-wide transition-all active:scale-95"
@@ -1166,7 +1157,7 @@ export function JacHomepage() {
                 <button onClick={() => setShowVolumeSlider(v => !v)} className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-lg transition-colors" style={{ color: showVolumeSlider ? "hsl(270 100% 78%)" : "hsl(0 0% 32%)" }} data-testid="button-jac-volume" aria-label="Volume">
                   <Volume2 className="w-3.5 h-3.5" />
                 </button>
-                {micSupported && !isIAB && (
+                {micSupported && (
                   <div className="relative flex flex-col items-center">
                     {/* "Tap to talk" guidance label — shows until first mic use */}
                     {!liveMode && !micHintDone && (
@@ -1230,7 +1221,7 @@ export function JacHomepage() {
                 </button>
               </div>
               <p className="text-center text-[8px] text-white/12 mt-2 font-display tracking-wider">
-                {isIAB ? "Open guberapp.com in Chrome or Safari for voice" : "JAC · Voice by ElevenLabs"}
+                {"JAC · Voice by ElevenLabs"}
               </p>
             </div>
           </div>
@@ -1248,9 +1239,23 @@ export function JacHomepage() {
                   : "Type a message below to get started"}
               </p>
             )}
+            {/* Soft "open in browser" hint — only shown after a voice failure in IAB-like environments */}
+            {showOpenInBrowser && (
+              <div className="flex justify-center">
+                <a
+                  href={typeof window !== "undefined" ? window.location.href : "https://guberapp.app"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] font-display font-semibold tracking-wide px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                  style={{ color: "hsl(270 100% 72%)", border: "1px solid hsl(270 100% 72% / 0.3)", background: "hsl(270 100% 72% / 0.08)" }}
+                >
+                  Open GUBER for full voice →
+                </a>
+              </div>
+            )}
             {/* Instant "connecting" indicator — shows as soon as mic is tapped,
                 disappears the moment ConvAI's first transcript replaces the greeting */}
-            {!isIAB && liveMode && liveState !== "speaking" && messages.length === 1 && messages[0].content === "To talk to me, tap the mic button! 🎤" && (
+            {liveMode && liveState !== "speaking" && messages.length === 1 && messages[0].content === GREETING.content && (
               <div className="flex items-center gap-2 px-4 py-2.5 rounded-[22px] self-start"
                 style={{ background: "hsl(0 0% 97%)", border: "2.5px solid hsl(222 30% 30%)" }}>
                 <span className="flex gap-0.5 items-end h-4">

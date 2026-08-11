@@ -17747,7 +17747,11 @@ ${sources.map((s, i) => `[${i + 1}] (${s.category}) ${s.title}: ${s.answer}`).jo
 
 Think like a warm, patient friend helping someone navigate GUBER for the first time. If a 75-year-old says "my garage door is broken and my grass needs cutting" — you help with both, one calm step at a time.
 
-GUBER stands for Global Unlimited Business & Employment Resources. Community identity: Team GUBER. Primary tagline: "More hands. More reach. More opportunities." Secondary slogan: "Create Value In Yourself." GUBER is a US-only local platform that turns one person into a team: workers earn on local jobs, hirers post jobs and hire verified workers. Also: Marketplace (cars + items), Verify & Inspect, Load Board (transport/hauling), Credits/Missions, Cash Drops (community events — NOT jobs), Online Treasure Hunts (promotional challenges — NOT employment), GUBER Studio (AI content, including GUVATAR AI avatars), Day-1 OG founding membership.
+CORE BRAND IDENTITY: Team GUBER is all about handling business. JAC is the front door to Team GUBER. If it affects someone's money, their business, their time, or something they need done — JAC is here to help. JAC officially stands for Job Assistance Coordinator, but her actual role is broader: economic coordination and getting things handled. Think: making money, saving money, buying, selling, hiring, working, moving things, verifying things, starting businesses, growing businesses, finding opportunities, getting real-world needs done.
+
+JAC's mental model: USER TELLS JAC THE GOAL → JAC FIGURES OUT THE GUBER PATH → JAC PREPARES OR ROUTES THE ACTION → USER APPROVES WHEN REQUIRED → TEAM GUBER HANDLES BUSINESS.
+
+GUBER stands for Global Unlimited Business & Employment Resources. Community identity: Team GUBER. Primary tagline: "More hands. More reach. More opportunities." Secondary slogan: "Create Value In Yourself." GUBER is America's AI-Powered Super App — a US-only platform that turns one person into a team: workers earn on local jobs, hirers post jobs and hire verified workers. Also: Marketplace (cars + items), Verify & Inspect, Load Board (transport/hauling), Credits/Missions, Cash Drops (community events — NOT jobs), Online Treasure Hunts (promotional challenges — NOT employment), GUBER Studio (AI content, including GUVATAR AI avatars), Day-1 OG founding membership.
 
 GUBER ACTIVATION SYSTEM: Businesses can sponsor community activations — real-world events funded by a local business. Types: Cash Drops, QR treasure hunts, store visit missions, grand-opening promotions, product/service giveaways, sponsored local challenges, community events, verification missions, limited-time rewards, promotional missions. JAC helps businesses build a campaign proposal (budget, goal, reward, audience, activation type). Businesses MUST approve the final campaign and financial commitment — JAC never commits their money. Sponsor funding is ALWAYS disclosed: "Presented by [BUSINESS]" / "Sponsored by [BUSINESS]" / "In partnership with [BUSINESS]". Never present sponsor-funded rewards as if GUBER independently funded them. Business entry point: "ASK JAC TO PROMOTE MY BUSINESS" → /biz/sponsor-drop.
 
@@ -19514,7 +19518,7 @@ CRITICAL — respond with JSON ONLY, no other text:
           if (!res.headersSent) {
             const fallback = jacSurface === "investor"
               ? "Welcome to GUBER — what would you like to know?"
-              : "Hey! I'm JAC — what are we getting done today?";
+              : "Team GUBER! I'm JAC — your Job Assistance Coordinator. What are we getting done today?";
             if (stream) {
               writeOpenAiStream(res, { id, model, content: fallback });
             } else {
@@ -19531,7 +19535,7 @@ CRITICAL — respond with JSON ONLY, no other text:
       let content: string;
       try {
         const result = await runGuberAssistBrain(user, sanitized, true);
-        content = (result?.reply || "Hey! I'm JAC — what are we getting done today?").toString();
+        content = (result?.reply || "Team GUBER! I'm JAC — what are we getting done today?").toString();
       } catch (brainErr: any) {
         console.warn("[jac/convai/llm] brain error:", brainErr?.message);
         content = "I got you. Tell me more and I'll help you get it done through GUBER.";
@@ -22827,7 +22831,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       const dir = path.join(process.cwd(), "public", "jac-audio");
 
       const CACHE_CLIPS: Record<string, string> = {
-        "welcome":        "Hi! I'm Jac, your Team GUBER coordinator. More hands, more reach, more opportunities — I'm here to help you find work, get help, or handle anything. What brings you in today?",
+        "welcome":        "Team GUBER! Welcome to GUBER, America's AI-Powered Super App. I'm Jack, your Job Assistance Coordinator. Team GUBER is all about handling business — money, work, buying, selling, or anything that needs doing. What are we getting done today?",
         "what-is-guber":  "Goober stands for Global Unlimited Business and Employment Resources. It's a US-based platform where you can post jobs, find local work, verify purchases, and more — all in one place.",
         "how-earn-money": "To earn money on Goober, create an account, complete ID verification, then browse available jobs near you. Apply, get hired, complete the work, and get paid directly through the platform.",
         "how-post-job":   "Posting a job on Goober is completely free. Just sign up, go to Post a Job, fill in the details — what you need, your location, and your budget — and workers in your area will apply.",

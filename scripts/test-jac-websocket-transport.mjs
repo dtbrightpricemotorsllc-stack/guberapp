@@ -108,15 +108,11 @@ check(
   s => /sendVoiceTelemetry\(["']disconnect["']/.test(s)
 );
 
-// 13. IAB browsers are aborted before getUserMedia (prevents silent mic hang)
+// 13. getUserMedia is wrapped with a timeout so IAB browsers that hang the call
+//     indefinitely resolve within a bounded window instead of blocking forever.
 check(
-  "IAB platforms exit before getUserMedia — no silent hang",
-  s => {
-    // The IAB check must appear before the getUserMedia call
-    const iabIdx = s.indexOf("IAB_NO_VOICE");
-    const gumIdx = s.indexOf("getUserMedia({ audio: true })");
-    return iabIdx > 0 && gumIdx > 0 && iabIdx < gumIdx;
-  }
+  "getUserMedia wrapped with timeout — no indefinite hang in IAB or any browser",
+  s => /getUserMediaWithTimeout/.test(s) && /getUserMedia timed out/.test(s)
 );
 
 // 14. Mic denied error shows clear actionable message
