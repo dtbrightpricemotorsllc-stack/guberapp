@@ -17721,6 +17721,14 @@ Think like a warm, patient friend helping someone navigate GUBER for the first t
 
 GUBER stands for Global Unlimited Business & Employment Resources. Community identity: Team GUBER. Primary tagline: "More hands. More reach. More opportunities." Secondary slogan: "Create Value In Yourself." GUBER is a US-only local platform that turns one person into a team: workers earn on local jobs, hirers post jobs and hire verified workers. Also: Marketplace (cars + items), Verify & Inspect, Load Board (transport/hauling), Credits/Missions, Cash Drops (community events — NOT jobs), Online Treasure Hunts (promotional challenges — NOT employment), GUBER Studio (AI content, including GUVATAR AI avatars), Day-1 OG founding membership.
 
+GUBER ACTIVATION SYSTEM: Businesses can sponsor community activations — real-world events funded by a local business. Types: Cash Drops, QR treasure hunts, store visit missions, grand-opening promotions, product/service giveaways, sponsored local challenges, community events, verification missions, limited-time rewards, promotional missions. JAC helps businesses build a campaign proposal (budget, goal, reward, audience, activation type). Businesses MUST approve the final campaign and financial commitment — JAC never commits their money. Sponsor funding is ALWAYS disclosed: "Presented by [BUSINESS]" / "Sponsored by [BUSINESS]" / "In partnership with [BUSINESS]". Never present sponsor-funded rewards as if GUBER independently funded them. Business entry point: "ASK JAC TO PROMOTE MY BUSINESS" → /biz/sponsor-drop.
+
+JAC / GUBEE / TEAM GUBER MODEL:
+- JAC = conversation + coordination. JAC gathers information, builds proposals, guides users, and hands off to the right action.
+- Gubee = GUBER's visual mascot representing progress. Gubee made a drop. Gubee is on the move. Gubee found someone nearby. (Physical actions are always done by real Team GUBER members, not AI.)
+- Team GUBER = real people — workers, businesses, verified members — who execute real-world tasks.
+- Users keep control over ALL consequential decisions. JAC surfaces human-action gates: ACCEPT MISSION, APPROVE & POST, CONFIRM PICKUP, APPROVE PAYMENT, etc. Never claim JAC physically performed any real-world action.
+
 AGE POLICY: GUBER is only for users 18 years of age or older. There is no accommodation for anyone under 18 to work, post jobs, or use the Platform in any capacity, including through a parent or guardian's account. If someone mentions a minor wanting to do jobs, tell them GUBER is an adults-only platform and is not available to anyone under 18.
 
 ═══════════════════════════════════
@@ -18940,6 +18948,14 @@ MY JOBS → route: /my-jobs
 
 MAP → route: /map
 "map" / "show me nearby" / "jobs on a map"
+
+CASH DROPS → route: /cash-drops
+"cash drops" / "find a drop" / "treasure hunt" / "where is the drop" / "win cash" / "cash drop near me"
+
+GUBER ACTIVATIONS / PROMOTE MY BUSINESS → route: /biz/sponsor-drop [business-facing]
+"promote my business" / "advertise on GUBER" / "sponsor a drop" / "run a promotion" / "I have a budget to promote" / "I want more foot traffic" / "how do I advertise" / "create a campaign" / "sponsor an event" / "GUBER activation"
+When a business owner asks about promoting or advertising, say: "JAC can build a campaign proposal around your budget. What's your goal — more foot traffic, a grand opening, a giveaway?" Then collect: budget, goal, location, reward type. Route to /biz/sponsor-drop once they're ready.
+Sponsorship transparency rule: always remind them their brand will appear as "Presented by [their business name]" on the activation — never disguised.
 
 CAR WASH / DETAILING (MEDIUM confidence — always ask follow-up):
 "car washed" / "detail my car" / "wash my truck" / "mobile detail"
@@ -22506,7 +22522,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       const dir = path.join(process.cwd(), "public", "jac-audio");
 
       const CACHE_CLIPS: Record<string, string> = {
-        "welcome":        "Hi! I'm Jac, your Team Goober coordinator. More hands, more reach, more opportunities — I'm here to help you find work, get help, or handle anything. What brings you in today?",
+        "welcome":        "Hi! I'm Jac, your Team GUBER coordinator. More hands, more reach, more opportunities — I'm here to help you find work, get help, or handle anything. What brings you in today?",
         "what-is-guber":  "Goober stands for Global Unlimited Business and Employment Resources. It's a US-based platform where you can post jobs, find local work, verify purchases, and more — all in one place.",
         "how-earn-money": "To earn money on Goober, create an account, complete ID verification, then browse available jobs near you. Apply, get hired, complete the work, and get paid directly through the platform.",
         "how-post-job":   "Posting a job on Goober is completely free. Just sign up, go to Post a Job, fill in the details — what you need, your location, and your budget — and workers in your area will apply.",
@@ -22523,7 +22539,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         "how-signup":     "Signing up is free and takes about 2 minutes. Just go to the sign up page, enter your name, email, and create a password. Then complete ID verification and you're ready to post or find work.",
         "safety":         "Safety is built into every step on Goober. Every user verifies their identity. All payments go through the platform — no cash handoffs. Every job is documented with proof of completion.",
         "what-is-barter": "Barter on Goober lets you exchange services or items without cash. If you have a skill someone needs and they have something you want, you can trade directly — fully documented on the platform.",
-        "contact-support": "For help, you can chat with me any time — I'm Jac, your Team Goober coordinator. For account issues, visit the Help section in your profile or reach out through the Contact page.",
+        "contact-support": "For help, you can chat with me any time — I'm Jac, your Team GUBER coordinator. For account issues, visit the Help section in your profile or reach out through the Contact page.",
         "us-only":        "Goober is currently available in the United States only. We're focused on building the best possible local experience here before expanding internationally.",
         "what-is-trustbox": "Trust Box is a subscription that gives you unlimited plays of the Aye Eye or Not game, plus other perks. It's one of the ways to get more out of your Goober membership.",
       };
@@ -26200,6 +26216,96 @@ OUTPUT STYLE:
         details: `Host drop ${drop.id} cancelled by owner`,
       });
       res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Cash Drop Placement Mission endpoints ────────────────────────────────
+  // These are used by the /cash-drop-mission/:id worker-facing page.
+  // The worker is the `hostUserId` on the cashDrop record.
+  // Flow: accept (draft→pending_placement) → complete (pending_placement→pending_verification)
+  // Admin reviews proof then sets status→active (releasing the public hunt).
+
+  app.post("/api/cash-drop-mission/:id/accept", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const dropId = parseInt(req.params.id);
+      if (isNaN(dropId)) return res.status(400).json({ error: "Invalid drop id" });
+      const drop = await storage.getCashDrop(dropId);
+      if (!drop) return res.status(404).json({ error: "Drop not found" });
+
+      // Only the assigned placement worker may accept
+      if (drop.hostUserId !== req.session.userId) {
+        return res.status(403).json({ error: "Not your mission" });
+      }
+      if (!["draft", "pending"].includes(drop.status)) {
+        return res.status(400).json({ error: `Mission already in status: ${drop.status}` });
+      }
+
+      const updated = await storage.updateCashDrop(dropId, {
+        status: "pending_placement",
+      });
+      await storage.createAuditLog({
+        action: "cash_drop_mission_accepted",
+        userId: req.session.userId!,
+        details: `Worker ${req.session.userId} accepted placement mission for drop ${dropId}`,
+      });
+      res.json({ success: true, drop: updated });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/cash-drop-mission/:id/complete", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const dropId = parseInt(req.params.id);
+      if (isNaN(dropId)) return res.status(400).json({ error: "Invalid drop id" });
+      const drop = await storage.getCashDrop(dropId);
+      if (!drop) return res.status(404).json({ error: "Drop not found" });
+
+      if (drop.hostUserId !== req.session.userId) {
+        return res.status(403).json({ error: "Not your mission" });
+      }
+      if (drop.status !== "pending_placement") {
+        return res.status(400).json({ error: `Unexpected status: ${drop.status}. Accept mission first.` });
+      }
+
+      const { gpsLat, gpsLng, photoData, photoMime } = req.body;
+
+      const patchData: Record<string, any> = {
+        status: "pending_verification",
+      };
+
+      // Record GPS proof location if provided
+      if (typeof gpsLat === "number" && typeof gpsLng === "number") {
+        patchData.gpsLat = gpsLat;
+        patchData.gpsLng = gpsLng;
+      }
+
+      // Upload proof photo to Cloudinary if provided
+      if (photoData && photoMime) {
+        try {
+          const { v2: cloudinary } = await import("cloudinary");
+          const dataUri = `data:${photoMime};base64,${photoData}`;
+          const uploaded = await cloudinary.uploader.upload(dataUri, {
+            folder: "cash-drop-mission-proofs",
+            resource_type: "image",
+          });
+          patchData.hostLogo = uploaded.secure_url; // reuse hostLogo as proof photo
+        } catch (uploadErr: any) {
+          console.error("[cash-drop-mission] photo upload failed:", uploadErr.message);
+          // Continue without the photo — GPS alone is acceptable
+        }
+      }
+
+      const updated = await storage.updateCashDrop(dropId, patchData);
+      await storage.createAuditLog({
+        action: "cash_drop_mission_proof_submitted",
+        userId: req.session.userId!,
+        details: `Worker ${req.session.userId} submitted proof for drop ${dropId}. GPS: ${gpsLat},${gpsLng}`,
+      });
+
+      res.json({ success: true, drop: updated, message: "Proof submitted. Activation will release after admin verification." });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

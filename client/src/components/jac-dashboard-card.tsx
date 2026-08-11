@@ -4,14 +4,14 @@ import { setGuberAssistantOpen } from "@/components/guber-assistant";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
 const QUICK_ACTIONS = [
-  { label: "Find Work",        message: "I need work nearby" },
-  { label: "Hire Help",        message: "I need help with something" },
-  { label: "Sell Something",   message: "I want to sell something" },
-  { label: "Need Transport",   message: "I need transport" },
-  { label: "Verify Something", message: "I need something verified" },
-  { label: "Earn Credits",     message: "I want to earn credits" },
-  { label: "Cash Drops",       message: "Tell me about Cash Drops" },
-  { label: "My Messages",      message: "Check my messages" },
+  { label: "Find Work",           message: "I need work nearby" },
+  { label: "Hire Help",           message: "I need help with something" },
+  { label: "Promote My Business", message: "I want to promote my business with GUBER Activations" },
+  { label: "Cash Drops",          message: "Tell me about Cash Drops" },
+  { label: "Sell Something",      message: "I want to sell something" },
+  { label: "Need Transport",      message: "I need transport" },
+  { label: "Verify Something",    message: "I need something verified" },
+  { label: "Earn Credits",        message: "I want to earn credits" },
 ];
 
 function getContextualGreeting(name?: string | null): { greeting: string; sub: string } {

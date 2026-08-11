@@ -1141,16 +1141,21 @@ export default function Home() {
               <p className="text-muted-foreground text-sm leading-relaxed mb-5 max-w-md">
                 Reach customers, promote your services, and build better digital tools with Guber Global LLC.
               </p>
-              <div className="flex flex-col sm:flex-row items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-center gap-3 flex-wrap">
                 <Link href="/business" className="flex items-center gap-2 h-11 px-7 rounded-xl font-display tracking-[0.15em] text-sm font-bold transition-all active:scale-95"
                   style={{ background: "linear-gradient(135deg,#a855f7,#7c3aed)", color: "#fff" }}
                   data-testid="link-business-get-started">
                   GET STARTED FREE
                 </Link>
+                <Link href="/biz/sponsor-drop" className="flex items-center gap-2 h-11 px-6 rounded-xl font-display tracking-[0.15em] text-sm font-bold transition-all active:scale-95"
+                  style={{ background: "linear-gradient(135deg,rgba(245,158,11,0.15),rgba(217,119,6,0.12))", border: "1px solid rgba(245,158,11,0.4)", color: "rgba(245,200,100,0.9)" }}
+                  data-testid="link-business-activate">
+                  <Zap className="w-3.5 h-3.5" /> ASK JAC TO PROMOTE MY BUSINESS
+                </Link>
                 <Link href="/business" className="flex items-center gap-2 h-11 px-6 rounded-xl font-display tracking-[0.15em] text-sm transition-all active:scale-95"
                   style={{ background: "rgba(168,85,247,0.08)", border: "1px solid rgba(168,85,247,0.25)", color: "#a855f7" }}
                   data-testid="link-business-explore">
-                  EXPLORE BUSINESS OPPORTUNITIES
+                  EXPLORE
                 </Link>
               </div>
             </div>

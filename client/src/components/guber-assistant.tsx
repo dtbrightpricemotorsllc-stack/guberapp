@@ -128,7 +128,7 @@ const INITIAL_CHIPS = [
   "I need $500 by Friday",
   "Find work nearby",
   "Hire help",
-  "Earn credits",
+  "Promote My Business",
   "Cash Drops",
   "Day-1 OG",
   "See For Me",
