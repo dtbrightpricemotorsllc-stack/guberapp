@@ -445,8 +445,12 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
 
     // Suppress ElevenLabs SDK internal WebRTC crash (error_type on undefined)
     // This is an event-handler error so React error boundaries can't catch it.
+    // Guard is gated on activeRef so import-time monkey-patch errors (RTCDataChannel,
+    // getUserMedia) that fire before the user taps the mic don't incorrectly surface
+    // the "Voice is having trouble connecting" bubble (reproduces on Samsung Browser).
     useEffect(() => {
       function guard(e: ErrorEvent) {
+        if (!activeRef.current) return; // session not started — ignore
         const msg = e.message ?? "";
         if (msg.includes("error_type") || (msg.includes("undefined") && e.filename?.includes("elevenlabs"))) {
           e.preventDefault();
