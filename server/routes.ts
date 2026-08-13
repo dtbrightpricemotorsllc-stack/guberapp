@@ -58,6 +58,7 @@ import { generateJWT, verifyJWT } from "./jwt";
 import { signMobileCheckoutToken, verifyMobileCheckoutToken, isValidProduct } from "./mobile-checkout-token";
 import { verifyJacVoiceToken, signJacVoiceToken } from "./jac-voice-token";
 import { sanitizeAssistMessages, resolveVoiceToken, newCompletionId, writeOpenAiStream, buildNonStreamCompletion, checkConvaiRateLimit } from "./jac-convai";
+import { getJacSession, setJacSession, clearJacSession, summarizeSession } from "./jac-session";
 import { recordVoiceEvent } from "./jac-voice-telemetry";
 import { evaluatePayoutMultiFactor } from "./payout-guard";
 import * as assetCustody from "./asset-custody";
@@ -18430,6 +18431,23 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
           if (ok) {
             const id = await createPendingAction(onboardUserId, proposedAction.type, proposedAction.fields ?? {}, summary);
             (parsed as any).pendingAction = { id, type: proposedAction.type, summary };
+            // ── Write session so text-to-voice cross-surface "change that" works ──
+            // Map action type → canonical workflow name + module
+            const ACTION_WORKFLOW_MAP: Record<string, { currentWorkflow: string; selectedModule: string }> = {
+              post_job:            { currentWorkflow: "create_job",                  selectedModule: "jobs" },
+              marketplace_listing: { currentWorkflow: "create_marketplace_listing",  selectedModule: "marketplace" },
+              transport_request:   { currentWorkflow: "create_load",                 selectedModule: "load_board" },
+              vi_request:          { currentWorkflow: "create_vi_request",           selectedModule: "verify_inspect" },
+            };
+            const wfMeta = ACTION_WORKFLOW_MAP[proposedAction.type];
+            if (wfMeta) {
+              setJacSession(onboardUserId, {
+                ...wfMeta,
+                pendingApprovalId: id,
+                collectedFields: proposedAction.fields ?? {},
+                currentObjective: summary,
+              }, { replaceFields: true }).catch((e: any) => console.error("[JAC] onboard session write error:", e.message));
+            }
           }
         } catch (paErr: any) {
           console.error("[JAC] pending action stage error:", paErr.message);
@@ -19712,19 +19730,38 @@ CRITICAL — respond with JSON ONLY, no other text:
       console.log("[jac/tools/create-job-draft] userId:", user.id, "category:", category);
 
       // Draft — not published, status = "draft"
+      // Use canonical schema fields (postedById, budget, location, zip) so that
+      // subsequent edit/publish ownership checks (job.postedById === userId) pass.
+      const locationStr = [city || (user as any).city, state || (user as any).state].filter(Boolean).join(", ") || null;
+      // Append schedule to description when provided (no dedicated schedule column on jobs)
+      let toolDescription = description || null;
+      if (schedule) {
+        toolDescription = toolDescription ? `${toolDescription}\n\nSchedule: ${schedule}` : `Schedule: ${schedule}`;
+      }
+      // budget: prefer max, fall back to min, default 0
+      const toolBudget = budget_max ? Number(budget_max) : (budget_min ? Number(budget_min) : 0);
+      // Geocode location for map placement
+      let toolLat: number | null = null;
+      let toolLng: number | null = null;
+      if (locationStr) {
+        try { const c = await geocodeAddress(locationStr); if (c) { toolLat = c.lat; toolLng = c.lng; } } catch {}
+      }
       const draft = await storage.createJob({
-        hirerId: user.id,
-        title: title || category,
+        postedById: user.id,
+        title: title || `${category} needed`,
         category: String(category),
-        subcategory: subcategory || null,
-        description: description || null,
-        city: city || user.city || null,
-        state: state || user.state || null,
-        zipCode: zip || null,
-        budgetMin: budget_min ? Number(budget_min) : null,
-        budgetMax: budget_max ? Number(budget_max) : null,
-        schedule: schedule || null,
+        description: toolDescription,
+        location: locationStr,
+        locationApprox: locationStr,
+        zip: zip || null,
+        lat: toolLat,
+        lng: toolLng,
+        budget: toolBudget,
         status: "draft",
+        isPaid: false,
+        isPublished: false,
+        urgentSwitch: false,
+        payType: "Flat Rate",
       } as any);
 
       // Queue a draft card notification so the client chat can show a "Review Draft" card
@@ -19737,17 +19774,28 @@ CRITICAL — respond with JSON ONLY, no other text:
         });
       }
 
+      // ── Save session so "change that to Friday" works across turns ──────────
+      const toolSessionFields: Record<string, unknown> = {};
+      if (title) toolSessionFields.title = title;
+      if (category) toolSessionFields.category = category;
+      if (zip) toolSessionFields.zip = zip;
+      if (schedule) toolSessionFields.schedule = schedule;
+      await setJacSession(Number(user_id), {
+        currentWorkflow: "create_job",
+        selectedModule: "jobs",
+        draftObjectId: String(draft.id),
+        collectedFields: toolSessionFields,
+        currentObjective: `Post a job: ${draft.title || draft.category || category}`,
+      }, { replaceFields: true });
+
       return res.json({
         drafted: true,
         jobId: draft.id,
         preview: {
           title: draft.title,
           category: draft.category,
-          city: draft.city,
-          state: draft.state,
-          budgetMin: draft.budgetMin,
-          budgetMax: draft.budgetMax,
-          schedule: draft.schedule,
+          location: draft.location,
+          budget: draft.budget,
         },
         message: `Draft created! Review it at /jobs/${draft.id} and say "post it" to publish.`,
         requiresConfirmation: true,
@@ -20475,6 +20523,10 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
 
       console.log(`[jac/action] action=${action} userId=${userId ?? "anon"}`);
 
+      // ── Session state — load once, shared across all action branches ────────
+      // Non-blocking: session load errors are swallowed inside getJacSession.
+      const _session = userId ? await getJacSession(userId) : null;
+
       switch (action) {
 
         // ── JOBS ─────────────────────────────────────────────────────────────
@@ -20516,6 +20568,21 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
             isPaid: false, isPublished: false, urgentSwitch: false, payType: "Flat Rate",
           } as any);
           _pendingDraftCards.set(userId!, { draftId: String(job.id), title: job.title, expiresAt: Date.now() + 120_000 });
+          // ── Remember the active draft so later turns ("change that to Friday") work ──
+          const sessionFields: Record<string, unknown> = {};
+          if (title) sessionFields.title = title;
+          if (category) sessionFields.category = category;
+          if (price != null) sessionFields.price = price;
+          if (location) sessionFields.location = location;
+          if (requested_date) sessionFields.requested_date = requested_date;
+          if (requested_time) sessionFields.requested_time = requested_time;
+          await setJacSession(userId!, {
+            currentWorkflow: "create_job",
+            selectedModule: "jobs",
+            draftObjectId: String(job.id),
+            collectedFields: sessionFields,
+            currentObjective: `Post a job: ${job.title}`,
+          }, { replaceFields: true });
           return res.json({
             success: true,
             result: { draft_id: String(job.id), job_title: job.title },
@@ -20525,29 +20592,94 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
 
         case "edit_job_draft": {
           const user = await requireUser(); if (!user) return;
-          const { draft_id, title, description, category, price, location } = data as any;
-          if (!draft_id) return res.json({ success: false, error: "draft_id is required." });
+          const { title, description, category, price, location, requested_date, requested_time } = data as any;
+          // draft_id may come from the caller or be resolved from session
+          // ("change that to Friday" has no explicit draft_id)
+          let draft_id = (data as any).draft_id;
+          if (!draft_id && _session?.draftObjectId && _session.currentWorkflow === "create_job") {
+            draft_id = _session.draftObjectId;
+            console.log(`[jac/action] edit_job_draft: resolved draft_id=${draft_id} from session`);
+          }
+          if (!draft_id) return res.json({ success: false, error: "draft_id is required. I'm not sure which draft you mean — could you clarify?" });
           const job = await storage.getJob(parseInt(String(draft_id)));
           if (!job) return res.json({ success: false, error: "Job draft not found." });
           if (job.postedById !== userId) return res.status(403).json({ success: false, error: "That draft doesn't belong to your account." });
           if (job.status !== "draft") return res.json({ success: false, error: `Job is already ${job.status} and cannot be edited as a draft.` });
           const updates: any = {};
           if (title) updates.title = title;
-          if (description) updates.description = description;
           if (category) updates.category = category;
           if (price != null) updates.budget = parseFloat(String(price));
           if (location) {
             updates.location = location; updates.locationApprox = location;
             try { const c = await geocodeAddress(location); if (c) { updates.lat = c.lat; updates.lng = c.lng; } } catch {}
           }
+          // Rebuild description: strip any existing timing suffix (both "Schedule:" and
+          // "Requested:" variants come from different creation paths), then re-append.
+          // When only one of date/time is supplied, preserve the other from:
+          //   1. session collectedFields (action/legacy create paths)
+          //   2. existing description parse (tool create path that uses "Schedule:")
+          if (description || requested_date || requested_time) {
+            const rawDesc = description ?? (job.description || "");
+            // Strip all trailing timing lines regardless of which prefix was used
+            const baseDesc = rawDesc.replace(/\n\n(Schedule|Requested):[^\n]*/g, "").trim();
+            if (requested_date || requested_time) {
+              // Step 1: try to derive existing timing from session
+              let existingDate = _session?.collectedFields?.requested_date as string | undefined;
+              let existingTime = _session?.collectedFields?.requested_time as string | undefined;
+              // Step 2: if session lacks it, parse from the job's current description
+              // Handles both "Requested: <date> at <time>" and "Schedule: <value>" formats
+              if (!existingDate && !existingTime && job.description) {
+                const requestedMatch = job.description.match(/\n\nRequested:\s*([^\n]+)/);
+                if (requestedMatch) {
+                  const parts = requestedMatch[1].split(" at ");
+                  existingDate = parts[0]?.trim() || undefined;
+                  existingTime = parts[1]?.trim() || undefined;
+                } else {
+                  const scheduleMatch = job.description.match(/\n\nSchedule:\s*([^\n]+)/);
+                  if (scheduleMatch) existingDate = scheduleMatch[1].trim();
+                }
+              }
+              // Prefer the explicitly-supplied value; fall back to what we derived
+              const resolvedDate = requested_date ?? existingDate ?? null;
+              const resolvedTime = requested_time ?? existingTime ?? null;
+              const timeInfo = [resolvedDate, resolvedTime].filter(Boolean).join(" at ");
+              updates.description = timeInfo
+                ? (baseDesc ? `${baseDesc}\n\nRequested: ${timeInfo}` : `Requested: ${timeInfo}`)
+                : baseDesc;
+            } else {
+              updates.description = baseDesc;
+            }
+          }
           const updated = await storage.updateJob(parseInt(String(draft_id)), updates);
-          return res.json({ success: true, result: { draft_id, job_title: updated?.title ?? title }, message: `Draft updated.` });
+          // Merge changed fields back into session so the next turn stays current
+          const sessionFieldPatch: Record<string, unknown> = {};
+          if (title) sessionFieldPatch.title = title;
+          if (description) sessionFieldPatch.description = description;
+          if (category) sessionFieldPatch.category = category;
+          if (price != null) sessionFieldPatch.price = price;
+          if (location) sessionFieldPatch.location = location;
+          if (requested_date) sessionFieldPatch.requested_date = requested_date;
+          if (requested_time) sessionFieldPatch.requested_time = requested_time;
+          await setJacSession(userId!, {
+            draftObjectId: String(draft_id),
+            currentWorkflow: "create_job",
+            selectedModule: "jobs",
+            collectedFields: sessionFieldPatch,
+          });
+          const changedSummary = Object.keys(updates).join(", ");
+          return res.json({ success: true, result: { draft_id, job_title: updated?.title ?? title }, message: `Draft updated${changedSummary ? ` (${changedSummary})` : ""}.` });
         }
 
         case "publish_job": {
           const user = await requireUser(); if (!user) return;
-          const { draft_id, confirmed } = data as any;
-          if (!draft_id) return res.json({ success: false, error: "draft_id is required." });
+          const { confirmed } = data as any;
+          // Resolve draft_id: caller may omit it and rely on session context
+          let draft_id = (data as any).draft_id;
+          if (!draft_id && _session?.draftObjectId && _session.currentWorkflow === "create_job") {
+            draft_id = _session.draftObjectId;
+            console.log(`[jac/action] publish_job: resolved draft_id=${draft_id} from session`);
+          }
+          if (!draft_id) return res.json({ success: false, error: "draft_id is required. Which job draft should I publish?" });
           const job = await storage.getJob(parseInt(String(draft_id)));
           if (!job) return res.json({ success: false, error: "Job draft not found." });
           if (job.postedById !== userId) return res.status(403).json({ success: false, error: "That job doesn't belong to your account." });
@@ -20560,6 +20692,8 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
               message: `Ready to publish "${job.title}" for $${job.budget}. Shall I open it for review and payment?`,
             });
           }
+          // Clear session after a successful publish — the workflow is done
+          await clearJacSession(userId!);
           queueNav("job_detail", `/jobs/${job.id}`);
           return res.json({
             success: true,
@@ -21093,6 +21227,65 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
           });
         }
 
+        // ── SESSION MANAGEMENT ────────────────────────────────────────────────
+        // JAC uses these to inspect and update its own workflow memory.
+
+        case "get_session_state": {
+          // Allow unauthenticated callers to get an empty session response
+          if (!userId || !_session) {
+            return res.json({
+              success: true,
+              result: {
+                currentObjective: null, currentWorkflow: null,
+                draftObjectId: null, collectedFields: {}, pendingApprovalId: null, selectedModule: null,
+              },
+              message: "No active session (not signed in).",
+            });
+          }
+          const summary = summarizeSession(_session);
+          return res.json({
+            success: true,
+            result: {
+              currentObjective: _session.currentObjective,
+              currentWorkflow: _session.currentWorkflow,
+              draftObjectId: _session.draftObjectId,
+              collectedFields: _session.collectedFields,
+              pendingApprovalId: _session.pendingApprovalId,
+              selectedModule: _session.selectedModule,
+            },
+            message: summary ?? "No active workflow in progress.",
+          });
+        }
+
+        case "set_session_context": {
+          // JAC calls this when it wants to label the current conversation intent
+          // (e.g. after interpreting "I need someone to move a couch" as a job post)
+          const user = await requireUser(); if (!user) return;
+          const { current_objective, current_workflow, selected_module, draft_object_id } = data as any;
+          const patch: Parameters<typeof setJacSession>[1] = {};
+          if (current_objective !== undefined) patch.currentObjective = current_objective || null;
+          if (current_workflow  !== undefined) patch.currentWorkflow  = current_workflow  || null;
+          if (selected_module   !== undefined) patch.selectedModule   = selected_module   || null;
+          if (draft_object_id   !== undefined) patch.draftObjectId    = draft_object_id   || null;
+          await setJacSession(userId!, patch);
+          const updated = await getJacSession(userId!);
+          return res.json({
+            success: true,
+            result: { currentWorkflow: updated.currentWorkflow, selectedModule: updated.selectedModule },
+            message: "Session context updated.",
+          });
+        }
+
+        case "clear_session": {
+          const user = await requireUser(); if (!user) return;
+          await clearJacSession(userId!);
+          return res.json({
+            success: true,
+            result: {},
+            message: "Session cleared. Starting fresh — what would you like to do?",
+          });
+        }
+
         // ── UNKNOWN ───────────────────────────────────────────────────────────
 
         default:
@@ -21172,6 +21365,22 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         expiresAt: Date.now() + 120_000,
       });
 
+      // ── Save session so "change that to Friday" resolves this draft ─────────
+      const legacySessionFields: Record<string, unknown> = {};
+      if (title) legacySessionFields.title = title;
+      if (category) legacySessionFields.category = category;
+      if (price != null) legacySessionFields.price = price;
+      if (location) legacySessionFields.location = location;
+      if (requested_date) legacySessionFields.requested_date = requested_date;
+      if (requested_time) legacySessionFields.requested_time = requested_time;
+      await setJacSession(userId, {
+        currentWorkflow: "create_job",
+        selectedModule: "jobs",
+        draftObjectId: String(job.id),
+        collectedFields: legacySessionFields,
+        currentObjective: `Post a job: ${job.title}`,
+      }, { replaceFields: true });
+
       res.json({
         success: true,
         draft_id: String(job.id),
@@ -21190,13 +21399,26 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     try {
       if (!jacToolAuth(req, res)) return;
 
-      const { user_id, draft_id, confirmed } = req.body || {};
-      if (!user_id || !draft_id) return res.status(400).json({ error: "user_id and draft_id are required" });
+      const { user_id, confirmed } = req.body || {};
+      if (!user_id) return res.status(400).json({ error: "user_id is required" });
       if (confirmed !== true) return res.status(400).json({ error: "confirmed must be explicitly true" });
 
       const userId = parseInt(String(user_id));
-      const jobId  = parseInt(String(draft_id));
-      if (isNaN(userId) || isNaN(jobId)) return res.status(400).json({ error: "user_id and draft_id must be numbers" });
+      if (isNaN(userId)) return res.status(400).json({ error: "user_id must be a number" });
+
+      // draft_id may be explicit or resolved from session ("post it" after voice draft)
+      let rawDraftId = (req.body || {}).draft_id;
+      if (!rawDraftId) {
+        const sess = await getJacSession(userId);
+        if (sess.draftObjectId && sess.currentWorkflow === "create_job") {
+          rawDraftId = sess.draftObjectId;
+          console.log(`[jac/publish-job] resolved draft_id=${rawDraftId} from session`);
+        }
+      }
+      if (!rawDraftId) return res.status(400).json({ error: "draft_id is required — no active draft found in session" });
+
+      const jobId = parseInt(String(rawDraftId));
+      if (isNaN(jobId)) return res.status(400).json({ error: "draft_id must be a number" });
 
       const job = await storage.getJob(jobId);
       if (!job) return res.status(404).json({ error: "Job draft not found" });
@@ -21214,6 +21436,9 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         route: `/jobs/${job.id}`,
         expiresAt: Date.now() + 30_000,
       });
+
+      // Clear session — the workflow is complete
+      await clearJacSession(userId);
 
       res.json({
         success: true,
@@ -21824,6 +22049,8 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       if (!success) {
         return res.status(status).json({ message: body?.message || "That didn't go through — please try again from the page directly.", body });
       }
+      // Clear session — the confirmed workflow is done, so the next turn starts fresh
+      clearJacSession(userId).catch((e: any) => console.error("[jac/actions confirm] clearSession error:", e.message));
       res.json({ ok: true, summary, result: body });
     } catch (err: any) {
       console.error("[jac/actions confirm]", err.message);

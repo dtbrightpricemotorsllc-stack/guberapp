@@ -2283,6 +2283,24 @@ app.use((req, res, next) => {
   // (which adds cid, session deduplication, and token-validated writes).
   // Migration block intentionally removed to avoid creating an unused table.
 
+  // ── JAC Workflow Session Memory ──────────────────────────────────────────────
+  // Stores per-user mid-conversation state: current_workflow, draft_object_id,
+  // collected_fields, etc. so JAC can resolve "change that" / "make it Friday"
+  // without restarting the workflow. One row per user; TTL enforced in code.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_session_state (
+      user_id             INTEGER PRIMARY KEY,
+      current_objective   TEXT,
+      current_workflow    TEXT,
+      draft_object_id     TEXT,
+      collected_fields    JSONB  NOT NULL DEFAULT '{}'::jsonb,
+      pending_approval_id INTEGER,
+      selected_module     TEXT,
+      updated_at          TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_session_updated ON jac_session_state (updated_at DESC);
+  `).catch(e => console.error("[migration] jac_session_state table error:", e));
+
   const shutdown = () => {
     clearInterval(elevenLabsProbeInterval);
     httpServer.close(() => process.exit(0));
