@@ -1,5 +1,20 @@
 import React from "react";
 
+/** Detect chunk-load / module-import failures that happen after a new deploy */
+function isChunkLoadError(err: Error): boolean {
+  const msg = (err?.message || String(err)).toLowerCase();
+  return (
+    msg.includes("importing a module script failed") ||
+    msg.includes("failed to fetch dynamically imported module") ||
+    msg.includes("error loading dynamically imported module") ||
+    msg.includes("loading chunk") ||
+    msg.includes("loading css chunk") ||
+    (msg.includes("import") && msg.includes("failed"))
+  );
+}
+
+const RELOAD_FLAG = "guber_chunk_reload";
+
 interface State {
   error: Error | null;
 }
@@ -11,7 +26,29 @@ export class RootErrorBoundary extends React.Component<
   state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
+    // Auto-reload once when this is a stale-chunk error (common after deploys).
+    // sessionStorage flag prevents an infinite reload loop.
+    if (isChunkLoadError(error)) {
+      try {
+        if (!sessionStorage.getItem(RELOAD_FLAG)) {
+          sessionStorage.setItem(RELOAD_FLAG, "1");
+          // Force a full reload bypassing cache so the new chunks load.
+          window.location.replace(
+            window.location.href.includes("?")
+              ? window.location.href + "&_r=" + Date.now()
+              : window.location.href + "?_r=" + Date.now()
+          );
+          // Return null so nothing renders during the redirect.
+          return { error: null };
+        }
+      } catch {}
+    }
     return { error };
+  }
+
+  componentDidMount() {
+    // Clear the reload flag once the app successfully mounts.
+    try { sessionStorage.removeItem(RELOAD_FLAG); } catch {}
   }
 
   render() {
@@ -56,7 +93,14 @@ export class RootErrorBoundary extends React.Component<
           {error.message || String(error)}
         </p>
         <button
-          onClick={() => window.location.reload()}
+          onClick={() => {
+            try { sessionStorage.removeItem(RELOAD_FLAG); } catch {}
+            window.location.replace(
+              window.location.href.includes("?")
+                ? window.location.href + "&_r=" + Date.now()
+                : window.location.href + "?_r=" + Date.now()
+            );
+          }}
           style={{
             marginTop: "8px",
             padding: "12px 32px",
