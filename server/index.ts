@@ -1834,11 +1834,10 @@ app.use((req, res, next) => {
   startCron();
 
   // ── ElevenLabs ConvAI key probe ───────────────────────────────────────────
-  // Fire once at startup to catch wrong-workspace or missing-scope keys before
-  // any user tries to speak. Logs a loud warning so the issue is visible in
-  // seconds rather than after user complaints. Result is also surfaced in the
-  // Mission Control AI health group.
-  (async () => {
+  // Fires once at startup and then every 60 minutes so a rotated or revoked
+  // key shows RED in Mission Control within the hour rather than waiting for
+  // the next server restart.
+  async function probeElevenLabsConvai() {
     const agentId = process.env.ELEVENLABS_CONVAI_AGENT_ID;
     const apiKey  = process.env.ELEVENLABS_API_KEY;
 
@@ -1898,7 +1897,14 @@ app.use((req, res, next) => {
       console.warn(`[elevenlabs] ⚠️ ${detail}`);
       setElevenLabsConvaiProbeResult({ status: "error", detail });
     }
-  })();
+  }
+
+  // Run immediately at startup, then re-run every 60 minutes.
+  probeElevenLabsConvai();
+  const elevenLabsProbeInterval = setInterval(
+    () => { probeElevenLabsConvai().catch(() => { /* errors already logged inside */ }); },
+    60 * 60 * 1000,
+  );
   await seedReferralExpiry().catch(e => console.error("[seed] Referral expiry column error:", e));
   await seedCatalog().catch(e => console.error("[seed] catalog seed error:", e));
   // Task #317: must run before syncAdminCredentials/seedDemoAccounts (which SELECT new columns)
@@ -2259,6 +2265,7 @@ app.use((req, res, next) => {
   // Migration block intentionally removed to avoid creating an unused table.
 
   const shutdown = () => {
+    clearInterval(elevenLabsProbeInterval);
     httpServer.close(() => process.exit(0));
   };
   process.on("SIGTERM", shutdown);
