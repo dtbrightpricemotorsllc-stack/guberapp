@@ -6961,6 +6961,9 @@ export async function registerRoutes(
 
   app.get("/api/marketplace", async (req: Request, res: Response) => {
     try {
+      // Public browse must only return publicly-available listings.
+      // Callers may NOT override this — any supplied status value is discarded
+      // and the endpoint unconditionally uses "available".
       const items = await storage.getMarketplaceItems({
         category: req.query.category as string | undefined,
         search: req.query.search as string | undefined,
@@ -6970,7 +6973,7 @@ export async function registerRoutes(
         makeOfferEnabled: req.query.makeOfferEnabled === "true",
         sellerAvailability: req.query.sellerAvailability as string | undefined,
         sort: req.query.sort as string | undefined,
-        status: req.query.status as string | undefined,
+        status: "available",
       });
       res.json(items);
     } catch (err: any) {
@@ -7019,10 +7022,16 @@ export async function registerRoutes(
     try {
       const item = await storage.getMarketplaceItemBySlug(req.params.slug);
       if (!item) return res.status(404).json({ message: "Listing not found" });
-      await storage.updateMarketplaceItem(item.id, { viewCount: (item.viewCount || 0) + 1 });
-      const seller = item.sellerId ? await storage.getUser(item.sellerId) : null;
       const viewerId = (req as any).session?.userId;
       const isSeller = viewerId && item.sellerId === viewerId;
+      const viewerUser = viewerId ? await storage.getUser(viewerId) : null;
+      const isAdmin = viewerUser?.role === "admin";
+      // Drafts are only visible to the seller and admins — treat as not-found for everyone else
+      if (item.status === "draft" && !isSeller && !isAdmin) {
+        return res.status(404).json({ message: "Listing not found" });
+      }
+      await storage.updateMarketplaceItem(item.id, { viewCount: (item.viewCount || 0) + 1 });
+      const seller = item.sellerId ? await storage.getUser(item.sellerId) : null;
       const hasDeal = isSeller || await viewerHasDealWithSeller(item.id, viewerId);
       res.json(maskMarketplaceItem(item, seller, !!hasDeal));
     } catch (err: any) {
@@ -7036,10 +7045,16 @@ export async function registerRoutes(
       if (isNaN(id)) return res.status(404).json({ message: "Not found" });
       const item = await storage.getMarketplaceItem(id);
       if (!item) return res.status(404).json({ message: "Item not found" });
-      await storage.updateMarketplaceItem(id, { viewCount: (item.viewCount || 0) + 1 });
-      const seller = item.sellerId ? await storage.getUser(item.sellerId) : null;
       const viewerId = (req as any).session?.userId;
       const isSeller = viewerId && item.sellerId === viewerId;
+      const viewerUser = viewerId ? await storage.getUser(viewerId) : null;
+      const isAdmin = viewerUser?.role === "admin";
+      // Drafts are only visible to the seller and admins — treat as not-found for everyone else
+      if (item.status === "draft" && !isSeller && !isAdmin) {
+        return res.status(404).json({ message: "Item not found" });
+      }
+      await storage.updateMarketplaceItem(id, { viewCount: (item.viewCount || 0) + 1 });
+      const seller = item.sellerId ? await storage.getUser(item.sellerId) : null;
       const hasDeal = isSeller || await viewerHasDealWithSeller(item.id, viewerId);
       res.json(maskMarketplaceItem(item, seller, !!hasDeal));
     } catch (err: any) {
@@ -20498,6 +20513,19 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       const rawId = user_id != null ? parseInt(String(user_id)) : null;
       const userId: number | null = rawId && !isNaN(rawId) ? rawId : null;
 
+      // If a user_id is present, reject suspended/banned accounts before ANY action
+      // executes — including read/search/navigation actions that never call requireUser().
+      // Anonymous/public actions (no user_id) are exempt.
+      if (userId) {
+        const callerUser = await storage.getUser(userId);
+        if (!callerUser) {
+          return res.status(404).json({ success: false, error: "User account not found." });
+        }
+        if ((callerUser as any).suspended || (callerUser as any).banned) {
+          return res.status(403).json({ success: false, error: "Account suspended" });
+        }
+      }
+
       // Fetch + validate user for account-gated actions; sends its own error response.
       async function requireUser() {
         if (!userId) {
@@ -20731,11 +20759,152 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
           return res.json({ success: true, result: summary, message: `You have ${items.length} marketplace listing${items.length === 1 ? "" : "s"}.`, nav: "/marketplace" });
         }
 
-        case "create_marketplace_draft":
-        case "edit_marketplace_listing":
-        case "publish_marketplace_listing":
+        case "create_marketplace_draft": {
+          const user = await requireUser(); if (!user) return;
+          if (await isDemoUser(userId!)) return res.status(403).json({ success: false, error: "Demo accounts cannot create real listings." });
+          const { title, category, price, condition, photos_url, location, description } = data as any;
+          if (!title) return res.json({ success: false, error: "Please provide a title for the listing." });
+          if (!category) return res.json({ success: false, error: "Please provide a category (e.g. Electronics, Vehicles, Furniture)." });
+
+          // Reject off-platform contact/payment solicitation on the RAW input (before
+          // filterContactInfo can strip/mangle the phrase, hiding the violation).
+          if (detectOffPlatformPhrase(String(title))) {
+            return res.json({ success: false, error: "off_platform_content", message: "Listing title contains off-platform contact or payment language. Please revise." });
+          }
+          if (description && detectOffPlatformPhrase(String(description))) {
+            return res.json({ success: false, error: "off_platform_content", message: "Listing description contains off-platform contact or payment language, which isn't allowed. Please remove phone numbers, emails, Venmo/PayPal references, and similar." });
+          }
+
+          // Reject off-platform content in location (raw, before filterContactInfo strips it)
+          if (location && detectOffPlatformPhrase(String(location))) {
+            return res.json({ success: false, error: "off_platform_content", message: "Location contains off-platform contact or payment language. Please provide a simple city/state." });
+          }
+
+          // Strip contact info from ALL user-supplied text fields (shared Marketplace safety policy)
+          const cleanTitle = filterContactInfo(String(title)).clean;
+          const cleanDesc = description ? filterContactInfo(String(description)).clean : null;
+          const cleanLocation = location ? filterContactInfo(String(location)).clean : null;
+
+          // Parse cleaned location into city/state
+          let city: string | null = null, state: string | null = null;
+          if (cleanLocation) {
+            const parts = cleanLocation.split(",").map((s: string) => s.trim());
+            if (parts.length >= 2) { city = parts[0]; state = parts[1]; }
+            else { city = parts[0]; }
+          }
+
+          const photosList = photos_url ? (Array.isArray(photos_url) ? photos_url : [photos_url]) : [];
+          const item = await (storage as any).createMarketplaceItem({
+            sellerId: userId!,
+            sellerName: user.fullName,
+            title: cleanTitle,
+            description: cleanDesc,
+            category,
+            condition: condition || null,
+            price: price != null ? parseFloat(String(price)) : null,
+            askingType: "fixed",
+            priceType: "firm",
+            makeOfferEnabled: false,
+            photos: photosList,
+            city: city || null,
+            state: state || null,
+            locationApprox: cleanLocation || null,
+            zipcode: user.zipcode || null,
+            approximateLocationOnly: true,
+            status: "draft",
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          });
+          // Generate and store a public slug (same pattern as the canonical marketplace create route)
+          const slugBase = `${cleanTitle} ${city || ""} ${state || ""}`
+            .toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 80);
+          const publicSlug = `${slugBase}-${item.id}`;
+          await (storage as any).updateMarketplaceItem(item.id, { publicSlug });
+          _pendingDraftCards.set(userId!, { draftId: String(item.id), title: item.title, expiresAt: Date.now() + 120_000 });
+          return res.json({
+            success: true,
+            result: { draft_id: String(item.id), title: item.title, category: item.category, price: item.price, slug: publicSlug },
+            message: `Marketplace draft created: "${item.title}" (draft #${item.id}). Want me to open it for review so you can publish?`,
+          });
+        }
+
+        case "edit_marketplace_listing": {
+          const user = await requireUser(); if (!user) return;
+          if (await isDemoUser(userId!)) return res.status(403).json({ success: false, error: "Demo accounts cannot modify real listings." });
+          const { draft_id, title, category, price, condition, photos_url, location, description } = data as any;
+          if (!draft_id) return res.json({ success: false, error: "draft_id is required." });
+          const item = await (storage as any).getMarketplaceItem?.(parseInt(String(draft_id)));
+          if (!item) return res.json({ success: false, error: "Marketplace listing not found." });
+          if (item.sellerId !== userId) return res.status(403).json({ success: false, error: "That listing doesn't belong to your account." });
+          if (item.status !== "draft" && item.status !== "available") {
+            return res.json({ success: false, error: `Listing is ${item.status} and cannot be edited.` });
+          }
+
+          const updates: any = { updatedAt: new Date() };
+          if (title) {
+            // Detect on raw value before filterContactInfo can strip the offending phrase
+            if (detectOffPlatformPhrase(String(title))) return res.json({ success: false, error: "off_platform_content", message: "Title contains off-platform contact or payment language. Please revise." });
+            updates.title = filterContactInfo(String(title)).clean;
+          }
+          if (description) {
+            if (detectOffPlatformPhrase(String(description))) return res.json({ success: false, error: "off_platform_content", message: "Description contains off-platform contact or payment language. Please revise." });
+            updates.description = filterContactInfo(String(description)).clean;
+          }
+          if (category) updates.category = category;
+          if (price != null) updates.price = parseFloat(String(price));
+          if (condition) updates.condition = condition;
+          if (photos_url) updates.photos = Array.isArray(photos_url) ? photos_url : [photos_url];
+          if (location && typeof location === "string") {
+            // Detect on raw value before filterContactInfo can strip the offending phrase
+            if (detectOffPlatformPhrase(location)) return res.json({ success: false, error: "off_platform_content", message: "Location contains off-platform contact or payment language. Please provide a simple city/state." });
+            const cleanLoc = filterContactInfo(location).clean;
+            const parts = cleanLoc.split(",").map((s: string) => s.trim());
+            if (parts.length >= 2) { updates.city = parts[0]; updates.state = parts[1]; }
+            else { updates.city = parts[0]; }
+            updates.locationApprox = cleanLoc;
+          }
+
+          const updated = await (storage as any).updateMarketplaceItem(parseInt(String(draft_id)), updates);
+          return res.json({
+            success: true,
+            result: { draft_id, title: updated?.title ?? title },
+            message: `Listing draft updated.`,
+          });
+        }
+
+        case "publish_marketplace_listing": {
+          const user = await requireUser(); if (!user) return;
+          if (await isDemoUser(userId!)) return res.status(403).json({ success: false, error: "Demo accounts cannot publish real listings." });
+          const { draft_id, confirmed } = data as any;
+          if (!draft_id) return res.json({ success: false, error: "draft_id is required." });
+          const item = await (storage as any).getMarketplaceItem?.(parseInt(String(draft_id)));
+          if (!item) return res.json({ success: false, error: "Marketplace listing not found." });
+          if (item.sellerId !== userId) return res.status(403).json({ success: false, error: "That listing doesn't belong to your account." });
+          if (item.status !== "draft") return res.json({ success: false, error: `Listing is already ${item.status}.` });
+          if (!item.title || !item.category) {
+            return res.json({ success: false, error: "Listing is missing required fields (title, category). Please edit the draft first." });
+          }
+          if (confirmed !== true) {
+            return res.json({
+              success: false,
+              requires_confirmation: true,
+              draft: { id: item.id, title: item.title, category: item.category, price: item.price, condition: item.condition },
+              message: `Ready to publish "${item.title}" for ${item.price ? `$${item.price}` : "no set price"}. Shall I go live?`,
+            });
+          }
+          await (storage as any).updateMarketplaceItem(parseInt(String(draft_id)), { status: "available" });
+          const navSlug = item.publicSlug || String(draft_id);
+          const navRoute = `/marketplace/p/${navSlug}`;
+          queueNav("marketplace_listing", navRoute);
+          return res.json({
+            success: true,
+            result: { item_id: item.id, slug: navSlug },
+            message: `"${item.title}" is now live on the Marketplace!`,
+            nav: navRoute,
+          });
+        }
+
         case "make_offer":
-          return res.json({ success: false, error: "not_yet_available", message: "Marketplace management via JAC is coming soon. Open Marketplace in the app.", nav: "/marketplace" });
+          return res.json({ success: false, error: "not_yet_available", message: "Making offers via JAC is coming soon. Open the listing in the app to make an offer.", nav: "/marketplace" });
 
         // ── LOAD BOARD ───────────────────────────────────────────────────────
 
@@ -20762,18 +20931,268 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
           return res.json({ success: true, result: summary, message: `You have ${loads.length} load${loads.length === 1 ? "" : "s"}.`, nav: "/load-board" });
         }
 
-        case "create_load_draft":
-        case "edit_load_draft":
-        case "publish_load":
-          return res.json({ success: false, error: "not_yet_available", message: "Load board posting via JAC is coming soon. Open the Load Board to post now.", nav: "/load-board" });
+        case "create_load_draft": {
+          const user = await requireUser(); if (!user) return;
+          if (await isDemoUser(userId!)) return res.status(403).json({ success: false, error: "Demo accounts cannot create real load board listings." });
+          const {
+            transport_type, pickup_city, pickup_state, delivery_city, delivery_state,
+            vehicle_type, running, vin, pickup_date, delivery_date, price, notes,
+          } = data as any;
+          if (!pickup_city || !pickup_state) return res.json({ success: false, error: "Please provide a pickup city and state." });
+          if (!delivery_city || !delivery_state) return res.json({ success: false, error: "Please provide a delivery city and state." });
+          const transportType = transport_type || "vehicle";
+          const vehicleCondition = running === false || String(running).toLowerCase() === "false" || String(running).toLowerCase() === "non-running"
+            ? ["non_running"] : ["running"];
+
+          const listing = await storage.createLoadBoardListing({
+            posterId: userId!,
+            transportType,
+            vehicleType: vehicle_type || null,
+            vehicleCondition,
+            vin: vin || null,
+            pickupCity: pickup_city,
+            pickupState: pickup_state,
+            deliveryCity: delivery_city,
+            deliveryState: delivery_state,
+            pricingMode: price != null ? "fixed" : "open",
+            postedPrice: price != null ? parseFloat(String(price)) : null,
+            pickupDate: pickup_date ? new Date(pickup_date) : null,
+            deliveryDate: delivery_date ? new Date(delivery_date) : null,
+            notes: notes || null,
+            status: "draft",
+          } as any);
+          _pendingDraftCards.set(userId!, { draftId: String(listing.id), title: `${transportType} load: ${pickup_city}, ${pickup_state} → ${delivery_city}, ${delivery_state}`, expiresAt: Date.now() + 120_000 });
+          return res.json({
+            success: true,
+            result: {
+              draft_id: String(listing.id),
+              transport_type: listing.transportType,
+              pickup: `${listing.pickupCity}, ${listing.pickupState}`,
+              delivery: `${listing.deliveryCity}, ${listing.deliveryState}`,
+              price: listing.postedPrice,
+            },
+            message: `Load draft created (#${listing.id}): ${transportType} from ${pickup_city}, ${pickup_state} to ${delivery_city}, ${delivery_state}${price != null ? ` for $${price}` : ""}. Want me to publish it to the Load Board?`,
+          });
+        }
+
+        case "edit_load_draft": {
+          const user = await requireUser(); if (!user) return;
+          if (await isDemoUser(userId!)) return res.status(403).json({ success: false, error: "Demo accounts cannot modify real load board listings." });
+          const {
+            draft_id, transport_type, pickup_city, pickup_state, delivery_city, delivery_state,
+            vehicle_type, running, vin, pickup_date, delivery_date, price, notes,
+          } = data as any;
+          if (!draft_id) return res.json({ success: false, error: "draft_id is required." });
+          const listing = await storage.getLoadBoardListing(parseInt(String(draft_id)));
+          if (!listing) return res.json({ success: false, error: "Load draft not found." });
+          if (listing.posterId !== userId) return res.status(403).json({ success: false, error: "That load draft doesn't belong to your account." });
+          if (listing.status !== "draft") return res.json({ success: false, error: `Load is already ${listing.status} and cannot be edited as a draft.` });
+
+          const updates: any = {};
+          if (transport_type) updates.transportType = transport_type;
+          if (pickup_city) updates.pickupCity = pickup_city;
+          if (pickup_state) updates.pickupState = pickup_state;
+          if (delivery_city) updates.deliveryCity = delivery_city;
+          if (delivery_state) updates.deliveryState = delivery_state;
+          if (vehicle_type) updates.vehicleType = vehicle_type;
+          if (running !== undefined) {
+            updates.vehicleCondition = (running === false || String(running).toLowerCase() === "false" || String(running).toLowerCase() === "non-running")
+              ? ["non_running"] : ["running"];
+          }
+          if (vin !== undefined) updates.vin = vin || null;
+          if (pickup_date) updates.pickupDate = new Date(pickup_date);
+          if (delivery_date) updates.deliveryDate = new Date(delivery_date);
+          if (price != null) { updates.postedPrice = parseFloat(String(price)); updates.pricingMode = "fixed"; }
+          if (notes !== undefined) updates.notes = notes || null;
+
+          const updated = await storage.updateLoadBoardListing(parseInt(String(draft_id)), updates);
+          return res.json({
+            success: true,
+            result: { draft_id, pickup: `${updated?.pickupCity}, ${updated?.pickupState}`, delivery: `${updated?.deliveryCity}, ${updated?.deliveryState}` },
+            message: `Load draft updated.`,
+          });
+        }
+
+        case "publish_load": {
+          const user = await requireUser(); if (!user) return;
+          if (await isDemoUser(userId!)) return res.status(403).json({ success: false, error: "Demo accounts cannot publish real load board listings." });
+          const { draft_id, confirmed } = data as any;
+          if (!draft_id) return res.json({ success: false, error: "draft_id is required." });
+          const listing = await storage.getLoadBoardListing(parseInt(String(draft_id)));
+          if (!listing) return res.json({ success: false, error: "Load draft not found." });
+          if (listing.posterId !== userId) return res.status(403).json({ success: false, error: "That load doesn't belong to your account." });
+          if (listing.status !== "draft") return res.json({ success: false, error: `Load is already ${listing.status}.` });
+          if (confirmed !== true) {
+            return res.json({
+              success: false,
+              requires_confirmation: true,
+              draft: {
+                id: listing.id,
+                transport_type: listing.transportType,
+                pickup: `${listing.pickupCity}, ${listing.pickupState}`,
+                delivery: `${listing.deliveryCity}, ${listing.deliveryState}`,
+                price: listing.postedPrice,
+              },
+              message: `Ready to post load #${listing.id} (${listing.transportType}: ${listing.pickupCity}, ${listing.pickupState} → ${listing.deliveryCity}, ${listing.deliveryState}${listing.postedPrice ? ` for $${listing.postedPrice}` : ""}). Shall I publish it?`,
+            });
+          }
+          await storage.updateLoadBoardListing(parseInt(String(draft_id)), { status: "posted" });
+          queueNav("load_board", "/load-board");
+          return res.json({
+            success: true,
+            result: { listing_id: listing.id },
+            message: `Load #${listing.id} is now live on the Load Board! Carriers can see it now.`,
+            nav: `/load-board`,
+          });
+        }
 
         // ── SEE FOR ME ───────────────────────────────────────────────────────
 
-        case "create_see_for_me_draft":
-        case "publish_see_for_me":
-        case "view_see_for_me_requests":
+        case "create_see_for_me_draft": {
+          const user = await requireUser(); if (!user) return;
+          if (await isDemoUser(userId!)) return res.status(403).json({ success: false, error: "Demo accounts cannot create real See For Me requests." });
+          // Enforce the platform-wide liability disclaimer gate (same as /api/jobs and /api/jobs/create-checkout)
+          if (!(user as any).liabilityDisclaimerAcceptedAt) {
+            return res.json({
+              success: false,
+              error: "liability_disclaimer_required",
+              message: "You need to accept the GUBER liability disclaimer before posting a See For Me request. Please open the app and accept the disclaimer first.",
+            });
+          }
+          const { location, what_to_document, budget, notes } = data as any;
+          if (!location) return res.json({ success: false, error: "Please provide the location you need documented." });
+          if (!what_to_document) return res.json({ success: false, error: "Please describe what you need documented (observable facts only — condition, presence, visible damage, etc.)." });
+
+          // Strip contact info from ALL user-supplied string fields (shared liability guardrail)
+          const cleanLocation = filterContactInfo(String(location)).clean;
+          const cleanDoc = filterContactInfo(String(what_to_document)).clean;
+          const cleanNotes = notes ? filterContactInfo(String(notes)).clean : null;
+
+          const title = `See For Me: ${cleanDoc.slice(0, 60)}`;
+          const description = [
+            `Location: ${cleanLocation}`,
+            `What to document: ${cleanDoc}`,
+            cleanNotes ? `Notes: ${cleanNotes}` : null,
+            "",
+            "IMPORTANT: Document observable facts only — photos, visible condition, presence or absence of items. No legal, medical, or professional assessments.",
+          ].filter(Boolean).join("\n");
+
+          // Shared disallowed-content check (same guard as /api/jobs)
+          const disallowedHit = detectDisallowedJobContent({ title, description, serviceType: null, jobDetails: null });
+          if (disallowedHit) {
+            return res.json({
+              success: false,
+              error: "disallowed_content",
+              message: `This See For Me request contains content that isn't allowed: ${disallowedHit.message} Please rephrase.`,
+            });
+          }
+
+          // Canonical V&I language guard — applied to ALL user-supplied text fields,
+          // including location (any field could carry forbidden certification/opinion language).
+          for (const [fieldName, fieldValue] of [
+            ["location", cleanLocation],
+            ["what_to_document", cleanDoc],
+            ["notes", cleanNotes ?? ""],
+          ] as [string, string][]) {
+            if (!fieldValue) continue;
+            const viHit = detectViLanguageHit(fieldValue);
+            if (viHit) {
+              return res.json({
+                success: false,
+                error: "vi_language_blocked",
+                message: `See For Me requests must document observable facts only (photos, visible condition, presence/absence). The word or phrase "${viHit.word}" in ${fieldName} is not allowed — please rephrase.`,
+              });
+            }
+          }
+
+          let lat: number | null = null, lng: number | null = null;
+          try { const c = await geocodeAddress(cleanLocation); if (c) { lat = c.lat; lng = c.lng; } } catch {}
+
+          const job = await storage.createJob({
+            title,
+            description,
+            category: "Verify & Inspect",
+            jobType: "vi",
+            budget: budget != null ? parseFloat(String(budget)) : 25,
+            location: cleanLocation,
+            locationApprox: cleanLocation,
+            lat, lng, zip: null,
+            postedById: userId!,
+            status: "draft",
+            isPaid: false, isPublished: false,
+            urgentSwitch: false, payType: "Flat Rate",
+          } as any);
+          _pendingDraftCards.set(userId!, { draftId: String(job.id), title: job.title, expiresAt: Date.now() + 120_000 });
+          return res.json({
+            success: true,
+            result: { draft_id: String(job.id), title: job.title, budget: job.budget },
+            message: `See For Me draft created (#${job.id}): "${String(what_to_document).slice(0, 50)}" at ${location} for $${job.budget}. Ready to publish?`,
+          });
+        }
+
+        case "publish_see_for_me": {
+          const user = await requireUser(); if (!user) return;
+          if (await isDemoUser(userId!)) return res.status(403).json({ success: false, error: "Demo accounts cannot publish real See For Me requests." });
+          const { draft_id, confirmed } = data as any;
+          if (!draft_id) return res.json({ success: false, error: "draft_id is required." });
+          const job = await storage.getJob(parseInt(String(draft_id)));
+          if (!job) return res.json({ success: false, error: "See For Me draft not found." });
+          if (job.postedById !== userId) return res.status(403).json({ success: false, error: "That draft doesn't belong to your account." });
+          // Guard: only genuine See For Me (V&I) drafts may publish through this action
+          if (job.category !== "Verify & Inspect" || (job as any).jobType !== "vi") {
+            return res.status(400).json({ success: false, error: "This draft is not a See For Me request and cannot be published through this action." });
+          }
+          if (job.status !== "draft") return res.json({ success: false, error: `This request is already ${job.status}.` });
+          if (confirmed !== true) {
+            return res.json({
+              success: false,
+              requires_confirmation: true,
+              draft: { id: job.id, title: job.title, budget: job.budget, location: job.location },
+              message: `Ready to post "${job.title}" for $${job.budget}. Nearby helpers will see it and can apply — shall I go live?`,
+            });
+          }
+          // Enforce idVerified gate (same as /api/jobs/create-checkout)
+          if (!(user as any).idVerified) {
+            return res.json({
+              success: false,
+              error: "id_verification_required",
+              message: "You need to verify your ID before posting a See For Me request. Please go to Profile → Trust & Credentials.",
+            });
+          }
+          // Publish using the same "post-first, pay-at-lock" model as /api/jobs/create-checkout
+          // (non-barter path): isPaid=true + posted_public is set at posting time;
+          // actual payment is collected when a helper is locked in, not at post time.
+          const published = await storage.updateJob(parseInt(String(draft_id)), {
+            status: "posted_public",
+            visibility: "public",
+            isPublished: true,
+            isPaid: true,
+          } as any);
+          if (published) notifyNearbyAvailableWorkers(published).catch(() => {});
           queueNav("see_for_me", "/see-for-me");
-          return res.json({ success: false, error: "not_yet_available", message: "See For Me JAC integration is coming soon. Opening the See For Me board now.", nav: "/see-for-me" });
+          return res.json({
+            success: true,
+            result: { job_id: job.id },
+            message: `"${job.title}" is now live! Nearby helpers can see your request and apply. Check the See For Me board for updates.`,
+            nav: "/see-for-me",
+          });
+        }
+
+        case "view_see_for_me_requests": {
+          const user = await requireUser(); if (!user) return;
+          const jobs = await storage.getJobsByUser(userId!);
+          const viJobs = jobs
+            .filter((j: any) => j.category === "Verify & Inspect" || j.jobType === "vi")
+            .slice(0, 15)
+            .map((j: any) => ({ id: j.id, title: j.title, status: j.status, budget: j.budget, location: j.location }));
+          queueNav("see_for_me", "/see-for-me");
+          return res.json({
+            success: true,
+            result: viJobs,
+            message: `You have ${viJobs.length} See For Me request${viJobs.length === 1 ? "" : "s"}.`,
+            nav: "/see-for-me",
+          });
+        }
 
         // ── WANTED BOARD ─────────────────────────────────────────────────────
 
@@ -32335,10 +32754,11 @@ OUTPUT STYLE:
   // GET /api/load-board — browse (public listings)
   app.get("/api/load-board", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { status, transportType } = req.query;
+      const { transportType } = req.query;
       const filters: any = {};
-      if (status) filters.status = status as string;
-      else filters.status = "posted";
+      // Public browse unconditionally returns only posted listings.
+      // Any caller-supplied status value is discarded to prevent lifecycle-state leakage.
+      filters.status = "posted";
       if (transportType && transportType !== "all") filters.transportType = transportType as string;
 
       const listings = await storage.getLoadBoardListings(filters);
@@ -32466,6 +32886,13 @@ OUTPUT STYLE:
 
       const userId = req.session.userId!;
       const isPoster = listing.posterId === userId;
+      // Draft listings are private — only the poster and admins may view them
+      if (listing.status === "draft" && !isPoster) {
+        const viewerUser = await storage.getUser(userId);
+        if (viewerUser?.role !== "admin") {
+          return res.status(404).json({ message: "Listing not found" });
+        }
+      }
       const poster = await storage.getUser(listing.posterId);
       const offers = await storage.getLoadBoardOffersByListing(listingId);
       const addons = await storage.getLoadBoardAddonsByListing(listingId);
