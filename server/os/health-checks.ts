@@ -619,6 +619,46 @@ async function checkBackendConnectivity(): Promise<CheckResult> {
   }
 }
 
+// ── ElevenLabs ConvAI startup probe result ────────────────────────────────────
+// Set once at server startup by probeElevenLabsConvAI() in server/index.ts.
+
+type ConvaiProbeStatus = "ok" | "wrong_workspace" | "missing_permissions" | "error" | "unchecked";
+
+interface ConvaiProbeResult {
+  status: ConvaiProbeStatus;
+  detail: string;
+}
+
+let _convaiProbe: ConvaiProbeResult = { status: "unchecked", detail: "Startup probe has not run yet." };
+
+export function setElevenLabsConvaiProbeResult(result: ConvaiProbeResult): void {
+  _convaiProbe = result;
+  mark("elevenlabs_convai_key", result.status === "ok", result.detail);
+}
+
+function checkElevenLabsConvAIKey(): CheckResult {
+  const key = "elevenlabs_convai_key";
+  const name = "ElevenLabs ConvAI API Key";
+  switch (_convaiProbe.status) {
+    case "ok":
+      return ok(key, name, "Valid", _convaiProbe.detail);
+    case "unchecked":
+      return unk(key, name, _convaiProbe.detail);
+    case "wrong_workspace":
+      return crit(key, name, "404 Wrong Workspace", _convaiProbe.detail,
+        "Replace ELEVENLABS_API_KEY with a key from the workspace that owns this agent.",
+        _convaiProbe.detail);
+    case "missing_permissions":
+      return crit(key, name, "401 Missing Scope", _convaiProbe.detail,
+        "Regenerate ELEVENLABS_API_KEY and ensure it has the convai_write permission.",
+        _convaiProbe.detail);
+    default:
+      return crit(key, name, "Error", _convaiProbe.detail,
+        "Check ELEVENLABS_API_KEY and ELEVENLABS_CONVAI_AGENT_ID env vars.",
+        _convaiProbe.detail);
+  }
+}
+
 // ── App Health grouped export ──────────────────────────────────────────────────
 
 export interface AppHealthGroup {
@@ -688,7 +728,7 @@ export async function runAppHealthChecks(): Promise<AppHealthReport> {
     {
       id: "ai",
       label: "AI / JAC Voice",
-      checks: [jacVoice],
+      checks: [jacVoice, checkElevenLabsConvAIKey()],
     },
   ];
 

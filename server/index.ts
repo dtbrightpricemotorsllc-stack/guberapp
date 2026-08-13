@@ -11,6 +11,7 @@ import { pool } from "./db";
 import { setNonceStore, PgNonceStore } from "./oauth";
 import { startStudioToolsListener } from "./studio-tools-notify";
 import { startOSRuntime } from "./os/index";
+import { setElevenLabsConvaiProbeResult } from "./os/health-checks";
 
 const app = express();
 const httpServer = createServer(app);
@@ -1831,6 +1832,73 @@ app.use((req, res, next) => {
   await startOSRuntime(app);
   startStudioToolsListener();
   startCron();
+
+  // ── ElevenLabs ConvAI key probe ───────────────────────────────────────────
+  // Fire once at startup to catch wrong-workspace or missing-scope keys before
+  // any user tries to speak. Logs a loud warning so the issue is visible in
+  // seconds rather than after user complaints. Result is also surfaced in the
+  // Mission Control AI health group.
+  (async () => {
+    const agentId = process.env.ELEVENLABS_CONVAI_AGENT_ID;
+    const apiKey  = process.env.ELEVENLABS_API_KEY;
+
+    if (!agentId || !apiKey) {
+      const detail = !apiKey
+        ? "ELEVENLABS_API_KEY is not set — voice will be unavailable"
+        : "ELEVENLABS_CONVAI_AGENT_ID is not set — voice will be unavailable";
+      console.warn(`[elevenlabs] ⚠️ ${detail}`);
+      setElevenLabsConvaiProbeResult({ status: "error", detail });
+      return;
+    }
+
+    try {
+      const resp = await fetch(
+        `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
+        {
+          headers: { "xi-api-key": apiKey },
+          signal: AbortSignal.timeout(10_000),
+        }
+      );
+
+      if (resp.ok) {
+        console.log("[elevenlabs] ✓ ConvAI signed-URL OK");
+        setElevenLabsConvaiProbeResult({ status: "ok", detail: "ConvAI signed-URL endpoint returned 200 OK" });
+        return;
+      }
+
+      let body: any = {};
+      try { body = await resp.json(); } catch { /* ignore */ }
+
+      if (resp.status === 404) {
+        const detail = "ELEVENLABS_API_KEY is from the wrong workspace — agent not found";
+        console.warn(`[elevenlabs] ⚠️ ${detail}`);
+        setElevenLabsConvaiProbeResult({ status: "wrong_workspace", detail });
+        return;
+      }
+
+      if (resp.status === 401) {
+        const errCode: string = body?.detail?.status ?? body?.error ?? "";
+        if (errCode === "missing_permissions" || String(errCode).includes("permission")) {
+          const detail = "ELEVENLABS_API_KEY is missing convai_write scope — signed URLs will fail";
+          console.warn(`[elevenlabs] ⚠️ ${detail}`);
+          setElevenLabsConvaiProbeResult({ status: "missing_permissions", detail });
+          return;
+        }
+        const detail = `ELEVENLABS_API_KEY is invalid or unauthorised (401) — ${errCode || "check key"}`;
+        console.warn(`[elevenlabs] ⚠️ ${detail}`);
+        setElevenLabsConvaiProbeResult({ status: "missing_permissions", detail });
+        return;
+      }
+
+      const detail = `ElevenLabs ConvAI probe returned unexpected status ${resp.status}`;
+      console.warn(`[elevenlabs] ⚠️ ${detail}`);
+      setElevenLabsConvaiProbeResult({ status: "error", detail });
+    } catch (e: any) {
+      const detail = `ElevenLabs ConvAI probe failed: ${e?.message ?? "network error"}`;
+      console.warn(`[elevenlabs] ⚠️ ${detail}`);
+      setElevenLabsConvaiProbeResult({ status: "error", detail });
+    }
+  })();
   await seedReferralExpiry().catch(e => console.error("[seed] Referral expiry column error:", e));
   await seedCatalog().catch(e => console.error("[seed] catalog seed error:", e));
   // Task #317: must run before syncAdminCredentials/seedDemoAccounts (which SELECT new columns)
