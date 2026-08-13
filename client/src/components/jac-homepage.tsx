@@ -916,19 +916,21 @@ export function JacHomepage() {
   const jacBubbles = messages.filter(m => m.role === "assistant").slice(-3);
 
   return (
-    <ConversationProvider>
-    {/* Only mount when voice is active — eliminates all SDK init errors before mic tap */}
+    <>
+    {/* ConversationProvider only mounts with its session — SDK never initialises before mic tap */}
     {liveMode && (
-      <JacConvaiSession
-        key={convaiKey}
-        ref={convaiSessionRef}
-        active={liveMode}
-        sessionEndpoint="/api/jac/convai/investor-session"
-        onPhaseChange={handleConvaiPhaseChange}
-        onUserTranscript={handleConvaiUserTranscript}
-        onJacResponse={handleConvaiJacResponse}
-        onError={handleConvaiError}
-      />
+      <ConversationProvider>
+        <JacConvaiSession
+          key={convaiKey}
+          ref={convaiSessionRef}
+          active={liveMode}
+          sessionEndpoint="/api/jac/convai/investor-session"
+          onPhaseChange={handleConvaiPhaseChange}
+          onUserTranscript={handleConvaiUserTranscript}
+          onJacResponse={handleConvaiJacResponse}
+          onError={handleConvaiError}
+        />
+      </ConversationProvider>
     )}
     <section
       className="relative z-10 w-full overflow-hidden"
@@ -1358,6 +1360,6 @@ export function JacHomepage() {
       </div>
     </section>
 
-    </ConversationProvider>
+    </>
   );
 }

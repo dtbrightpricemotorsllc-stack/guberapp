@@ -904,7 +904,7 @@ export function GUBERAssistant() {
   const convaiPulsing = convaiPhase === "connecting" || convaiPhase === "listening" || convaiPhase === "speaking";
 
   return (
-    <ConversationProvider>
+    <>
     <Sheet
       open={s.open}
       onOpenChange={(v) => {
@@ -927,17 +927,19 @@ export function GUBERAssistant() {
         style={{ background: "hsl(222 47% 5%)", borderTop: "1px solid hsl(270 100% 65% / 0.2)" }}
         hideCloseButton
       >
-        {/* Only mount when voice is active — eliminates all SDK init errors before mic tap */}
+        {/* ConversationProvider + session only mount when voice is active */}
         {convaiActive && (
-          <JacConvaiSession
-            key={convaiKey}
-            ref={convaiSessionRef}
-            active={convaiActive}
-            onPhaseChange={handleConvaiPhaseChange}
-            onUserTranscript={handleConvaiUserTranscript}
-            onJacResponse={handleConvaiJacResponse}
-            onError={handleConvaiError}
-          />
+          <ConversationProvider>
+            <JacConvaiSession
+              key={convaiKey}
+              ref={convaiSessionRef}
+              active={convaiActive}
+              onPhaseChange={handleConvaiPhaseChange}
+              onUserTranscript={handleConvaiUserTranscript}
+              onJacResponse={handleConvaiJacResponse}
+              onError={handleConvaiError}
+            />
+          </ConversationProvider>
         )}
         {/* ── Header ── */}
         <SheetHeader className="px-5 pt-4 pb-3 flex-shrink-0 border-b border-white/[0.05]">
@@ -1549,6 +1551,6 @@ export function GUBERAssistant() {
         </div>
       </SheetContent>
     </Sheet>
-    </ConversationProvider>
+    </>
   );
 }
