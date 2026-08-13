@@ -910,10 +910,11 @@ export function GUBERAssistant() {
       onOpenChange={(v) => {
         patchStore({ open: v });
         if (v) {
-          // User gesture — unlock audio and immediately start ElevenLabs ConvAI.
-          // ConvAI is the sole voice; it will play its configured greeting once ready.
+          // Unlock audio on open gesture but do NOT auto-start voice —
+          // voice only starts when the user explicitly taps the mic button.
+          // Auto-starting fails on Samsung Browser and other restricted
+          // environments, immediately triggering the error bubble.
           unlockAudioContext();
-          if (!convaiActive) startConvai();
         } else {
           cancelSpeech();
           stopConvai();
