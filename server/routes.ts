@@ -20316,19 +20316,107 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     }
   });
 
+  // ── Canonical screen → app route ─────────────────────────────────────────
+  // Every screen value JAC can navigate to in one place.  open_guber_screen
+  // normalises the incoming string to lowercase/snake_case then looks here.
   const JAC_SCREEN_ROUTES: Record<string, string> = {
-    load_board:      "/load-board",
-    marketplace:     "/marketplace",
-    see_for_me:      "/see-for-me",
-    day1_og:         "/og-advantage",
-    b4urepo:         "/b4u-repo",
-    b4uforeclosure:  "/b4u-foreclosure",
-    jobs:            "/my-jobs",
-    missions:        "/missions",
-    profile:         "/profile",
-    cash_drops:      "/cash-drops",
-    credits:         "/credits",
-    wallet:          "/wallet",
+    home:                 "/",
+    dashboard:            "/dashboard",
+    // Jobs
+    jobs:                 "/my-jobs",
+    my_jobs:              "/my-jobs",
+    browse_jobs:          "/browse-jobs",
+    post_job:             "/post-job",
+    job_detail:           "/my-jobs",       // without an id → job list
+    find_work:            "/browse-jobs",
+    // Marketplace
+    marketplace:          "/marketplace",
+    marketplace_listing:  "/marketplace",
+    wanted:               "/marketplace?tab=wanted",
+    barter:               "/marketplace?tab=barter",
+    // Transport / Load Board
+    load_board:           "/load-board",
+    transport_request:    "/load-board",
+    // See For Me / Verify & Inspect
+    see_for_me:           "/see-for-me",
+    verify_and_inspect:   "/see-for-me",
+    // Business / D.D.
+    business:             "/business",
+    dd:                   "/dd",
+    dd_launch:            "/dd",
+    // User
+    profile:              "/profile",
+    account_settings:     "/account-settings",
+    notifications:        "/notifications",
+    // Rewards / Earn
+    missions:             "/missions",
+    cash_drops:           "/cash-drops",
+    credits:              "/credits",
+    wallet:               "/wallet",
+    day1_og:              "/og-advantage",
+    pro_pocket:           "/credits",       // credits hub is the closest route
+    on_demand:            "/browse-jobs",
+    // Specialty
+    b4urepo:              "/b4u-repo",
+    b4uforeclosure:       "/b4u-foreclosure",
+    studio:               "/studio",
+    biz_sponsor:          "/biz/sponsor-drop",
+  };
+
+  // ── Natural-language alias → canonical screen key ─────────────────────────
+  // Lets JAC say "load board", "transport", "shipping" and always hit the
+  // right canonical key without ever returning a raw validation error.
+  const JAC_SCREEN_ALIASES: Record<string, string> = {
+    // Load Board variants
+    "transport":              "load_board",
+    "shipping":               "load_board",
+    "loadboard":              "load_board",
+    "load board":             "load_board",
+    "freight":                "load_board",
+    "hauling":                "load_board",
+    "vehicle transport":      "load_board",
+    "vehicle_transport":      "load_board",
+    "haul":                   "load_board",
+    // See For Me variants
+    "see for me":             "see_for_me",
+    "verify":                 "see_for_me",
+    "verify and inspect":     "see_for_me",
+    "inspect":                "see_for_me",
+    "remote presence":        "see_for_me",
+    "inspection":             "see_for_me",
+    // Jobs
+    "work":                   "browse_jobs",
+    "find work":              "browse_jobs",
+    "find jobs":              "browse_jobs",
+    "available jobs":         "browse_jobs",
+    "post a job":             "post_job",
+    "post job":               "post_job",
+    "create job":             "post_job",
+    "my jobs":                "my_jobs",
+    // Marketplace
+    "sell":                   "marketplace",
+    "my listings":            "marketplace",
+    "buy":                    "marketplace",
+    "items":                  "marketplace",
+    // Business / D.D.
+    "start a business":       "dd",
+    "business launch":        "dd",
+    "form an llc":            "dd",
+    "business formation":     "dd",
+    "business startup":       "dd",
+    "business development":   "dd",
+    "get an ein":             "dd",
+    // Notifications
+    "notifs":                 "notifications",
+    "alerts":                 "notifications",
+    "messages":               "notifications",
+    // Credits
+    "earn credits":           "credits",
+    "credit balance":         "credits",
+    // Wallet
+    "earnings":               "wallet",
+    "payouts":                "wallet",
+    "my money":               "wallet",
   };
 
   // ── POST /api/jac/action — Universal JAC action gateway ──────────────────
@@ -20679,11 +20767,96 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         // ── NAVIGATION ────────────────────────────────────────────────────────
 
         case "open_guber_screen": {
-          const { screen } = data as any;
-          if (!screen) return res.json({ success: false, error: "screen is required." });
-          const route = JAC_SCREEN_ROUTES[screen] ?? `/${String(screen).replace(/_/g, "-")}`;
-          queueNav(screen, route);
-          return res.json({ success: true, result: { screen, route }, message: `Opening ${String(screen).replace(/_/g, " ")} now.`, nav: route });
+          if (!data?.screen) return res.json({ success: false, error: "screen is required." });
+          // Normalise: lowercase, collapse whitespace, replace spaces with underscores.
+          const raw = String(data.screen).toLowerCase().trim().replace(/\s+/g, "_");
+          // Alias resolution first, then canonical lookup with underscore→hyphen fallback.
+          const canonical = JAC_SCREEN_ALIASES[raw.replace(/_/g, " ")] ?? JAC_SCREEN_ALIASES[raw] ?? raw;
+          const route = JAC_SCREEN_ROUTES[canonical] ?? `/${canonical.replace(/_/g, "-")}`;
+          queueNav(canonical, route);
+          console.log(`[jac/action] open_guber_screen raw="${data.screen}" → canonical="${canonical}" → route="${route}"`);
+          return res.json({ success: true, result: { screen: canonical, route }, message: `Opening ${canonical.replace(/_/g, " ")} now.`, nav: route });
+        }
+
+        // ── NOTIFICATIONS ────────────────────────────────────────────────────
+
+        case "get_notifications": {
+          const user = await requireUser(); if (!user) return;
+          const notifRows = await pool.query(
+            `SELECT id, type, message, read, created_at FROM notifications
+             WHERE user_id=$1 ORDER BY created_at DESC LIMIT 15`,
+            [userId]
+          );
+          const unread = notifRows.rows.filter((n: any) => !n.read).length;
+          queueNav("notifications", "/notifications");
+          return res.json({
+            success: true,
+            result: notifRows.rows.map((n: any) => ({
+              id: n.id, type: n.type, message: n.message,
+              read: n.read, createdAt: n.created_at,
+            })),
+            message: `You have ${unread} unread notification${unread === 1 ? "" : "s"}.`,
+            nav: "/notifications",
+          });
+        }
+
+        // ── ACCOUNT STATUS ───────────────────────────────────────────────────
+
+        case "get_account_status": {
+          const user = await requireUser(); if (!user) return;
+          const statusRow = await pool.query(`
+            SELECT
+              (SELECT COUNT(*)::int FROM jobs WHERE assigned_helper_id=$1
+               AND status NOT IN ('completed','cancelled','disputed') AND deleted_at IS NULL) AS worker_active,
+              (SELECT COUNT(*)::int FROM jobs WHERE posted_by_id=$1
+               AND status IN ('open','in_progress') AND deleted_at IS NULL) AS hirer_active,
+              (SELECT COUNT(*)::int FROM notifications WHERE user_id=$1 AND read=false) AS unread_notifs,
+              (SELECT COALESCE(SUM(CASE WHEN type='credit' THEN amount ELSE -amount END),0)::int
+               FROM credit_ledger WHERE user_id=$1) AS credits,
+              (SELECT COALESCE(SUM(amount),0)
+               FROM wallet_transactions WHERE user_id=$1 AND status='completed') AS wallet_balance
+          `, [userId]);
+          const s = statusRow.rows[0] ?? {};
+          const workerActive = parseInt(s.worker_active) || 0;
+          const hirerActive  = parseInt(s.hirer_active)  || 0;
+          const unread       = parseInt(s.unread_notifs) || 0;
+          const credits      = parseInt(s.credits)       || 0;
+          const wallet       = parseFloat(s.wallet_balance || "0");
+          return res.json({
+            success: true,
+            result: { workerActiveJobs: workerActive, hirerActiveJobs: hirerActive, unreadNotifications: unread, credits, walletBalance: wallet.toFixed(2) },
+            message: `${workerActive} active worker job${workerActive === 1 ? "" : "s"}, ${hirerActive} hirer job${hirerActive === 1 ? "" : "s"}, ${credits.toLocaleString()} credits, $${wallet.toFixed(2)} in wallet${unread > 0 ? `, ${unread} unread notification${unread === 1 ? "" : "s"}` : ""}.`,
+          });
+        }
+
+        // ── D.D. HANDOFF ─────────────────────────────────────────────────────
+
+        case "handoff_to_dd": {
+          if (!userId) {
+            queueNav("dd", "/dd");
+            return res.json({
+              success: false,
+              requires_auth: true,
+              message: "D.D. Business Launch is available to signed-in GUBER members. Sign in to access D.D.",
+              nav: "/login",
+            });
+          }
+          const user = await requireUser(); if (!user) return;
+          const isUnlocked = !!(user as any).ddLaunchUnlocked ?? !!(user as any).dd_launch_unlocked;
+          queueNav("dd", "/dd");
+          return res.json({
+            success: true,
+            result: { ddUnlocked: isUnlocked },
+            message: isUnlocked
+              ? "D.D. is ready — opening Business Launch now."
+              : "Opening D.D. Business Launch. There's a small one-time unlock to get the full step-by-step business startup guide.",
+            nav: "/dd",
+          });
+        }
+
+        case "open_dd": {
+          queueNav("dd", "/dd");
+          return res.json({ success: true, result: {}, message: "Opening D.D. Business Launch.", nav: "/dd" });
         }
 
         // ── GUEST DRAFT ACTIONS ───────────────────────────────────────────────
