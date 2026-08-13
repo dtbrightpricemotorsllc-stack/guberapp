@@ -927,15 +927,18 @@ export function GUBERAssistant() {
         style={{ background: "hsl(222 47% 5%)", borderTop: "1px solid hsl(270 100% 65% / 0.2)" }}
         hideCloseButton
       >
-        <JacConvaiSession
-          key={convaiKey}
-          ref={convaiSessionRef}
-          active={convaiActive}
-          onPhaseChange={handleConvaiPhaseChange}
-          onUserTranscript={handleConvaiUserTranscript}
-          onJacResponse={handleConvaiJacResponse}
-          onError={handleConvaiError}
-        />
+        {/* Only mount when voice is active — eliminates all SDK init errors before mic tap */}
+        {convaiActive && (
+          <JacConvaiSession
+            key={convaiKey}
+            ref={convaiSessionRef}
+            active={convaiActive}
+            onPhaseChange={handleConvaiPhaseChange}
+            onUserTranscript={handleConvaiUserTranscript}
+            onJacResponse={handleConvaiJacResponse}
+            onError={handleConvaiError}
+          />
+        )}
         {/* ── Header ── */}
         <SheetHeader className="px-5 pt-4 pb-3 flex-shrink-0 border-b border-white/[0.05]">
           <div className="flex items-center justify-between">

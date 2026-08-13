@@ -917,16 +917,19 @@ export function JacHomepage() {
 
   return (
     <ConversationProvider>
-    <JacConvaiSession
-      key={convaiKey}
-      ref={convaiSessionRef}
-      active={liveMode}
-      sessionEndpoint="/api/jac/convai/investor-session"
-      onPhaseChange={handleConvaiPhaseChange}
-      onUserTranscript={handleConvaiUserTranscript}
-      onJacResponse={handleConvaiJacResponse}
-      onError={handleConvaiError}
-    />
+    {/* Only mount when voice is active — eliminates all SDK init errors before mic tap */}
+    {liveMode && (
+      <JacConvaiSession
+        key={convaiKey}
+        ref={convaiSessionRef}
+        active={liveMode}
+        sessionEndpoint="/api/jac/convai/investor-session"
+        onPhaseChange={handleConvaiPhaseChange}
+        onUserTranscript={handleConvaiUserTranscript}
+        onJacResponse={handleConvaiJacResponse}
+        onError={handleConvaiError}
+      />
+    )}
     <section
       className="relative z-10 w-full overflow-hidden"
       style={{ background: "linear-gradient(170deg, hsl(222 47% 4%) 0%, hsl(270 65% 4%) 100%)", minHeight: 640 }}
