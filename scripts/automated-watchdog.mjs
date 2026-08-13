@@ -48,6 +48,7 @@ export const PROTECTED_TEST_SUITES = [
   "server/tests/studio-featured-admin.test.ts",
   "server/tests/studio-pricing.test.ts",
   "server/tests/asset-custody-routes.test.ts",
+  "server/tests/elevenlabs-health-probe.test.ts",
   "client/src/pages/login.test.tsx",
   "client/src/components/handsfree-capture.test.tsx",
 ];
