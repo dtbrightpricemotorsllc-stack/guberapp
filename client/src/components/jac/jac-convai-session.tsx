@@ -414,6 +414,10 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         // Disarm this instance's mic-lost token so a track "ended" event that
         // arrives after the ElevenLabs error callback doesn't fire redundantly.
         if (micLostTokenRef.current) { _disarmToken(micLostTokenRef.current); micLostTokenRef.current = null; }
+        // Gate on activeRef so a stale SDK error that arrives after the session
+        // was torn down (or before it was ever started) doesn't show an error
+        // bubble to a user who never tapped the mic.
+        if (!activeRef.current) return;
         sendVoiceTelemetry("error", platformRef.current, msg || "unknown_error", voiceTokenRef.current);
         cbRef.current.onError(msg || "Voice connection lost.");
       },
