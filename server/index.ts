@@ -1375,6 +1375,25 @@ app.use((req, res, next) => {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS dd_stripe_session_id TEXT;
   `).catch(e => console.error("[migration] users.dd_launch error:", e));
 
+  // D.D. Case Tracking — persistent formation cases with step-by-step state
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS dd_cases (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      business_type TEXT,
+      business_name TEXT,
+      state TEXT,
+      step_index INTEGER NOT NULL DEFAULT 0,
+      steps JSONB NOT NULL DEFAULT '[]'::jsonb,
+      collected_fields JSONB NOT NULL DEFAULT '{}'::jsonb,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_dd_cases_user ON dd_cases(user_id);
+    CREATE INDEX IF NOT EXISTS idx_dd_cases_status ON dd_cases(status);
+  `).catch(e => console.error("[migration] dd_cases table error:", e));
+
   // Add deleted_at to jobs (soft-delete; used by raw SQL in briefing/context queries)
   await pool.query(`
     ALTER TABLE jobs ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;

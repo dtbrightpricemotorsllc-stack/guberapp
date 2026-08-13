@@ -8,6 +8,7 @@
  */
 
 import type { Pool } from "pg";
+import { buildDdFormationSteps } from "./dd-formation";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 export const JAC_REALTIME_MODEL = "gpt-4o-realtime-preview-2024-12-17";
@@ -107,6 +108,7 @@ GUBER FEATURE MAP
 - Cash Drops (reward events) → /cash-drops
 - Post your own service listing → /marketplace (+ create)
 - Business dashboard → /biz/dashboard
+- D.D. Business Launch (formation guide) → /dd
 
 ACTION FLOW (for every request)
 1. Briefly acknowledge.
@@ -117,6 +119,19 @@ ACTION FLOW (for every request)
 6. Ask permission before creating, posting, applying, or buying anything.
 7. Confirm what happened after an action.
 8. Give ONE next step — not a list.
+
+D.D. BUSINESS LAUNCH — HANDOFF WORKFLOW
+When someone says "I want to start a business", "how do I start an LLC", "how do I get an EIN", "I want to make my business official", "what licenses do I need", or similar:
+1. Say: "That's D.D.'s department — she's Team GUBER's Business Development guide and will track every step."
+2. Ask what type of business entity they want (LLC is most common; also sole proprietor, S-Corp, partnership, C-Corp).
+3. Ask what state it will be registered in.
+4. Once you have BOTH — call create_dd_case. This creates a real tracked formation case with all the steps for their entity and state, persisted to their account.
+5. Tell them their case is set up and open D.D. now by calling navigate_to with route="/dd".
+6. If they already have an active case (get_dd_state returns has_case: true) — tell them what step they're on and navigate to /dd to resume.
+7. Do NOT try to walk through the full formation flow yourself. JAC gathers type + state, creates the case, and hands off. D.D. does the step-by-step guidance.
+8. If the user is not logged in — navigate to /dd (they'll see the paywall/login). Do not attempt to create a case for a guest.
+
+REQUIRED VS OPTIONAL HONESTY: Never tell a user a formation step is legally required when it is conditional. Steps like state tax registration, local licenses, and industry permits depend on state law, industry, and business activity. Always say "check whether this applies to you" for conditional steps.
 
 SAFETY & HONESTY
 - Never guarantee money, employment, housing, or specific earnings.
@@ -181,11 +196,11 @@ export const JAC_TOOLS = [
       properties: {
         route: {
           type: "string",
-          description: "The app route — e.g. '/post-job', '/marketplace', '/signup', '/verify-inspect', '/load-board', '/profile', '/browse-jobs', '/og-advantage', '/studio', '/cash-drops', '/signup?intent=worker', '/signup?intent=hirer'",
+          description: "The app route — e.g. '/post-job', '/marketplace', '/signup', '/verify-inspect', '/load-board', '/profile', '/browse-jobs', '/og-advantage', '/studio', '/cash-drops', '/dd', '/signup?intent=worker', '/signup?intent=hirer'",
         },
         reason: {
           type: "string",
-          description: "Brief human-readable reason shown to user, e.g. 'post a job listing', 'browse available work near you', 'sign up and get verified'",
+          description: "Brief human-readable reason shown to user, e.g. 'post a job listing', 'browse available work near you', 'sign up and get verified', 'open D.D. Business Launch'",
         },
       },
       required: ["route", "reason"],
@@ -200,9 +215,79 @@ export const JAC_TOOLS = [
       properties: {
         topic: {
           type: "string",
-          description: "Topic to get info on — 'overview', 'fees', 'payments', 'verification', 'categories', 'load_board', 'marketplace', 'studio', 'cash_drops', 'og_membership', 'verify_inspect'",
+          description: "Topic to get info on — 'overview', 'fees', 'payments', 'verification', 'categories', 'load_board', 'marketplace', 'studio', 'cash_drops', 'og_membership', 'verify_inspect', 'dd_business_launch'",
         },
       },
+    },
+  },
+  // ── D.D. Business Launch tools ────────────────────────────────────────────
+  {
+    type: "function" as const,
+    name: "create_dd_case",
+    description: "Create a persistent D.D. formation case for the authenticated user after gathering their business type and state. This creates a real tracked case with all the formation steps server-side. Call this ONLY after you know both the business_type AND the state. Requires the user to be signed in and have D.D. unlocked.",
+    parameters: {
+      type: "object",
+      properties: {
+        business_type: {
+          type: "string",
+          description: "The business entity type: 'LLC', 'Sole Proprietor', 'S-Corp', 'C-Corp', 'Partnership'. Ask the user if not yet known.",
+        },
+        business_name: {
+          type: "string",
+          description: "The intended business name, if the user has mentioned one. Omit if not yet known.",
+        },
+        state: {
+          type: "string",
+          description: "The U.S. state where the business will be registered, e.g. 'Alabama', 'Texas', 'California'. Ask the user if not yet known.",
+        },
+      },
+      required: ["business_type", "state"],
+    },
+  },
+  {
+    type: "function" as const,
+    name: "get_dd_state",
+    description: "Get the current state of the authenticated user's active D.D. formation case — which step they are on, what's been completed, and what the next step is. Use this when the user returns to a D.D. conversation or you need to check their progress.",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    type: "function" as const,
+    name: "get_dd_next_action",
+    description: "Get the next required formation step for the user's active D.D. case, including the official URL and cost if known. Use when resuming a D.D. conversation to tell the user exactly what to do next.",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    type: "function" as const,
+    name: "mark_dd_step_complete",
+    description: "Mark the current (or a specific) formation step as done and advance the case to the next step. Call this when the user confirms they've completed a step.",
+    parameters: {
+      type: "object",
+      properties: {
+        case_id: {
+          type: "number",
+          description: "The D.D. case ID (from create_dd_case or get_dd_state).",
+        },
+        step_id: {
+          type: "string",
+          description: "The step ID to mark complete (e.g. 'name_search', 'ein', 'formation_filing'). Omit to mark the current step_index complete.",
+        },
+      },
+      required: ["case_id"],
+    },
+  },
+  {
+    type: "function" as const,
+    name: "return_from_dd_to_jac",
+    description: "Signal the end of a D.D. session and return the user to the main JAC interface. Use when the user says they're done with D.D. or wants to do something else on GUBER.",
+    parameters: {
+      type: "object",
+      properties: {},
     },
   },
 ];
@@ -276,7 +361,8 @@ export async function createJacRealtimeSession(opts: RealtimeSessionOptions = {}
 export async function executeJacTool(
   name: string,
   args: Record<string, any>,
-  _pool: Pool,
+  pool: Pool,
+  userId?: number,
 ): Promise<Record<string, any>> {
   switch (name) {
     case "search_opportunities": {
@@ -366,12 +452,184 @@ export async function executeJacTool(
         cash_drops: "Cash Drops are real-cash reward events released by GUBER. They appear on the map. First to claim wins. Day-1 OG members get early notifications.",
         og_membership: "Day-1 OG is GUBER's founding membership. Perks: 5% fee instead of 10%, permanent gold badge, early feature access, priority Cash Drop notifications, and +20 Studio credits/month.",
         verify_inspect: "Verify & Inspect lets you hire a GUBER worker to physically inspect a car, property, or item on your behalf — remotely. They document everything on camera in real time. Useful for out-of-state purchases.",
+        dd_business_launch: "D.D. Business Launch is a $9.99 one-time unlock giving permanent access to Team GUBER's Business Development guide. D.D. walks you through forming an LLC, S-Corp, or any business entity step by step — including name search, Secretary of State filing, EIN, taxes, licenses, and banking readiness. All steps are tracked and saved to your account so you can pick up where you left off.",
       };
 
       const topic = args.topic || "overview";
       return {
         topic,
         info: info[topic] || info.overview,
+      };
+    }
+
+    // ── D.D. Case Tools ────────────────────────────────────────────────────────
+    case "create_dd_case": {
+      if (!userId) {
+        return {
+          error: "Authentication required to create a D.D. case.",
+          requires_auth: true,
+          action: "navigate",
+          route: "/dd",
+          message: "The user needs to sign in first. Navigate to /dd — they'll see the unlock flow.",
+        };
+      }
+      // Verify D.D. is unlocked
+      const userRow = await pool.query(
+        `SELECT dd_launch_unlocked FROM users WHERE id = $1`,
+        [userId]
+      );
+      if (!userRow.rows.length || !userRow.rows[0].dd_launch_unlocked) {
+        return {
+          dd_unlocked: false,
+          action: "navigate",
+          route: "/dd",
+          message: "D.D. Business Launch is not yet unlocked for this account. Navigating to /dd — they'll see the $9.99 unlock screen.",
+        };
+      }
+      const { business_type, business_name, state } = args;
+      const steps = buildDdFormationSteps(business_type || "LLC", state || "");
+      // Pause any previous active case
+      await pool.query(
+        `UPDATE dd_cases SET status = 'paused', updated_at = NOW() WHERE user_id = $1 AND status = 'active'`,
+        [userId]
+      );
+      const result = await pool.query(
+        `INSERT INTO dd_cases (user_id, business_type, business_name, state, step_index, steps, collected_fields, status)
+         VALUES ($1, $2, $3, $4, 0, $5::jsonb, '{}'::jsonb, 'active') RETURNING id`,
+        [userId, business_type || null, business_name || null, state || null, JSON.stringify(steps)]
+      );
+      const caseId = result.rows[0].id;
+      const currentStep = steps[0] || null;
+      return {
+        success: true,
+        case_id: caseId,
+        step_index: 0,
+        total_steps: steps.length,
+        current_step: currentStep,
+        action: "navigate",
+        route: "/dd",
+        message: `D.D. case created (ID ${caseId}) for ${business_type || "LLC"} in ${state || "your state"}. ${steps.length} formation steps tracked. First step: "${currentStep?.label || "gathering details"}". Opening D.D. now.`,
+      };
+    }
+
+    case "get_dd_state": {
+      if (!userId) {
+        return { has_case: false, error: "Authentication required.", requires_auth: true };
+      }
+      const caseRows = await pool.query(
+        `SELECT * FROM dd_cases WHERE user_id = $1 AND status IN ('active', 'completed') ORDER BY updated_at DESC LIMIT 1`,
+        [userId]
+      );
+      if (!caseRows.rows.length) {
+        return {
+          has_case: false,
+          message: "No active D.D. case found. Ask for business type and state, then call create_dd_case.",
+        };
+      }
+      const ddCase = caseRows.rows[0];
+      const steps: any[] = Array.isArray(ddCase.steps) ? ddCase.steps : [];
+      const completedCount = steps.filter((s: any) => s.completed).length;
+      const currentStep = steps[ddCase.step_index] || null;
+      return {
+        has_case: true,
+        case_id: ddCase.id,
+        business_type: ddCase.business_type,
+        business_name: ddCase.business_name,
+        state: ddCase.state,
+        step_index: ddCase.step_index,
+        total_steps: steps.length,
+        completed_steps: completedCount,
+        current_step: currentStep,
+        status: ddCase.status,
+        message: currentStep
+          ? `Active D.D. case found. Step ${ddCase.step_index + 1}/${steps.length}: "${currentStep.label}" (${completedCount} of ${steps.length} completed).`
+          : `All ${steps.length} formation steps completed.`,
+      };
+    }
+
+    case "get_dd_next_action": {
+      if (!userId) {
+        return { error: "Authentication required.", requires_auth: true };
+      }
+      const caseRows = await pool.query(
+        `SELECT * FROM dd_cases WHERE user_id = $1 AND status IN ('active', 'completed') ORDER BY updated_at DESC LIMIT 1`,
+        [userId]
+      );
+      if (!caseRows.rows.length) {
+        return {
+          has_case: false,
+          message: "No active D.D. case. Call create_dd_case first.",
+        };
+      }
+      const ddCase = caseRows.rows[0];
+      const steps: any[] = Array.isArray(ddCase.steps) ? ddCase.steps : [];
+      const nextIncomplete = steps.find((s: any) => !s.completed);
+      if (!nextIncomplete) {
+        return {
+          all_done: true,
+          total_steps: steps.length,
+          message: `All ${steps.length} formation steps are complete for this ${ddCase.business_type || "business"} in ${ddCase.state || "your state"}.`,
+        };
+      }
+      return {
+        step: nextIncomplete,
+        step_index: steps.indexOf(nextIncomplete),
+        total_steps: steps.length,
+        is_required: nextIncomplete.required,
+        message: `Next step: "${nextIncomplete.label}" — ${nextIncomplete.description}${nextIncomplete.cost ? ` (Cost: ${nextIncomplete.cost})` : ""}${nextIncomplete.url ? ` Official link: ${nextIncomplete.url}` : ""}`,
+      };
+    }
+
+    case "mark_dd_step_complete": {
+      if (!userId) {
+        return { error: "Authentication required.", requires_auth: true };
+      }
+      const { case_id: caseId, step_id: stepId } = args;
+      if (!caseId) return { error: "case_id is required." };
+      const caseRows = await pool.query(
+        `SELECT * FROM dd_cases WHERE id = $1 AND user_id = $2`,
+        [caseId, userId]
+      );
+      if (!caseRows.rows.length) {
+        return { error: "Case not found or access denied." };
+      }
+      const ddCase = caseRows.rows[0];
+      const steps: any[] = Array.isArray(ddCase.steps) ? [...ddCase.steps] : [];
+      // Mark target step
+      let targetIdx = stepId ? steps.findIndex((s: any) => s.id === stepId) : ddCase.step_index;
+      if (targetIdx === -1) targetIdx = ddCase.step_index;
+      if (targetIdx >= 0 && targetIdx < steps.length) {
+        steps[targetIdx] = { ...steps[targetIdx], completed: true };
+      }
+      // Advance to next incomplete
+      let newStepIndex = steps.length;
+      for (let i = 0; i < steps.length; i++) {
+        if (!steps[i].completed) { newStepIndex = i; break; }
+      }
+      const allDone = newStepIndex >= steps.length;
+      await pool.query(
+        `UPDATE dd_cases SET step_index = $1, steps = $2::jsonb, status = $3, updated_at = NOW() WHERE id = $4`,
+        [Math.min(newStepIndex, steps.length), JSON.stringify(steps), allDone ? "completed" : "active", caseId]
+      );
+      const nextStep = allDone ? null : steps[newStepIndex];
+      return {
+        success: true,
+        case_id: caseId,
+        step_index: newStepIndex,
+        total_steps: steps.length,
+        all_done: allDone,
+        next_step: nextStep,
+        message: allDone
+          ? `All ${steps.length} formation steps complete. ${ddCase.business_type || "Business"} formation in ${ddCase.state || "your state"} is fully tracked.`
+          : `Step marked complete. Next: "${nextStep?.label}" (step ${newStepIndex + 1}/${steps.length}).`,
+      };
+    }
+
+    case "return_from_dd_to_jac": {
+      return {
+        action: "navigate",
+        route: "/",
+        message: "Returning to JAC. D.D. progress is saved — the user can come back to /dd at any time to continue.",
       };
     }
 

@@ -30,6 +30,7 @@ import { sendPushToUser } from "./push";
 import { tryLocalAnswer, promoteToCache, getJacBrainStats, getMultiSourceContext } from "./jac-brain";
 import { syncJacProfile, buildJacProfileContext, buildMorningBriefing, scanOpportunities } from "./jac-profile";
 import { createJacRealtimeSession, executeJacTool } from "./jac-realtime";
+import { buildDdFormationSteps } from "./dd-formation";
 import { reportIssue as recordSystemIssue, escalateCriticalIssue, tryAdminMonitoringAnswer, shouldDiagnose } from "./system-issues";
 import { maybeDiagnoseIssue } from "./ai-diagnosis";
 import { isValidActionType, validateAndSummarize, createPendingAction, executeAction } from "./jac-actions";
@@ -17759,7 +17760,17 @@ D.D. BUSINESS LAUNCH — TEAM GUBER BUSINESS DEVELOPMENT SPECIALIST:
 D.D. is a Team GUBER specialist, not a general assistant. D.D. helps people start, form, and register a legitimate business — step by step, one question at a time. D.D. covers: business structure, business name, state formation/registration, EIN, state tax registration, county/city requirements, licenses and permits, registered agent, banking readiness, insurance considerations, payment/bookkeeping readiness, and GUBER Business onboarding when appropriate. D.D. uses Guided Chat (not voice) because business setup involves official links, prices, forms, and deadlines users need to look back at. D.D. costs $9.99 one-time — permanent access for that GUBER account. D.D. is not an attorney, CPA, or licensed professional.
 
 WHEN TO INTRODUCE D.D.:
-If someone says "I want to start a business", "how do I start an LLC", "how do I get an EIN", "I want to make my business official", "what licenses do I need", "how do I open a trucking company / detailing business / cleaning company" or similar — this is D.D.'s department. JAC should NOT try to walk through the full startup flow itself. Instead say: "Sounds like you're trying to turn this into a real business. That's D.D.'s department. D.D. is Team GUBER's Business Development guide and can walk you through what you need, what it may cost, what you can do today, and the official places to get everything done." Then offer to open D.D. (route: /dd). If the user already owns D.D., say D.D. is ready for them — do NOT prompt payment.
+If someone says "I want to start a business", "how do I start an LLC", "how do I get an EIN", "I want to make my business official", "what licenses do I need", "how do I open a trucking company / detailing business / cleaning company" or similar — this is D.D.'s department.
+
+JAC HANDOFF WORKFLOW FOR D.D. (follow this order precisely):
+1. Acknowledge: "That's D.D.'s department — she's Team GUBER's Business Development guide."
+2. Ask TWO questions (voice: one at a time): (a) What type of business entity? (LLC is most common; also sole proprietor, S-Corp, partnership, C-Corp) (b) What state will it be registered in?
+3. Once you have business_type AND state — use the create_dd_case action to create a tracked formation case server-side. This creates a real D.D. case with all the formation steps for their entity/state.
+4. Tell them their case is set up and opening D.D. now. Navigate to /dd.
+5. If the user already has an open D.D. case (get_dd_state returns has_case: true) — resume that case: tell them what step they are on and navigate to /dd.
+6. If the user does NOT have D.D. unlocked yet, navigate to /dd and tell them D.D. is $9.99 one-time — they'll see the unlock screen.
+
+JAC must NOT attempt to walk through the full business formation flow itself. JAC gathers entity type + state, creates the case, and hands off. D.D. does the step-by-step guidance.
 
 JAC / GUBEE / TEAM GUBER MODEL:
 - JAC = conversation + coordination. JAC gathers information, builds proposals, guides users, and hands off to the right action.
@@ -20006,7 +20017,9 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       if (!name || typeof name !== "string") {
         return res.status(400).json({ error: "Tool name required" });
       }
-      const result = await executeJacTool(name, args || {}, pool);
+      // Pass authenticated userId so D.D. tools can create/advance cases on behalf of the user.
+      const userId = (req.session as any)?.userId as number | undefined;
+      const result = await executeJacTool(name, args || {}, pool, userId);
       res.json(result);
     } catch (err: any) {
       console.error("[jac-realtime] tool error:", err?.message);
@@ -20857,6 +20870,186 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         case "open_dd": {
           queueNav("dd", "/dd");
           return res.json({ success: true, result: {}, message: "Opening D.D. Business Launch.", nav: "/dd" });
+        }
+
+        // ── D.D. CASE TOOLS ──────────────────────────────────────────────────
+        // These tools give JAC persistent case state so that starting a business
+        // through voice tracks real formation steps server-side across sessions.
+
+        case "create_dd_case": {
+          if (!userId) return res.json({ success: false, error: "Authentication required to create a D.D. case." });
+          const user = await requireUser(); if (!user) return;
+          if (!(user as any).ddLaunchUnlocked) {
+            queueNav("dd", "/dd");
+            return res.json({
+              success: false,
+              error: "D.D. Business Launch is not unlocked for this account.",
+              message: "To start a tracked formation case with D.D., you'll need to unlock D.D. Business Launch first.",
+              nav: "/dd",
+            });
+          }
+          const { business_type, business_name, state, collected_fields } = data as any;
+          const steps = buildDdFormationSteps(business_type || "LLC", state || "");
+          // Pause any previously active case before creating a new one
+          await pool.query(
+            `UPDATE dd_cases SET status = 'paused', updated_at = NOW() WHERE user_id = $1 AND status = 'active'`,
+            [userId]
+          );
+          const caseResult = await pool.query(
+            `INSERT INTO dd_cases (user_id, business_type, business_name, state, step_index, steps, collected_fields, status)
+             VALUES ($1, $2, $3, $4, 0, $5::jsonb, $6::jsonb, 'active')
+             RETURNING id`,
+            [
+              userId,
+              business_type || null,
+              business_name || null,
+              state || null,
+              JSON.stringify(steps),
+              JSON.stringify(collected_fields || {}),
+            ]
+          );
+          const caseId = caseResult.rows[0].id;
+          const currentStep = steps[0] || null;
+          queueNav("dd", "/dd");
+          return res.json({
+            success: true,
+            result: { case_id: caseId, step_index: 0, total_steps: steps.length, current_step: currentStep },
+            message: currentStep
+              ? `D.D. case created (ID ${caseId}). First step: "${currentStep.label}". Opening D.D. now.`
+              : `D.D. case created (ID ${caseId}). Opening D.D. now — D.D. will guide you through the steps.`,
+            nav: "/dd",
+          });
+        }
+
+        case "get_dd_state": {
+          if (!userId) return res.json({ success: false, error: "Authentication required." });
+          await requireUser(); if (!res.headersSent && !(req.session as any).userId) return;
+          const caseRows = await pool.query(
+            `SELECT * FROM dd_cases WHERE user_id = $1 AND status IN ('active', 'completed') ORDER BY updated_at DESC LIMIT 1`,
+            [userId]
+          );
+          if (!caseRows.rows.length) {
+            return res.json({
+              success: true,
+              result: { has_case: false },
+              message: "No active D.D. case found. Use create_dd_case to start one.",
+            });
+          }
+          const ddCase = caseRows.rows[0];
+          const steps: any[] = Array.isArray(ddCase.steps) ? ddCase.steps : [];
+          const currentStep = steps[ddCase.step_index] || null;
+          const completedSteps = steps.filter((s: any) => s.completed).length;
+          return res.json({
+            success: true,
+            result: {
+              case_id: ddCase.id,
+              business_type: ddCase.business_type,
+              business_name: ddCase.business_name,
+              state: ddCase.state,
+              step_index: ddCase.step_index,
+              total_steps: steps.length,
+              completed_steps: completedSteps,
+              current_step: currentStep,
+              collected_fields: ddCase.collected_fields || {},
+              status: ddCase.status,
+            },
+            message: currentStep
+              ? `Active case: ${ddCase.business_type || "business"} in ${ddCase.state || "your state"}. Currently on step ${ddCase.step_index + 1}/${steps.length}: "${currentStep.label}".`
+              : `All ${steps.length} steps completed for ${ddCase.business_type || "business"} formation.`,
+          });
+        }
+
+        case "get_dd_next_action": {
+          if (!userId) return res.json({ success: false, error: "Authentication required." });
+          await requireUser(); if (!res.headersSent && !(req.session as any).userId) return;
+          const caseRows = await pool.query(
+            `SELECT * FROM dd_cases WHERE user_id = $1 AND status IN ('active', 'completed') ORDER BY updated_at DESC LIMIT 1`,
+            [userId]
+          );
+          if (!caseRows.rows.length) {
+            return res.json({
+              success: false,
+              result: { has_case: false },
+              message: "No active D.D. case. Create one with create_dd_case first.",
+            });
+          }
+          const ddCase = caseRows.rows[0];
+          const steps: any[] = Array.isArray(ddCase.steps) ? ddCase.steps : [];
+          const nextIncomplete = steps.find((s: any) => !s.completed);
+          if (!nextIncomplete) {
+            return res.json({
+              success: true,
+              result: { all_done: true, total_steps: steps.length },
+              message: `All formation steps are complete for this case. ${ddCase.business_type || "Business"} formation in ${ddCase.state || "your state"} is fully tracked.`,
+            });
+          }
+          return res.json({
+            success: true,
+            result: {
+              step: nextIncomplete,
+              step_index: steps.indexOf(nextIncomplete),
+              total_steps: steps.length,
+              is_required: nextIncomplete.required,
+            },
+            message: `Next action: "${nextIncomplete.label}" — ${nextIncomplete.description}${nextIncomplete.cost ? ` (Cost: ${nextIncomplete.cost})` : ""}${nextIncomplete.url ? ` Official link: ${nextIncomplete.url}` : ""}`,
+          });
+        }
+
+        case "mark_dd_step_complete": {
+          if (!userId) return res.json({ success: false, error: "Authentication required." });
+          await requireUser(); if (!res.headersSent && !(req.session as any).userId) return;
+          const { case_id: markCaseId, step_id: markStepId, collected_updates } = data as any;
+          if (!markCaseId) return res.json({ success: false, error: "case_id is required." });
+          const caseRows = await pool.query(
+            `SELECT * FROM dd_cases WHERE id = $1 AND user_id = $2`,
+            [markCaseId, userId]
+          );
+          if (!caseRows.rows.length) return res.json({ success: false, error: "Case not found or access denied." });
+          const ddCase = caseRows.rows[0];
+          const steps: any[] = Array.isArray(ddCase.steps) ? ddCase.steps : [];
+          // Mark the target step (by id or by current step_index)
+          let targetIdx = steps.findIndex((s: any) => s.id === markStepId);
+          if (targetIdx === -1) targetIdx = ddCase.step_index;
+          if (targetIdx >= 0 && targetIdx < steps.length) {
+            steps[targetIdx] = { ...steps[targetIdx], completed: true };
+          }
+          // Advance step_index to next incomplete step
+          let newStepIndex = ddCase.step_index;
+          for (let i = 0; i < steps.length; i++) {
+            if (!steps[i].completed) { newStepIndex = i; break; }
+            if (i === steps.length - 1) newStepIndex = steps.length;
+          }
+          // Merge any collected_updates into collected_fields
+          const mergedFields = { ...(ddCase.collected_fields || {}), ...(collected_updates || {}) };
+          const allDone = newStepIndex >= steps.length;
+          await pool.query(
+            `UPDATE dd_cases SET step_index = $1, steps = $2::jsonb, collected_fields = $3::jsonb, status = $4, updated_at = NOW() WHERE id = $5`,
+            [Math.min(newStepIndex, steps.length), JSON.stringify(steps), JSON.stringify(mergedFields), allDone ? "completed" : "active", markCaseId]
+          );
+          const nextStep = steps[newStepIndex] || null;
+          return res.json({
+            success: true,
+            result: {
+              case_id: markCaseId,
+              step_index: newStepIndex,
+              total_steps: steps.length,
+              all_done: allDone,
+              next_step: nextStep,
+            },
+            message: allDone
+              ? `All ${steps.length} formation steps marked complete. ${ddCase.business_type || "Business"} formation is done.`
+              : `Step marked complete. Next: "${nextStep?.label}" (step ${newStepIndex + 1}/${steps.length}).`,
+          });
+        }
+
+        case "return_from_dd_to_jac": {
+          queueNav("home", "/");
+          return res.json({
+            success: true,
+            result: {},
+            message: "Handing you back to JAC now. I'm here if you need business help again.",
+            nav: "/",
+          });
         }
 
         // ── GUEST DRAFT ACTIONS ───────────────────────────────────────────────
@@ -33655,6 +33848,11 @@ OUTPUT STYLE:
     }
   });
 
+  // ── D.D. Formation Steps Builder ─────────────────────────────────────────
+  // Generates a ordered list of real formation steps for the given business type
+  // and state. Steps are persisted in dd_cases.steps and advanced by mark_dd_step_complete.
+  // buildDdFormationSteps is imported from ./dd-formation (shared with jac-realtime.ts)
+
   // ── D.D. Business Launch ──────────────────────────────────────────────────
   // GET /api/dd/status — returns whether the authenticated user has unlocked D.D.
   app.get("/api/dd/status", requireAuth, async (req, res) => {
@@ -33664,6 +33862,118 @@ OUTPUT STYLE:
       res.json({ unlocked: !!user?.ddLaunchUnlocked });
     } catch (err: any) {
       res.status(500).json({ error: "Failed to fetch D.D. status" });
+    }
+  });
+
+  // GET /api/dd/case — returns the user's active D.D. formation case (if any)
+  app.get("/api/dd/case", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId as number;
+      const result = await pool.query(
+        `SELECT * FROM dd_cases WHERE user_id = $1 AND status IN ('active', 'completed') ORDER BY updated_at DESC LIMIT 1`,
+        [userId]
+      );
+      if (!result.rows.length) return res.json({ case: null });
+      const ddCase = result.rows[0];
+      const steps: any[] = Array.isArray(ddCase.steps) ? ddCase.steps : [];
+      res.json({
+        case: {
+          id: ddCase.id,
+          business_type: ddCase.business_type,
+          business_name: ddCase.business_name,
+          state: ddCase.state,
+          step_index: ddCase.step_index,
+          total_steps: steps.length,
+          steps,
+          collected_fields: ddCase.collected_fields || {},
+          status: ddCase.status,
+          created_at: ddCase.created_at,
+          updated_at: ddCase.updated_at,
+        },
+      });
+    } catch (err: any) {
+      console.error("[dd/case GET]", err?.message);
+      res.status(500).json({ error: "Failed to fetch D.D. case" });
+    }
+  });
+
+  // POST /api/dd/case — create or replace the user's active D.D. formation case
+  app.post("/api/dd/case", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId as number;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      if (!user.ddLaunchUnlocked) return res.status(403).json({ error: "D.D. not unlocked", code: "dd_locked" });
+
+      const { business_type, business_name, state, collected_fields } = req.body as {
+        business_type?: string; business_name?: string; state?: string; collected_fields?: Record<string, any>;
+      };
+      const steps = buildDdFormationSteps(business_type || "LLC", state || "");
+      // Pause previous active cases
+      await pool.query(
+        `UPDATE dd_cases SET status = 'paused', updated_at = NOW() WHERE user_id = $1 AND status = 'active'`,
+        [userId]
+      );
+      const insert = await pool.query(
+        `INSERT INTO dd_cases (user_id, business_type, business_name, state, step_index, steps, collected_fields, status)
+         VALUES ($1, $2, $3, $4, 0, $5::jsonb, $6::jsonb, 'active') RETURNING *`,
+        [userId, business_type || null, business_name || null, state || null, JSON.stringify(steps), JSON.stringify(collected_fields || {})]
+      );
+      const ddCase = insert.rows[0];
+      res.json({
+        case: {
+          id: ddCase.id, business_type: ddCase.business_type, business_name: ddCase.business_name,
+          state: ddCase.state, step_index: 0, total_steps: steps.length, steps,
+          collected_fields: ddCase.collected_fields || {}, status: "active",
+        },
+      });
+    } catch (err: any) {
+      console.error("[dd/case POST]", err?.message);
+      res.status(500).json({ error: "Failed to create D.D. case" });
+    }
+  });
+
+  // PATCH /api/dd/case/:id/step — mark current step complete and advance
+  app.patch("/api/dd/case/:id/step", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId as number;
+      const caseId = parseInt(String(req.params.id), 10);
+      const { step_id, collected_updates } = req.body as { step_id?: string; collected_updates?: Record<string, any> };
+      const caseRows = await pool.query(`SELECT * FROM dd_cases WHERE id = $1 AND user_id = $2`, [caseId, userId]);
+      if (!caseRows.rows.length) return res.status(404).json({ error: "Case not found" });
+      const ddCase = caseRows.rows[0];
+      const steps: any[] = Array.isArray(ddCase.steps) ? [...ddCase.steps] : [];
+      // Mark target step complete
+      let targetIdx = step_id ? steps.findIndex((s: any) => s.id === step_id) : ddCase.step_index;
+      if (targetIdx === -1) targetIdx = ddCase.step_index;
+      if (targetIdx >= 0 && targetIdx < steps.length) {
+        steps[targetIdx] = { ...steps[targetIdx], completed: true };
+      }
+      // Advance to next incomplete step
+      let newStepIndex = steps.length; // default: all done
+      for (let i = 0; i < steps.length; i++) {
+        if (!steps[i].completed) { newStepIndex = i; break; }
+      }
+      const mergedFields = { ...(ddCase.collected_fields || {}), ...(collected_updates || {}) };
+      const allDone = newStepIndex >= steps.length;
+      const updated = await pool.query(
+        `UPDATE dd_cases SET step_index = $1, steps = $2::jsonb, collected_fields = $3::jsonb, status = $4, updated_at = NOW()
+         WHERE id = $5 RETURNING *`,
+        [Math.min(newStepIndex, steps.length), JSON.stringify(steps), JSON.stringify(mergedFields), allDone ? "completed" : "active", caseId]
+      );
+      const row = updated.rows[0];
+      res.json({
+        case: {
+          id: row.id, business_type: row.business_type, business_name: row.business_name,
+          state: row.state, step_index: row.step_index, total_steps: steps.length, steps,
+          collected_fields: row.collected_fields || {}, status: row.status,
+        },
+        all_done: allDone,
+        next_step: allDone ? null : steps[newStepIndex],
+      });
+    } catch (err: any) {
+      console.error("[dd/case PATCH step]", err?.message);
+      res.status(500).json({ error: "Failed to advance D.D. step" });
     }
   });
 
@@ -33738,6 +34048,38 @@ OUTPUT STYLE:
 
       const model = process.env.DD_MODEL || "gpt-4.1-mini";
 
+      // Load active case to inject current step context into the prompt
+      let caseContext = "";
+      try {
+        const caseRows = await pool.query(
+          `SELECT * FROM dd_cases WHERE user_id = $1 AND status IN ('active', 'completed') ORDER BY updated_at DESC LIMIT 1`,
+          [userId]
+        );
+        if (caseRows.rows.length) {
+          const ddCase = caseRows.rows[0];
+          const steps: any[] = Array.isArray(ddCase.steps) ? ddCase.steps : [];
+          const completedCount = steps.filter((s: any) => s.completed).length;
+          const currentStep = steps[ddCase.step_index] || null;
+          const nextSteps = steps.slice(ddCase.step_index, ddCase.step_index + 3).filter((s: any) => !s.completed);
+          caseContext = `
+
+ACTIVE FORMATION CASE (Case #${ddCase.id}):
+- Business type: ${ddCase.business_type || "not yet determined"}
+- Business name: ${ddCase.business_name || "not yet chosen"}
+- State: ${ddCase.state || "not yet determined"}
+- Progress: ${completedCount}/${steps.length} steps complete
+- Current step (step_index=${ddCase.step_index}): ${currentStep ? `"${currentStep.label}" — ${currentStep.description}` : "all steps complete"}
+- Next steps: ${nextSteps.length ? nextSteps.map((s: any) => `"${s.label}"`).join(", ") : "none remaining"}
+- Collected so far: ${JSON.stringify(ddCase.collected_fields || {})}
+
+YOUR JOB RIGHT NOW: Guide the user through the CURRENT STEP listed above. Do not skip ahead. When the user confirms they've completed the current step, tell them to mark it done (they'll see a "Mark Step Done" button in the UI). Then move to the next step.
+
+If the case has no business_type or state yet, gather those first before referencing the steps — JAC may have triggered this conversation before collecting all details.`;
+        }
+      } catch (caseErr: any) {
+        console.warn("[dd/chat] Could not load case context:", caseErr?.message);
+      }
+
       const DD_SYSTEM_PROMPT = `You are D.D., Team GUBER's Business Development guide.
 
 YOUR ROLE: Help users start, form, and register a legitimate business — step by step, one question at a time. You are a focused specialist, not a general-purpose AI.
@@ -33759,7 +34101,7 @@ SCOPE — you cover:
 - Existing GUBER Business onboarding when the business is ready to operate
 
 COVERAGE: You account for FEDERAL, STATE, COUNTY, CITY, and INDUSTRY requirements.
-
+${caseContext}
 COSTS — When you have enough info, show a cost breakdown in this JSON structure at the END of your message content:
 {
   "costs": [
@@ -33804,6 +34146,8 @@ SAFETY — NEVER ask users for:
 - Unnecessary identity documents
 If a government service needs sensitive info, send the user there with a link — do not collect it here.
 
+REQUIRED vs OPTIONAL HONESTY: Never tell a user a step is legally required when it is optional. Always distinguish government fees (which are mandatory to file) from third-party services (which are optional alternatives).
+
 DISCLAIMER: You are not the user's attorney, CPA, insurance agent, or licensed professional. You cannot guarantee legal compliance, approval, or licensing. Always recommend consulting a qualified professional for complex situations.
 
 OFF-TOPIC: If someone asks about something unrelated to business formation/startup (sports scores, general advice, GUBER jobs, etc.), respond ONLY with:
@@ -33811,7 +34155,7 @@ OFF-TOPIC: If someone asks about something unrelated to business formation/start
   "content": "That's outside my department. I'm here to get your business started. Want me to send you back to JAC?"
 }
 
-OPENING: If this is the first message, greet warmly and ask what they want to start.
+OPENING: If this is the first message and there is no active case, greet warmly and ask what they want to start.
 
 START WITH: Ask only what you need to determine the correct path — business type, location, solo or partners, online/mobile/physical, employees now or later, budget available today.`;
 
