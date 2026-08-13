@@ -294,7 +294,7 @@ export function JacHomepage() {
   // "splash" = gesture gate (required by browsers before any audio)
   // "chat"   = full chat panel + auto-speak fires immediately on enter
   // "intro"  = minimized chip selector (reached via minimize button)
-  const [mode, setMode] = useState<"splash" | "intro" | "chat">("chat");
+  const [mode, setMode] = useState<"splash" | "intro" | "chat">("splash");
 
   // Detect in-app browsers for post-failure "Open GUBER for full voice" hint only.
   // This does NOT block voice — we attempt voice on every platform and fall back
@@ -522,6 +522,14 @@ export function JacHomepage() {
   function enterChat() {
     unlockAudioContext();
     setMode("chat");
+    // The splash tap IS the browser gesture — start voice immediately so JAC
+    // speaks without the user having to find and tap the mic button separately.
+    // Skip for IAB browsers where mic access is unreliable.
+    if (!isIAB) {
+      // Use setTimeout(0) so setMode("chat") renders first, ensuring the chat
+      // section (and its ConvAI slot) is mounted before boot() fires.
+      setTimeout(() => toggleLiveMode(), 0);
+    }
   }
 
   // Returning-visitor personalisation — ConvAI now voices the greeting, so we
