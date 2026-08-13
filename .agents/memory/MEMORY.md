@@ -43,3 +43,4 @@
 - [createAuditLog schema mismatch](createaudit-log-schema.md) — only pass userId/action/details/ipAddress; wrong field names (actorId/entityType/metadata) crash inserts with a misleading unrelated-looking error.
 - [Capacitor WKWebView black screen](capacitor-wkwebview-black-screen.md) — three bugs in ViewController.swift cause instant black screen; fix: dark bg in capacitorDidLoad(), deferred retry for NSURLErrorCancelled, anchor overlay to self.view.
 - [iPad black screen diagnosis](ipad-black-screen.md) — LoadingSplash (#000 fixed overlay) + no auth fetch timeout = permanent black on Autoscale cold starts; fix: timeout + skip splash on native.
+- [ElevenLabs API key workspace + permissions](elevenlabs-api-key-workspace.md) — key needs correct workspace (owns agent_4901kw…) AND convai_write scope; wrong workspace=404, missing scope=401; staging key sk_e36cf… must never be used.
