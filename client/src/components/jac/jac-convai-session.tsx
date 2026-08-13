@@ -586,18 +586,18 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           if (session.signedUrl) params.signedUrl = session.signedUrl;
           else                   params.agentId   = session.agentId;
 
-          // Always suppress ElevenLabs' firstMessage so JAC never speaks a greeting
-          // when a new WebSocket session starts.  The greeting is shown immediately as
-          // static text in the React UI on page load — ElevenLabs re-speaking it on
-          // every mic tap / reconnect would sound like JAC is restarting the conversation
-          // from scratch, which is exactly the complaint we are fixing.
+          // Do NOT suppress ElevenLabs' firstMessage.  Sending firstMessage:""
+          // causes the ElevenLabs server to close the WebSocket immediately after
+          // accepting the handshake (telemetry: connect → unexpected_disconnect
+          // on every attempt).  Letting ElevenLabs play its configured firstMessage
+          // is also the correct UX for the splash-tap flow: the user taps once and
+          // JAC speaks her greeting automatically — no mic button required.
+          // The static text greeting in the React UI is replaced by the first
+          // ConvAI transcript via handleConvaiJacResponse (see jac-homepage.tsx).
           //
           // NOTE: overrides.agent only accepts { prompt, firstMessage, language } in SDK v1.9.0.
           // The `turn` field (turn_timeout, mode) is NOT in the SDK type and is silently dropped
           // by constructOverrides() — it never reaches ElevenLabs.  Do not add it here.
-          params.overrides = {
-            agent: { firstMessage: "" },
-          };
 
           // Skip the SDK's built-in Android audio-mode delay (3 s).  That delay
           // was added for WebRTC/LiveKit which needs the Android AudioManager to
