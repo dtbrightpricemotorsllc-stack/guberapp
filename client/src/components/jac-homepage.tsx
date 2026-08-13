@@ -519,7 +519,15 @@ export function JacHomepage() {
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [mode]);
 
+  // Guard against double-tap on the splash card: if enterChat fires a second
+  // time before the first toggleLiveMode has completed, the second call would
+  // see liveMode=true (still connecting) and call stopLiveMode(), killing the
+  // session.  A simple boolean ref prevents re-entry.
+  const enterChatCalledRef = useRef(false);
+
   function enterChat() {
+    if (enterChatCalledRef.current) return;   // double-tap guard
+    enterChatCalledRef.current = true;
     unlockAudioContext();
     setMode("chat");
     // The splash tap IS the browser gesture — start voice immediately so JAC

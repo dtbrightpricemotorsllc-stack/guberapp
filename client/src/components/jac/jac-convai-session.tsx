@@ -383,6 +383,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
       onConnect: () => {
         // ElevenLabs ConvAI now owns audio — cancel any in-flight text-TTS
         // and block jacSpeak() for the duration of this session.
+        console.log("[JAC ConvAI] onConnect — session established ✓ platform=" + platformRef.current);
         clearConnectTimeout();
         setJacConvaiActive(true);
         cancelAllJacAudio();
@@ -390,6 +391,12 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
       },
       onDisconnect: () => {
         // Release audio ownership so text-mode TTS can resume if needed.
+        console.warn(
+          "[JAC ConvAI] onDisconnect — active=" + activeRef.current +
+          " cancel=" + cancelRef.current +
+          " micLost=" + micLostRef.current +
+          " platform=" + platformRef.current
+        );
         clearConnectTimeout();
         setJacConvaiActive(false);
         // Disarm this instance's mic-lost token — session is intentionally gone.
@@ -409,6 +416,15 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         }
       },
       onError: (msg: string) => {
+        // Log the full SDK error message so Samsung Browser / Android console
+        // captures 401 auth failures, 429 rate limits, WebSocket close codes,
+        // and any other status the SDK surfaces — rather than silently swapping
+        // to the fallback state loop.
+        console.error(
+          "[JAC ConvAI] onError — msg=" + (msg || "(empty)") +
+          " active=" + activeRef.current +
+          " platform=" + platformRef.current
+        );
         clearConnectTimeout();
         setJacConvaiActive(false);
         // Disarm this instance's mic-lost token so a track "ended" event that
@@ -530,14 +546,20 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           }
 
           // ── Test 1: Mic input (permission-check stream) ─────────────────────
-          // diagnoseMicStream logs track details + measures audio levels for 600 ms.
+          // diagnoseMicStream logs track details + measures audio levels for 150 ms.
           // This is a separate test from Test 2 (ElevenLabs audio output below).
-          await diagnoseMicStream(micResult.value as MediaStream, platform);
-          (micResult.value as MediaStream).getTracks().forEach(t => t.stop());
+          const testStream = micResult.value as MediaStream;
+          await diagnoseMicStream(testStream, platform);
+          // Do NOT stop the test stream here.  Stopping immediately before
+          // startSession() causes a race on Samsung Browser / Android Chrome
+          // where the browser is still releasing the mic device when the SDK
+          // calls getUserMedia() again — resulting in a silent stream or a
+          // second permission prompt.  Instead, stop it 600 ms after
+          // startSession() has had time to open its own stream.
           console.log(
-            "[JAC MIC TEST 1] Permission-check stream stopped. " +
-            "[JAC MIC TEST 2] ElevenLabs will now open its own getUserMedia stream + " +
-            "RTCPeerConnection.addTrack — watch for [JAC MIC DIAG] log lines above."
+            "[JAC MIC TEST 1] Diagnostics complete (stream kept alive). " +
+            "[JAC MIC TEST 2] ElevenLabs will now open its own getUserMedia stream — " +
+            "watch for [JAC MIC DIAG] log lines."
           );
 
           if (sessionResult.status === "rejected") {
@@ -570,19 +592,12 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
             ? String(session.userContext.userId)
             : "anon";
 
-          const params: Record<string, any> = {
-            dynamicVariables: dynVars,
-            // Force WebSocket for every session regardless of whether we have a
-            // signedUrl or fall back to agentId (public-agent mode).
-            //
-            // Without this, the SDK infers the connection type: signedUrl → WebSocket,
-            // agentId-only → WebRTC.  WebRTC requires LiveKit ICE negotiation which
-            // hangs indefinitely on Samsung Internet (and some other Android browsers)
-            // without ever calling onConnect or onError, leaving JAC stuck on
-            // "connecting…" forever.  WebSocket is reliable across all browsers and
-            // is the correct transport for ElevenLabs ConvAI.
-            connectionType: "websocket",
-          };
+          // SDK v1.9.0: signedUrl → WebSocket transport (SDK infers this automatically).
+          // agentId-only would fall back to WebRTC/LiveKit which hangs indefinitely
+          // on Samsung Internet.  We always pass signedUrl so WebSocket is used.
+          // NOTE: connectionType and connectionDelay are NOT in the SDK v1.9.0 type
+          // and are silently dropped — do not add them.
+          const params: Record<string, any> = { dynamicVariables: dynVars };
           if (session.signedUrl) params.signedUrl = session.signedUrl;
           else                   params.agentId   = session.agentId;
 
@@ -590,24 +605,22 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           // causes the ElevenLabs server to close the WebSocket immediately after
           // accepting the handshake (telemetry: connect → unexpected_disconnect
           // on every attempt).  Letting ElevenLabs play its configured firstMessage
-          // is also the correct UX for the splash-tap flow: the user taps once and
-          // JAC speaks her greeting automatically — no mic button required.
+          // is the correct UX for the splash-tap flow: user taps once and JAC speaks.
           // The static text greeting in the React UI is replaced by the first
           // ConvAI transcript via handleConvaiJacResponse (see jac-homepage.tsx).
-          //
-          // NOTE: overrides.agent only accepts { prompt, firstMessage, language } in SDK v1.9.0.
-          // The `turn` field (turn_timeout, mode) is NOT in the SDK type and is silently dropped
-          // by constructOverrides() — it never reaches ElevenLabs.  Do not add it here.
-
-          // Skip the SDK's built-in Android audio-mode delay (3 s).  That delay
-          // was added for WebRTC/LiveKit which needs the Android AudioManager to
-          // switch modes.  We force WebSocket above, so the delay is unnecessary
-          // and only makes the "connecting…" state feel sluggish on Android.
-          params.connectionDelay = { default: 0, android: 0, ios: 0 };
 
           // AudioContext was already unlocked above — start session immediately.
           if (cancelRef.current) return;
+          console.log("[JAC ConvAI] startSession — transport=" + (session.signedUrl ? "websocket/signed" : "agentId/public"));
           startSession(params as any);
+
+          // Stop the permission-test stream after the SDK has had time to open its
+          // own getUserMedia.  600 ms is generous; SDK typically opens within 100 ms.
+          const _ts = testStream;
+          setTimeout(() => {
+            _ts.getTracks().forEach(t => t.stop());
+            console.log("[JAC MIC TEST 1] Permission-check stream stopped (deferred 600 ms).");
+          }, 600);
 
           // ── Mid-session mic-lost guard ──────────────────────────────────────
           // Create a per-instance token and add it to the _micLostRegistry AFTER
