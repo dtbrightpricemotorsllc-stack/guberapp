@@ -30,6 +30,10 @@ export interface JacVoiceTokenPayload {
   exp: number;
   nonce: string;
   ver: 1;
+  /** Optional: caller's first name (personalises the voice system prompt). */
+  firstName?: string;
+  /** Optional: JAC surface mode (homepage | investor | app | admin). */
+  jacMode?: string;
 }
 
 function getSecret(): string {
@@ -51,6 +55,8 @@ export function signJacVoiceToken(input: {
   role: JacVoiceRole;
   platform: JacVoicePlatform;
   cid?: string;
+  firstName?: string;
+  jacMode?: string;
 }): string {
   const payload: JacVoiceTokenPayload = {
     userId: input.userId ?? null,
@@ -60,6 +66,8 @@ export function signJacVoiceToken(input: {
     exp: Date.now() + TTL_MS,
     nonce: crypto.randomBytes(8).toString("hex"),
     ver: 1,
+    ...(input.firstName ? { firstName: input.firstName } : {}),
+    ...(input.jacMode   ? { jacMode:   input.jacMode   } : {}),
   };
   const body = b64url(Buffer.from(JSON.stringify(payload), "utf8"));
   const sig = b64url(crypto.createHmac("sha256", getSecret()).update(body).digest());

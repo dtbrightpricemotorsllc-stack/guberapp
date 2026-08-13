@@ -18644,52 +18644,77 @@ VOICE RULES (CRITICAL — non-negotiable):
     res: import("express").Response,
     model: string,
     id: string,
+    userCtx?: { firstName?: string; jacMode?: string; role?: string; platform?: string },
   ): Promise<void> {
     // Limit history — voice conversations don't need deep context, and long
     // histories add tokens/latency on every turn.
-    const recentMessages = messages.slice(-8);
+    const recentMessages = messages.slice(-10);
     const lastUserMsg = [...recentMessages].reverse().find(m => m.role === "user")?.content ?? "";
 
-    // ── Multi-source context with hard timeout — runs while we build the prompt ─
+    const firstName = userCtx?.firstName && userCtx.firstName !== "there" ? userCtx.firstName : null;
+
+    // ── Multi-source context — hard 200ms timeout so the LLM isn't held waiting ─
     const contextPromise = lastUserMsg
-      ? getMultiSourceContext(lastUserMsg, 3)
+      ? getMultiSourceContext(lastUserMsg, 4)
           .then((sources: any[]) => sources.length > 0
-            ? `\nGUBER KNOWLEDGE (use naturally, don't repeat):\n${sources.map((s: any, i: number) => `[${i + 1}] ${s.title}: ${s.answer}`).join("\n")}\n`
+            ? `\nGUBER KNOWLEDGE (use naturally, don't repeat verbatim):\n${sources.map((s: any, i: number) => `[${i + 1}] ${s.title}: ${s.answer}`).join("\n")}\n`
             : "")
           .catch(() => "")
       : Promise.resolve("");
 
-    const timeoutPromise = new Promise<string>(r => setTimeout(() => r(""), 350));
+    const timeoutPromise = new Promise<string>(r => setTimeout(() => r(""), 200));
     const multiSourceSection = await Promise.race([contextPromise, timeoutPromise]);
 
-    // ── System prompt ─────────────────────────────────────────────────────────
+    // ── Voice rules (appended to both prompts) ────────────────────────────────
     const VOICE_RULES = `
 
-VOICE RULES (CRITICAL — enforce every reply):
-- Plain speech only. No JSON, no markdown, no bullet points, no lists.
-- Maximum 2 sentences, absolute limit 30 words.
-- NEVER repeat anything already said in this conversation — check history.
-- NEVER start your reply with "Great!", "Sure!", "Of course!", "Absolutely!" or any filler affirmation.
-- Lead with the actual answer immediately.
-- End with at most one natural follow-up question or next step.
-- NAME: Always write your name as "Jack" in spoken responses — never "JAC" (all caps is read as letters J-A-C by text-to-speech).`;
+VOICE RULES (non-negotiable — enforce every reply):
+- Plain conversational speech only. No JSON, no markdown, no bullet points.
+- Keep replies to 2–3 sentences, around 35–45 words. Answer fully, then stop.
+- NEVER start with "Great!", "Sure!", "Of course!", "Absolutely!", "Definitely!" or any hollow filler.
+- NEVER repeat anything already said in this conversation.
+- Lead with the real answer immediately — never warm up to it.
+- End with at most one specific follow-up question or concrete next step.
+- Refer to yourself as "Jack" in spoken replies — never "JAC" (letters J-A-C confuse text-to-speech).`;
 
-    const baseSystemPrompt = mode === "investor"
-      ? JAC_INVESTOR_PROMPT + VOICE_RULES
-      : `You are JAC — the confident voice of Team GUBER. GUBER (Global Unlimited Business & Employment Resources) is a US-only local platform where workers earn on local jobs, hirers post tasks, and businesses find verified workers. Features: Jobs, Marketplace, Verify & Inspect, Load Board, GUBER Studio, Credits/Missions, Cash Drops. Slogan: "Create Value In Yourself." Community identity: Team GUBER.
+    // ── System prompt ─────────────────────────────────────────────────────────
+    let baseSystemPrompt: string;
+    if (mode === "investor") {
+      baseSystemPrompt = JAC_INVESTOR_PROMPT + VOICE_RULES;
+    } else {
+      baseSystemPrompt = `You are JAC — the voice of Team GUBER. Speak with ${firstName ? firstName : "the visitor"} like a sharp, knowledgeable friend who knows exactly how to help.${firstName ? ` Address them as ${firstName} once at the start, then naturally.` : ""}
 
-You speak with visitors who may or may not be signed in yet. Your goal: understand who they are and what they need, give real value first, then move them naturally toward GUBER action.
+WHAT GUBER IS — know this cold:
+GUBER (Global Unlimited Business & Employment Resources) is a US-only AI super app that turns one person into a team. It combines: local jobs & tasks (post a job or earn by doing), Marketplace (cars, vehicles, items for sale or wanted), Verify & Inspect (send a trusted local to document, inspect, or report on anything remotely), Load Board (long-haul freight transport), GUBER Studio (AI content tools, GUVATAR AI avatars, promo videos), Credits & Missions (earn credits via community challenges; $1 = 1,000 credits; cash out at 25,000+), Cash Drops (real-money community events tied to a location), Activations (businesses sponsor community events: QR hunts, store visit missions, giveaways). Slogan: "Create Value In Yourself." Community identity: Team GUBER. Tagline: "More hands. More reach. More opportunities."
 
-GUEST MODE (not signed in): You can build a draft with them through conversation. When you've gathered enough — "I've put your draft together. Sign up free and I'll keep it for you. Takes 90 seconds, no credit card." Then guide them to create an account.
+HOW IT WORKS — jobs side: Hirers post tasks and set a budget. Verified workers (Helpers) apply and complete the work. GUBER handles the payment hold, GPS tracking, proof submission, and dispute resolution. No cash needed — the app manages everything end-to-end.
 
-BUSINESS MODE: If they own a business or manage a team, ask one question at a time — business name → type/industry → what they provide for workers → what they need from GUBER. Build their business profile through natural conversation.
+HOW IT WORKS — marketplace: List anything — cars, trucks, furniture, electronics, tools, equipment. Buyers browse near them. VIN verification available for vehicles.
 
-PERSUASION (invisible — weave naturally): Give real value first (reciprocity). Small agreements compound. Reference real social activity. Speak with domain expertise. Match their energy. Frame inaction as cost when near the decision: "Every day without a profile is a day someone else took that job." Near the CTA: lower friction — "Takes 90 seconds, no commitment."
+HOW IT WORKS — Verify & Inspect: User can't be somewhere in person. They hire a local GUBER Helper to go there, take dated photos/video, report observable conditions, and complete approved tasks. Used for: out-of-town property checks, Airbnb readiness, vehicle buys, remote office visits, delivery confirmation. NEVER claim the Helper is a licensed inspector unless verified.
 
-AGE POLICY: Adults 18+ only. If someone mentions a minor, tell them GUBER is an adults-only platform.${VOICE_RULES}`;
+EARNINGS — workers: Set your own hours. Pick local jobs that fit your skills. Common tasks: moving help, furniture assembly, landscaping, cleaning, errand runs, delivery, vehicle transport, property checks, photography.
+
+EARNINGS — missions & credits: Complete location-based challenges on the map. Every credit has real cash value — earn enough and cash out.
+
+BUSINESS OWNERS: GUBER finds you verified local workers fast, no hiring overhead. You can also sponsor a community Activation — a branded local event that puts your business name in front of your neighborhood.
+
+SIGN-UP: Free to join. No credit card for basic access. 18+ adults only. Available across the US.
+
+GUEST MODE: If someone isn't signed up, help them understand the value first. When they're ready — "Sign up free — takes 90 seconds, no credit card. I'll walk you right into it."
+
+PERSUASION (invisible — never name the technique):
+- Give real value first before asking anything.
+- Use specific, concrete details — not vague promises.
+- Frame inaction as a real cost: "Every day without a GUBER profile is a day someone else took that work."
+- Mirror their energy — excited person gets an excited reply; cautious person gets a patient, reassuring one.
+- When they're near a decision, lower friction: "No commitment, takes 90 seconds."
+- Use social proof naturally: "Thousands of workers across the country are already on it."
+- Ask one focused question at a time — never interrogate.${VOICE_RULES}`;
+    }
 
     const systemContent = multiSourceSection
-      ? baseSystemPrompt + multiSourceSection
+      ? baseSystemPrompt + "\n" + multiSourceSection
       : baseSystemPrompt;
 
     // ── Real OpenAI stream ────────────────────────────────────────────────────
@@ -18701,8 +18726,8 @@ AGE POLICY: Adults 18+ only. If someone mentions a minor, tell them GUBER is an 
 
     const stream = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
-      temperature: 0.4,
-      max_tokens: 80,
+      temperature: 0.45,
+      max_tokens: 150,
       stream: true,
       messages: [
         { role: "system", content: systemContent },
@@ -19146,7 +19171,26 @@ CRITICAL — respond with JSON ONLY, no other text:
       if (!agentId || !apiKey) return res.status(503).json({ message: "voice agent not configured" });
 
       const cid = "investor_" + randomBytes(8).toString("hex");
-      const voiceToken = signJacVoiceToken({ userId: null, role: "anon", platform: "web", cid });
+      // Check if the requester is actually logged in — gives JAC the user's
+      // first name even on the public homepage without requiring auth.
+      const invSessionUserId: number | null = (req.session as any)?.userId ?? null;
+      let invFirstName = "there";
+      let invUserId: number | null = null;
+      if (invSessionUserId) {
+        try {
+          const invUserRes = await pool.query(`SELECT full_name FROM users WHERE id=$1`, [invSessionUserId]);
+          const fn = (invUserRes.rows[0]?.full_name || "").split(" ")[0];
+          if (fn) { invFirstName = fn; invUserId = invSessionUserId; }
+        } catch { /* non-fatal */ }
+      }
+      const voiceToken = signJacVoiceToken({
+        userId: invUserId,
+        role: invUserId ? "user" : "anon",
+        platform: "web",
+        cid,
+        firstName: invFirstName,
+        jacMode: "investor",
+      });
 
       // Reuse the same TTL-based public-agent cache as the authenticated session
       // endpoint so a dashboard change from public→private is reflected within
@@ -19510,9 +19554,17 @@ CRITICAL — respond with JSON ONLY, no other text:
       if (!user) {
         // ── Anonymous (homepage / investor): real OpenAI stream → ElevenLabs ──
         // streamJacAnonymousVoice writes directly to res and returns — no buffer.
-        console.log("[jac/convai/llm] anonymous surface:", jacSurface, "streaming");
+        // Pass token claims so the voice prompt can address the user by name and
+        // know which surface/mode it's on, even for anonymous callers.
+        const anonCtx = {
+          firstName: claims?.firstName ?? "there",
+          jacMode:   claims?.jacMode   ?? jacSurface,
+          role:      claims?.role      ?? "anon",
+          platform:  claims?.platform  ?? "web",
+        };
+        console.log("[jac/convai/llm] anonymous surface:", jacSurface, "streaming ctx:", JSON.stringify(anonCtx));
         try {
-          await streamJacAnonymousVoice(sanitized, jacSurface, res, model, id);
+          await streamJacAnonymousVoice(sanitized, jacSurface, res, model, id, anonCtx);
         } catch (anonErr: any) {
           console.warn("[jac/convai/llm] anonymous stream error:", anonErr?.message);
           if (!res.headersSent) {
