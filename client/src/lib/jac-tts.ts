@@ -28,6 +28,7 @@ export function normalizeTtsText(text: string): string {
  */
 const CACHE_MAP: Array<{ slug: string; keywords: string[] }> = [
   { slug: "welcome",           keywords: ["job assisting coordinator", "what brings you"] },
+  { slug: "homepage-welcome",  keywords: ["trying to make happen", "welcome to team guber"] },
   { slug: "what-is-guber",     keywords: ["what is guber", "what does guber do", "guber stand for", "global unlimited"] },
   { slug: "how-earn-money",    keywords: ["how do i earn", "how to earn", "make money", "earn money"] },
   { slug: "how-post-job",      keywords: ["how do i post", "post a job", "posting a job"] },

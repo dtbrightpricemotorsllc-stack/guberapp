@@ -530,10 +530,14 @@ export function JacHomepage() {
     enterChatCalledRef.current = true;
     unlockAudioContext();
     setMode("chat");
-    // Text conversation is the default — voice does NOT auto-start.
-    // The user taps the mic button explicitly when they want voice.
-    // (Auto-start was disabled so no ElevenLabs session is created without
-    //  an explicit user action, and to keep text as the primary experience.)
+    // Speak the greeting immediately using the pre-cached static MP3
+    // (public/jac-audio/welcome.mp3 — zero API cost, JAC's real voice).
+    // The splash tap IS a browser gesture, so audio is already unlocked.
+    // greetingSpokenRef prevents replay if the user subsequently taps the mic.
+    if (!greetingSpokenRef.current) {
+      greetingSpokenRef.current = true;
+      speak(GREETING.content);
+    }
   }
 
   // Returning-visitor personalisation — ConvAI now voices the greeting, so we
