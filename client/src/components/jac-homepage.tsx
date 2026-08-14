@@ -112,7 +112,7 @@ const OPENING_OPTIONS = [
 
 const GREETING: JacMsg = {
   role: "assistant",
-  content: "Welcome to Team GUBER!! I'm JAC, your Job Assistance Coordinator. If it affects your money, your business, your time, or something you need handled, I'm here to help. What are we getting done today?",
+  content: "Hey, welcome to Team GUBER. What are you trying to make happen?",
   buttons: OPENING_OPTIONS,
 };
 
@@ -449,12 +449,12 @@ export function JacHomepage() {
     jacSpeak(text, { muted: mutedRef.current });
   }, []);
 
-  // Pre-warm the ConvAI session token on mount so it's ready before the user
-  // taps the mic — eliminates the biggest startup latency (~500-1500 ms).
-  // Skip in in-app browsers: voice is disabled there so the token is never used.
-  useEffect(() => {
-    prewarmJacSession("/api/jac/convai/investor-session");
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Pre-warm intentionally disabled: text conversation is the default experience.
+  // Voice prewarm is skipped so no ElevenLabs session token is requested on page load.
+  // Re-enable this effect when voice is the confirmed default path.
+  // useEffect(() => {
+  //   prewarmJacSession("/api/jac/convai/investor-session");
+  // }, []);
 
   useEffect(() => {
     function onVisibility() {
@@ -530,14 +530,10 @@ export function JacHomepage() {
     enterChatCalledRef.current = true;
     unlockAudioContext();
     setMode("chat");
-    // The splash tap IS the browser gesture — start voice immediately so JAC
-    // speaks without the user having to find and tap the mic button separately.
-    // Skip for IAB browsers where mic access is unreliable.
-    if (!isIAB) {
-      // Use setTimeout(0) so setMode("chat") renders first, ensuring the chat
-      // section (and its ConvAI slot) is mounted before boot() fires.
-      setTimeout(() => toggleLiveMode(), 0);
-    }
+    // Text conversation is the default — voice does NOT auto-start.
+    // The user taps the mic button explicitly when they want voice.
+    // (Auto-start was disabled so no ElevenLabs session is created without
+    //  an explicit user action, and to keep text as the primary experience.)
   }
 
   // Returning-visitor personalisation — ConvAI now voices the greeting, so we

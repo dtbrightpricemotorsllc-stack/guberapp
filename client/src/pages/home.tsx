@@ -862,7 +862,24 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* ── Hero Slideshow ── */}
+      {/* ── Brand Hero — conversation-first per new brand direction ── */}
+      <section className="relative z-10 px-5 pt-10 pb-4 text-center max-w-2xl mx-auto w-full" data-testid="section-brand-hero">
+        <p className="text-[11px] font-display tracking-[0.3em] text-muted-foreground/50 mb-4 uppercase">Team GUBER</p>
+        <h1 className="text-4xl sm:text-5xl font-display font-black tracking-tight leading-[1.05] mb-3 text-white">
+          Want more<br />out of life?
+        </h1>
+        <h2 className="text-2xl sm:text-3xl font-display font-black tracking-wider mb-5" style={{ color: "hsl(152 100% 44%)" }}>
+          Join Team GUBER.
+        </h2>
+        <p className="text-muted-foreground/70 text-sm sm:text-base max-w-xs mx-auto leading-relaxed italic">
+          "Bring what's behind your eyes in front of your eyes."
+        </p>
+      </section>
+
+      {/* ── JAC Homepage Assistant — primary experience ── */}
+      <JacHomepage />
+
+      {/* ── Hero Slideshow — moved below JAC so conversation loads first ── */}
       <HeroSlideshow onSlideChange={setCurrentSlide} />
 
       {/* ── Slide CTA — below images, never overlapping ── */}
@@ -876,9 +893,6 @@ export default function Home() {
           {currentSlide.cta} <ArrowRight className="w-4 h-4" />
         </Link>
       </div>
-
-      {/* ── JAC Homepage Assistant ── */}
-      <JacHomepage />
 
       {/* ── Platform availability strip ── */}
       <div className="relative z-10 flex items-center justify-center gap-4 sm:gap-6 flex-wrap px-5 py-4 text-[11px] font-display tracking-wider border-b border-border/30">
