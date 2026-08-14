@@ -1393,6 +1393,30 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_dd_cases_user ON dd_cases(user_id);
     CREATE INDEX IF NOT EXISTS idx_dd_cases_status ON dd_cases(status);
   `).catch(e => console.error("[migration] dd_cases table error:", e));
+  // Partial unique index: only one active case per user allowed at the DB level.
+  // First, deduplicate any existing duplicate active rows (keep the most recently updated per user).
+  // Then create the index; treat failure as a critical alert (logged prominently).
+  try {
+    await pool.query(`
+      UPDATE dd_cases SET status = 'paused', updated_at = NOW()
+      WHERE id IN (
+        SELECT id FROM (
+          SELECT id,
+                 ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY updated_at DESC) AS rn
+          FROM dd_cases
+          WHERE status = 'active'
+        ) sub
+        WHERE rn > 1
+      )
+    `);
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS dd_cases_one_active_per_user
+        ON dd_cases (user_id) WHERE status = 'active';
+    `);
+    console.log("[migration] dd_cases_one_active_per_user index ready.");
+  } catch (e: any) {
+    console.error("[migration] CRITICAL: dd_cases unique-active index failed — duplicate active cases may exist. Manual remediation required.", e?.message);
+  }
 
   // Add deleted_at to jobs (soft-delete; used by raw SQL in briefing/context queries)
   await pool.query(`

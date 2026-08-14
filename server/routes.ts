@@ -21443,25 +21443,30 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
           }
           const { business_type, business_name, state, collected_fields } = data as any;
           const steps = buildDdFormationSteps(business_type || "LLC", state || "");
-          // Pause any previously active case before creating a new one
-          await pool.query(
-            `UPDATE dd_cases SET status = 'paused', updated_at = NOW() WHERE user_id = $1 AND status = 'active'`,
-            [userId]
-          );
-          const caseResult = await pool.query(
-            `INSERT INTO dd_cases (user_id, business_type, business_name, state, step_index, steps, collected_fields, status)
-             VALUES ($1, $2, $3, $4, 0, $5::jsonb, $6::jsonb, 'active')
-             RETURNING id`,
-            [
-              userId,
-              business_type || null,
-              business_name || null,
-              state || null,
-              JSON.stringify(steps),
-              JSON.stringify(collected_fields || {}),
-            ]
-          );
-          const caseId = caseResult.rows[0].id;
+          // Advisory lock serializes all dd_cases activation operations per user
+          const createClient1 = await pool.connect();
+          let caseId: number;
+          try {
+            await createClient1.query("BEGIN");
+            await createClient1.query(`SELECT pg_advisory_xact_lock($1)`, [userId]);
+            await createClient1.query(
+              `UPDATE dd_cases SET status = 'paused', updated_at = NOW() WHERE user_id = $1 AND status = 'active'`,
+              [userId]
+            );
+            const caseResult = await createClient1.query(
+              `INSERT INTO dd_cases (user_id, business_type, business_name, state, step_index, steps, collected_fields, status)
+               VALUES ($1, $2, $3, $4, 0, $5::jsonb, $6::jsonb, 'active')
+               RETURNING id`,
+              [userId, business_type || null, business_name || null, state || null, JSON.stringify(steps), JSON.stringify(collected_fields || {})]
+            );
+            await createClient1.query("COMMIT");
+            caseId = caseResult.rows[0].id;
+          } catch (txErr) {
+            await createClient1.query("ROLLBACK");
+            throw txErr;
+          } finally {
+            createClient1.release();
+          }
           const currentStep = steps[0] || null;
           queueNav("dd", "/dd");
           return res.json({
@@ -21477,24 +21482,47 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         case "get_dd_state": {
           if (!userId) return res.json({ success: false, error: "Authentication required." });
           await requireUser(); if (!res.headersSent && !(req.session as any).userId) return;
-          const caseRows = await pool.query(
-            `SELECT * FROM dd_cases WHERE user_id = $1 AND status IN ('active', 'completed') ORDER BY updated_at DESC LIMIT 1`,
+          // Fetch all cases so JAC can enumerate paused ones for resume
+          const allDdRows = await pool.query(
+            `SELECT id, business_type, business_name, state, step_index, steps, collected_fields, status, updated_at
+             FROM dd_cases WHERE user_id = $1 ORDER BY updated_at DESC`,
             [userId]
           );
-          if (!caseRows.rows.length) {
+          const activeRow = allDdRows.rows.find((r: any) => r.status === "active");
+          const pausedRows = allDdRows.rows.filter((r: any) => r.status === "paused");
+          const completedRows = allDdRows.rows.filter((r: any) => r.status === "completed");
+
+          if (!allDdRows.rows.length) {
             return res.json({
               success: true,
               result: { has_case: false },
-              message: "No active D.D. case found. Use create_dd_case to start one.",
+              message: "No D.D. cases found. Use create_dd_case to start one.",
             });
           }
-          const ddCase = caseRows.rows[0];
+
+          const summarizeRow = (r: any) => {
+            const stps: any[] = Array.isArray(r.steps) ? r.steps : [];
+            return {
+              case_id: r.id,
+              business_type: r.business_type,
+              business_name: r.business_name,
+              state: r.state,
+              step_index: r.step_index,
+              total_steps: stps.length,
+              completed_steps: stps.filter((s: any) => s.completed).length,
+              status: r.status,
+            };
+          };
+
+          const ddCase = activeRow || allDdRows.rows[0];
           const steps: any[] = Array.isArray(ddCase.steps) ? ddCase.steps : [];
           const currentStep = steps[ddCase.step_index] || null;
           const completedSteps = steps.filter((s: any) => s.completed).length;
+
           return res.json({
             success: true,
             result: {
+              has_case: true,
               case_id: ddCase.id,
               business_type: ddCase.business_type,
               business_name: ddCase.business_name,
@@ -21505,10 +21533,12 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
               current_step: currentStep,
               collected_fields: ddCase.collected_fields || {},
               status: ddCase.status,
+              paused_cases: pausedRows.map(summarizeRow),
+              completed_cases: completedRows.map(summarizeRow),
             },
-            message: currentStep
-              ? `Active case: ${ddCase.business_type || "business"} in ${ddCase.state || "your state"}. Currently on step ${ddCase.step_index + 1}/${steps.length}: "${currentStep.label}".`
-              : `All ${steps.length} steps completed for ${ddCase.business_type || "business"} formation.`,
+            message: activeRow
+              ? `Active case (ID ${ddCase.id}): ${ddCase.business_type || "business"} in ${ddCase.state || "your state"}. Step ${ddCase.step_index + 1}/${steps.length}: "${currentStep?.label || "all done"}".${pausedRows.length > 0 ? ` Also ${pausedRows.length} paused case(s): ${pausedRows.map((r: any) => `ID ${r.id} (${r.business_type || "business"} in ${r.state || "unknown state"})`).join(", ")}. Use resume_dd_case to switch.` : ""}`
+              : `No active case. ${pausedRows.length} paused case(s): ${pausedRows.map((r: any) => `ID ${r.id} (${r.business_type || "business"} in ${r.state || "unknown state"})`).join(", ")}. Use resume_dd_case with the desired case_id.`,
           });
         }
 
@@ -21592,6 +21622,64 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
             message: allDone
               ? `All ${steps.length} formation steps marked complete. ${ddCase.business_type || "Business"} formation is done.`
               : `Step marked complete. Next: "${nextStep?.label}" (step ${newStepIndex + 1}/${steps.length}).`,
+          });
+        }
+
+        case "resume_dd_case": {
+          if (!userId) return res.json({ success: false, error: "Authentication required." });
+          const user = await requireUser(); if (!user) return;
+          if (!(user as any).ddLaunchUnlocked) {
+            return res.json({ success: false, error: "D.D. Business Launch is not unlocked for this account." });
+          }
+          const { case_id: resumeCaseId } = data as any;
+          if (!resumeCaseId) return res.json({ success: false, error: "case_id is required." });
+          const resumeRows = await pool.query(
+            `SELECT * FROM dd_cases WHERE id = $1 AND user_id = $2`,
+            [resumeCaseId, userId]
+          );
+          if (!resumeRows.rows.length) return res.json({ success: false, error: "Case not found or access denied." });
+          const resumeCase = resumeRows.rows[0];
+          if (resumeCase.status === "completed") {
+            return res.json({ success: false, error: "Cannot resume a completed case." });
+          }
+          // Advisory lock + atomic swap: serializes per-user case activation
+          const resumeClient = await pool.connect();
+          try {
+            await resumeClient.query("BEGIN");
+            await resumeClient.query(`SELECT pg_advisory_xact_lock($1)`, [userId]);
+            await resumeClient.query(
+              `UPDATE dd_cases SET status = 'paused', updated_at = NOW() WHERE user_id = $1 AND status = 'active' AND id != $2`,
+              [userId, resumeCaseId]
+            );
+            await resumeClient.query(
+              `UPDATE dd_cases SET status = 'active', updated_at = NOW() WHERE id = $1`,
+              [resumeCaseId]
+            );
+            await resumeClient.query("COMMIT");
+          } catch (txErr) {
+            await resumeClient.query("ROLLBACK");
+            throw txErr;
+          } finally {
+            resumeClient.release();
+          }
+          const resumeSteps: any[] = Array.isArray(resumeCase.steps) ? resumeCase.steps : [];
+          const resumeCurrentStep = resumeSteps[resumeCase.step_index] || null;
+          queueNav("dd", "/dd");
+          return res.json({
+            success: true,
+            result: {
+              case_id: resumeCaseId,
+              business_type: resumeCase.business_type,
+              business_name: resumeCase.business_name,
+              state: resumeCase.state,
+              step_index: resumeCase.step_index,
+              total_steps: resumeSteps.length,
+              current_step: resumeCurrentStep,
+            },
+            message: resumeCurrentStep
+              ? `Resumed ${resumeCase.business_type || "business"} case in ${resumeCase.state || "your state"}. Back on step ${resumeCase.step_index + 1}/${resumeSteps.length}: "${resumeCurrentStep.label}". Opening D.D. now.`
+              : `Resumed D.D. case. Opening D.D. now.`,
+            nav: "/dd",
           });
         }
 
@@ -34551,6 +34639,37 @@ OUTPUT STYLE:
     }
   });
 
+  // GET /api/dd/cases — returns all cases for the user sorted by recency
+  app.get("/api/dd/cases", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId as number;
+      const result = await pool.query(
+        `SELECT * FROM dd_cases WHERE user_id = $1 ORDER BY updated_at DESC`,
+        [userId]
+      );
+      const cases = result.rows.map((ddCase: any) => {
+        const steps: any[] = Array.isArray(ddCase.steps) ? ddCase.steps : [];
+        return {
+          id: ddCase.id,
+          business_type: ddCase.business_type,
+          business_name: ddCase.business_name,
+          state: ddCase.state,
+          step_index: ddCase.step_index,
+          total_steps: steps.length,
+          steps,
+          collected_fields: ddCase.collected_fields || {},
+          status: ddCase.status,
+          created_at: ddCase.created_at,
+          updated_at: ddCase.updated_at,
+        };
+      });
+      res.json({ cases });
+    } catch (err: any) {
+      console.error("[dd/cases GET]", err?.message);
+      res.status(500).json({ error: "Failed to fetch D.D. cases" });
+    }
+  });
+
   // POST /api/dd/case — create or replace the user's active D.D. formation case
   app.post("/api/dd/case", requireAuth, async (req, res) => {
     try {
@@ -34563,17 +34682,29 @@ OUTPUT STYLE:
         business_type?: string; business_name?: string; state?: string; collected_fields?: Record<string, any>;
       };
       const steps = buildDdFormationSteps(business_type || "LLC", state || "");
-      // Pause previous active cases
-      await pool.query(
-        `UPDATE dd_cases SET status = 'paused', updated_at = NOW() WHERE user_id = $1 AND status = 'active'`,
-        [userId]
-      );
-      const insert = await pool.query(
-        `INSERT INTO dd_cases (user_id, business_type, business_name, state, step_index, steps, collected_fields, status)
-         VALUES ($1, $2, $3, $4, 0, $5::jsonb, $6::jsonb, 'active') RETURNING *`,
-        [userId, business_type || null, business_name || null, state || null, JSON.stringify(steps), JSON.stringify(collected_fields || {})]
-      );
-      const ddCase = insert.rows[0];
+      // Advisory lock serializes all dd_cases activation operations per user
+      const createClient = await pool.connect();
+      let ddCase: any;
+      try {
+        await createClient.query("BEGIN");
+        await createClient.query(`SELECT pg_advisory_xact_lock($1)`, [userId]);
+        await createClient.query(
+          `UPDATE dd_cases SET status = 'paused', updated_at = NOW() WHERE user_id = $1 AND status = 'active'`,
+          [userId]
+        );
+        const insert = await createClient.query(
+          `INSERT INTO dd_cases (user_id, business_type, business_name, state, step_index, steps, collected_fields, status)
+           VALUES ($1, $2, $3, $4, 0, $5::jsonb, $6::jsonb, 'active') RETURNING *`,
+          [userId, business_type || null, business_name || null, state || null, JSON.stringify(steps), JSON.stringify(collected_fields || {})]
+        );
+        await createClient.query("COMMIT");
+        ddCase = insert.rows[0];
+      } catch (txErr) {
+        await createClient.query("ROLLBACK");
+        throw txErr;
+      } finally {
+        createClient.release();
+      }
       res.json({
         case: {
           id: ddCase.id, business_type: ddCase.business_type, business_name: ddCase.business_name,
@@ -34628,6 +34759,77 @@ OUTPUT STYLE:
     } catch (err: any) {
       console.error("[dd/case PATCH step]", err?.message);
       res.status(500).json({ error: "Failed to advance D.D. step" });
+    }
+  });
+
+  // PATCH /api/dd/case/:id/resume — resume a paused case (sets it active, pauses any current active)
+  app.patch("/api/dd/case/:id/resume", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId as number;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      if (!user.ddLaunchUnlocked) return res.status(403).json({ error: "D.D. not unlocked", code: "dd_locked" });
+
+      const caseId = parseInt(String(req.params.id), 10);
+      if (isNaN(caseId)) return res.status(400).json({ error: "Invalid case id" });
+
+      // Verify the case belongs to this user and is paused
+      const caseRows = await pool.query(
+        `SELECT * FROM dd_cases WHERE id = $1 AND user_id = $2`,
+        [caseId, userId]
+      );
+      if (!caseRows.rows.length) return res.status(404).json({ error: "Case not found" });
+      const ddCase = caseRows.rows[0];
+      if (ddCase.status === "active") {
+        // Already active — return it as-is
+        const steps: any[] = Array.isArray(ddCase.steps) ? ddCase.steps : [];
+        return res.json({
+          case: {
+            id: ddCase.id, business_type: ddCase.business_type, business_name: ddCase.business_name,
+            state: ddCase.state, step_index: ddCase.step_index, total_steps: steps.length, steps,
+            collected_fields: ddCase.collected_fields || {}, status: ddCase.status,
+            created_at: ddCase.created_at, updated_at: ddCase.updated_at,
+          },
+        });
+      }
+      if (ddCase.status === "completed") {
+        return res.status(400).json({ error: "Cannot resume a completed case" });
+      }
+
+      // Advisory lock + atomic swap: serializes per-user case activation
+      const client = await pool.connect();
+      let row: any;
+      try {
+        await client.query("BEGIN");
+        await client.query(`SELECT pg_advisory_xact_lock($1)`, [userId]);
+        await client.query(
+          `UPDATE dd_cases SET status = 'paused', updated_at = NOW() WHERE user_id = $1 AND status = 'active' AND id != $2`,
+          [userId, caseId]
+        );
+        const updated = await client.query(
+          `UPDATE dd_cases SET status = 'active', updated_at = NOW() WHERE id = $1 RETURNING *`,
+          [caseId]
+        );
+        await client.query("COMMIT");
+        row = updated.rows[0];
+      } catch (txErr) {
+        await client.query("ROLLBACK");
+        throw txErr;
+      } finally {
+        client.release();
+      }
+      const steps: any[] = Array.isArray(row.steps) ? row.steps : [];
+      res.json({
+        case: {
+          id: row.id, business_type: row.business_type, business_name: row.business_name,
+          state: row.state, step_index: row.step_index, total_steps: steps.length, steps,
+          collected_fields: row.collected_fields || {}, status: row.status,
+          created_at: row.created_at, updated_at: row.updated_at,
+        },
+      });
+    } catch (err: any) {
+      console.error("[dd/case PATCH resume]", err?.message);
+      res.status(500).json({ error: "Failed to resume D.D. case" });
     }
   });
 

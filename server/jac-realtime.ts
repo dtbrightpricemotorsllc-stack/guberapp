@@ -283,6 +283,21 @@ export const JAC_TOOLS = [
   },
   {
     type: "function" as const,
+    name: "resume_dd_case",
+    description: "Resume a previously paused D.D. formation case by its case_id. Use when the user wants to continue a business they started before but paused. Call get_dd_state first to discover available paused cases, then call this with the case_id they want to resume.",
+    parameters: {
+      type: "object",
+      properties: {
+        case_id: {
+          type: "number",
+          description: "The ID of the paused D.D. case to resume.",
+        },
+      },
+      required: ["case_id"],
+    },
+  },
+  {
+    type: "function" as const,
     name: "return_from_dd_to_jac",
     description: "Signal the end of a D.D. session and return the user to the main JAC interface. Use when the user says they're done with D.D. or wants to do something else on GUBER.",
     parameters: {
@@ -488,17 +503,29 @@ export async function executeJacTool(
       }
       const { business_type, business_name, state } = args;
       const steps = buildDdFormationSteps(business_type || "LLC", state || "");
-      // Pause any previous active case
-      await pool.query(
-        `UPDATE dd_cases SET status = 'paused', updated_at = NOW() WHERE user_id = $1 AND status = 'active'`,
-        [userId]
-      );
-      const result = await pool.query(
-        `INSERT INTO dd_cases (user_id, business_type, business_name, state, step_index, steps, collected_fields, status)
-         VALUES ($1, $2, $3, $4, 0, $5::jsonb, '{}'::jsonb, 'active') RETURNING id`,
-        [userId, business_type || null, business_name || null, state || null, JSON.stringify(steps)]
-      );
-      const caseId = result.rows[0].id;
+      // Advisory lock serializes all dd_cases activation operations per user
+      const createClient = await pool.connect();
+      let caseId: number;
+      try {
+        await createClient.query("BEGIN");
+        await createClient.query(`SELECT pg_advisory_xact_lock($1)`, [userId]);
+        await createClient.query(
+          `UPDATE dd_cases SET status = 'paused', updated_at = NOW() WHERE user_id = $1 AND status = 'active'`,
+          [userId]
+        );
+        const result = await createClient.query(
+          `INSERT INTO dd_cases (user_id, business_type, business_name, state, step_index, steps, collected_fields, status)
+           VALUES ($1, $2, $3, $4, 0, $5::jsonb, '{}'::jsonb, 'active') RETURNING id`,
+          [userId, business_type || null, business_name || null, state || null, JSON.stringify(steps)]
+        );
+        await createClient.query("COMMIT");
+        caseId = result.rows[0].id;
+      } catch (txErr) {
+        await createClient.query("ROLLBACK");
+        throw txErr;
+      } finally {
+        createClient.release();
+      }
       const currentStep = steps[0] || null;
       return {
         success: true,
@@ -516,20 +543,42 @@ export async function executeJacTool(
       if (!userId) {
         return { has_case: false, error: "Authentication required.", requires_auth: true };
       }
-      const caseRows = await pool.query(
-        `SELECT * FROM dd_cases WHERE user_id = $1 AND status IN ('active', 'completed') ORDER BY updated_at DESC LIMIT 1`,
+      // Fetch all non-completed cases so JAC can enumerate paused ones for resume
+      const allCaseRows = await pool.query(
+        `SELECT id, business_type, business_name, state, step_index, steps, status, updated_at
+         FROM dd_cases WHERE user_id = $1 ORDER BY updated_at DESC`,
         [userId]
       );
-      if (!caseRows.rows.length) {
+      const activeRow = allCaseRows.rows.find((r: any) => r.status === "active");
+      const pausedRows = allCaseRows.rows.filter((r: any) => r.status === "paused");
+      const completedRows = allCaseRows.rows.filter((r: any) => r.status === "completed");
+
+      const summarize = (row: any) => {
+        const steps: any[] = Array.isArray(row.steps) ? row.steps : [];
+        return {
+          case_id: row.id,
+          business_type: row.business_type,
+          business_name: row.business_name,
+          state: row.state,
+          step_index: row.step_index,
+          total_steps: steps.length,
+          completed_steps: steps.filter((s: any) => s.completed).length,
+          status: row.status,
+        };
+      };
+
+      if (!activeRow && pausedRows.length === 0 && completedRows.length === 0) {
         return {
           has_case: false,
-          message: "No active D.D. case found. Ask for business type and state, then call create_dd_case.",
+          message: "No D.D. cases found. Ask for business type and state, then call create_dd_case.",
         };
       }
-      const ddCase = caseRows.rows[0];
+
+      const ddCase = activeRow || allCaseRows.rows[0];
       const steps: any[] = Array.isArray(ddCase.steps) ? ddCase.steps : [];
       const completedCount = steps.filter((s: any) => s.completed).length;
       const currentStep = steps[ddCase.step_index] || null;
+
       return {
         has_case: true,
         case_id: ddCase.id,
@@ -541,9 +590,11 @@ export async function executeJacTool(
         completed_steps: completedCount,
         current_step: currentStep,
         status: ddCase.status,
-        message: currentStep
-          ? `Active D.D. case found. Step ${ddCase.step_index + 1}/${steps.length}: "${currentStep.label}" (${completedCount} of ${steps.length} completed).`
-          : `All ${steps.length} formation steps completed.`,
+        paused_cases: pausedRows.map(summarize),
+        completed_cases: completedRows.map(summarize),
+        message: activeRow
+          ? `Active D.D. case found (ID ${ddCase.id}). Step ${ddCase.step_index + 1}/${steps.length}: "${currentStep?.label || "all done"}" (${completedCount} of ${steps.length} completed).${pausedRows.length > 0 ? ` The user also has ${pausedRows.length} paused case(s): ${pausedRows.map((r: any) => `ID ${r.id} (${r.business_type || "business"} in ${r.state || "unknown state"})`).join(", ")}. Call resume_dd_case with the relevant case_id to switch.` : ""}`
+          : `No active case. The user has ${pausedRows.length} paused case(s): ${pausedRows.map((r: any) => `ID ${r.id} (${r.business_type || "business"} in ${r.state || "unknown state"})`).join(", ")}. Call resume_dd_case with the desired case_id.`,
       };
     }
 
@@ -622,6 +673,75 @@ export async function executeJacTool(
         message: allDone
           ? `All ${steps.length} formation steps complete. ${ddCase.business_type || "Business"} formation in ${ddCase.state || "your state"} is fully tracked.`
           : `Step marked complete. Next: "${nextStep?.label}" (step ${newStepIndex + 1}/${steps.length}).`,
+      };
+    }
+
+    case "resume_dd_case": {
+      if (!userId) {
+        return { error: "Authentication required.", requires_auth: true };
+      }
+      // Enforce paid-feature gate — same as REST and routes-JAC paths
+      const unlockRow = await pool.query(
+        `SELECT dd_launch_unlocked FROM users WHERE id = $1`,
+        [userId]
+      );
+      if (!unlockRow.rows.length || !unlockRow.rows[0].dd_launch_unlocked) {
+        return {
+          error: "D.D. Business Launch is not unlocked for this account.",
+          action: "navigate",
+          route: "/dd",
+          message: "Navigating to /dd — they'll see the $9.99 unlock screen.",
+        };
+      }
+      const { case_id: resumeCaseId } = args;
+      if (!resumeCaseId) return { error: "case_id is required." };
+      const resumeRows = await pool.query(
+        `SELECT * FROM dd_cases WHERE id = $1 AND user_id = $2`,
+        [resumeCaseId, userId]
+      );
+      if (!resumeRows.rows.length) {
+        return { error: "Case not found or access denied." };
+      }
+      const resumeCase = resumeRows.rows[0];
+      if (resumeCase.status === "completed") {
+        return { error: "Cannot resume a completed case." };
+      }
+      // Advisory lock + atomic swap: serializes per-user case activation
+      const resumeClient = await pool.connect();
+      try {
+        await resumeClient.query("BEGIN");
+        await resumeClient.query(`SELECT pg_advisory_xact_lock($1)`, [userId]);
+        await resumeClient.query(
+          `UPDATE dd_cases SET status = 'paused', updated_at = NOW() WHERE user_id = $1 AND status = 'active' AND id != $2`,
+          [userId, resumeCaseId]
+        );
+        await resumeClient.query(
+          `UPDATE dd_cases SET status = 'active', updated_at = NOW() WHERE id = $1`,
+          [resumeCaseId]
+        );
+        await resumeClient.query("COMMIT");
+      } catch (txErr) {
+        await resumeClient.query("ROLLBACK");
+        throw txErr;
+      } finally {
+        resumeClient.release();
+      }
+      const resumeSteps: any[] = Array.isArray(resumeCase.steps) ? resumeCase.steps : [];
+      const resumeCurrentStep = resumeSteps[resumeCase.step_index] || null;
+      return {
+        success: true,
+        case_id: resumeCaseId,
+        business_type: resumeCase.business_type,
+        business_name: resumeCase.business_name,
+        state: resumeCase.state,
+        step_index: resumeCase.step_index,
+        total_steps: resumeSteps.length,
+        current_step: resumeCurrentStep,
+        action: "navigate",
+        route: "/dd",
+        message: resumeCurrentStep
+          ? `Resumed ${resumeCase.business_type || "business"} case in ${resumeCase.state || "your state"}. Back on step ${resumeCase.step_index + 1}/${resumeSteps.length}: "${resumeCurrentStep.label}". Opening D.D. now.`
+          : `Resumed D.D. case. Opening D.D. now.`,
       };
     }
 

@@ -15,7 +15,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, ExternalLink, ChevronRight, Loader2, Lock,
   CheckCircle2, AlertCircle, Circle, ChevronDown, ChevronUp,
-  ClipboardList, ArrowRight,
+  ClipboardList, ArrowRight, History, Play,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -357,6 +357,76 @@ function MessageBubble({ msg }: { msg: DDMessage }) {
   );
 }
 
+// ── Previous cases drawer ─────────────────────────────────────────────────────
+
+function PreviousCasesDrawer({
+  cases,
+  onResume,
+  isResuming,
+}: {
+  cases: DDCase[];
+  onResume: (id: number) => void;
+  isResuming: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const pausedCases = cases.filter(c => c.status === "paused");
+  if (pausedCases.length === 0) return null;
+
+  return (
+    <div className="border border-border rounded-xl overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+        onClick={() => setOpen(v => !v)}
+      >
+        <div className="flex items-center gap-2">
+          <History className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-xs font-semibold text-foreground">
+            Previous cases ({pausedCases.length})
+          </span>
+        </div>
+        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+      </button>
+
+      {open && (
+        <div className="border-t border-border divide-y divide-border">
+          {pausedCases.map(c => {
+            const completedCount = c.steps.filter(s => s.completed).length;
+            const pct = c.total_steps > 0 ? Math.round((completedCount / c.total_steps) * 100) : 0;
+            const label = [c.business_type, c.business_name ? `"${c.business_name}"` : null, c.state ? `in ${c.state}` : null]
+              .filter(Boolean).join(" ") || "Formation case";
+            return (
+              <div key={c.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium text-foreground truncate">{label}</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">
+                    {completedCount}/{c.total_steps} steps · {pct}% complete · paused
+                  </div>
+                  <div className="w-20 h-1 rounded-full bg-muted overflow-hidden mt-1">
+                    <div className="h-full bg-amber-500/60 rounded-full" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 h-8 px-3 text-[11px] font-bold gap-1"
+                  onClick={() => { onResume(c.id); setOpen(false); }}
+                  disabled={isResuming}
+                >
+                  {isResuming ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <><Play className="h-3 w-3" /> Resume</>
+                  )}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Guided Chat ──────────────────────────────────────────────────────────
 
 function DDChat() {
@@ -379,6 +449,41 @@ function DDChat() {
     retry: false,
   });
   const activeCase = caseData?.case ?? null;
+
+  // Load all cases (for the previous-cases drawer)
+  const { data: casesData, refetch: refetchCases } = useQuery<{ cases: DDCase[] }>({
+    queryKey: ["/api/dd/cases"],
+    retry: false,
+  });
+  const allCases = casesData?.cases ?? [];
+
+  // Resume a paused case
+  const resumeMutation = useMutation({
+    mutationFn: async (caseId: number) => {
+      const res = await apiRequest("PATCH", `/api/dd/case/${caseId}/resume`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/dd/case"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dd/cases"] });
+      const resumed = data.case as DDCase | undefined;
+      if (resumed) {
+        const completedCount = resumed.steps.filter(s => s.completed).length;
+        const currentStep = resumed.steps[resumed.step_index];
+        const parts: string[] = [];
+        if (resumed.business_type) parts.push(resumed.business_type);
+        if (resumed.business_name) parts.push(`"${resumed.business_name}"`);
+        if (resumed.state) parts.push(`in ${resumed.state}`);
+        setMessages([{
+          role: "assistant",
+          content: `Welcome back! I've resumed your ${parts.join(" ") || "formation"} case. You're on step ${resumed.step_index + 1} of ${resumed.total_steps}${currentStep ? `: "${currentStep.label}"` : ""}. ${completedCount > 0 ? `You've already completed ${completedCount} step${completedCount === 1 ? "" : "s"}. ` : ""}Ready to continue?`,
+        }]);
+      }
+    },
+    onError: () => {
+      toast({ title: "Couldn't resume case", description: "Please try again.", variant: "destructive" });
+    },
+  });
 
   // When a case loads with business_type / state and the chat is still at the greeting,
   // inject a context message so D.D. picks up where JAC left off
@@ -495,16 +600,21 @@ function DDChat() {
         </Badge>
       </div>
 
-      {/* Case progress tracker — shown when there's an active case */}
-      {activeCase && activeCase.steps.length > 0 && (
-        <div className="px-4 pt-3 pb-1">
+      {/* Case progress tracker + previous cases drawer */}
+      <div className="px-4 pt-3 pb-1 space-y-2">
+        {activeCase && activeCase.steps.length > 0 && (
           <StepTracker
             ddCase={activeCase}
             onMarkDone={(stepId) => markStepMutation.mutate(stepId)}
             isMarkingDone={markStepMutation.isPending}
           />
-        </div>
-      )}
+        )}
+        <PreviousCasesDrawer
+          cases={allCases}
+          onResume={(id) => resumeMutation.mutate(id)}
+          isResuming={resumeMutation.isPending}
+        />
+      </div>
 
       {/* Messages */}
       <ScrollArea className="flex-1 px-4 py-4">
