@@ -237,10 +237,15 @@ function reportFallback(reason: string) {
  * Returns a promise that resolves when audio ends (or immediately on error).
  * `onStart` fires the moment audible playback actually begins — use it to
  * measure end-to-end latency from STT completion to first sound.
+ *
+ * `staticSrc` — if provided, attempt this URL before slug detection.
+ *   Useful for callers that already know the pre-generated asset path so they
+ *   don't rely solely on keyword matching.  Falls through to the normal
+ *   slug/live/Web-Speech chain if the file is missing or fails to play.
  */
 export async function jacSpeak(
   rawText: string,
-  opts: { muted?: boolean; onFallback?: () => void; onStart?: () => void } = {}
+  opts: { muted?: boolean; onFallback?: () => void; onStart?: () => void; staticSrc?: string } = {}
 ): Promise<void> {
   if (opts.muted) return;
   // ConvAI owns audio — silently discard any TTS request while a session is active
@@ -252,11 +257,21 @@ export async function jacSpeak(
   const text = normalizeTtsText(rawText);
   if (!text.trim()) return;
 
-  // ── Tier 1: static cache (free, instant, all platforms) ──────────────────
+  // ── Tier 1a: explicit static path (caller-supplied, zero API round-trip) ──
+  if (opts.staticSrc) {
+    const played = await tryPlayAudio(opts.staticSrc, false, opts.onStart);
+    if (played) return;
+    // File absent or failed — fall through to slug detection / live API
+  }
+
+  // ── Tier 1b: static cache (free, instant, all platforms) ─────────────────
   const slug = detectCacheSlug(rawText);
   if (slug) {
-    const played = await tryPlayAudio(`/jac-audio/${slug}.mp3`, false, opts.onStart);
-    if (played) return;
+    // Skip if staticSrc already tried this same path to avoid a double-fetch
+    if (!opts.staticSrc || opts.staticSrc !== `/jac-audio/${slug}.mp3`) {
+      const played = await tryPlayAudio(`/jac-audio/${slug}.mp3`, false, opts.onStart);
+      if (played) return;
+    }
   }
 
   // ── Tier 2: live ElevenLabs via backend proxy ─────────────────────────────

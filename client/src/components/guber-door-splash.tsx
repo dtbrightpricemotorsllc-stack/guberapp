@@ -59,8 +59,10 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     schedule(() => setPhase("opening"),             DOORS_START_AT);
     schedule(() => {
       setPhase("open");
-      // JAC greeting via TTS (ElevenLabs buffered → Web Speech fallback)
-      jacSpeak(GREETING_TEXT).catch(() => {});
+      // JAC greeting — static pre-generated MP3 plays instantly with zero
+      // API round-trip.  Falls back to live ElevenLabs / Web Speech if the
+      // file is absent (GREETING_TEXT keywords match the homepage-welcome slug).
+      jacSpeak(GREETING_TEXT, { staticSrc: "/jac-audio/homepage-welcome.mp3" }).catch(() => {});
     }, GREETING_AT);
     schedule(() => setShowButtons(true),            BUTTONS_AT);
   }
