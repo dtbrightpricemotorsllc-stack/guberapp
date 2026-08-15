@@ -653,3 +653,10 @@ id = "Mxp0CWrbVp-ZplnZ8WlHR"
 uri = "file://investor-materials/formal/GUBER-Investor-Package.zip"
 type = "unspecified"
 title = "GUBER Investor Package (banner removed)"
+
+[[outputs]]
+id = "4AhMUTIZq4wMl_j68I1fD"
+uri = "file://attached_assets/generated_videos/guber-doors-reveal.mp4"
+type = "video"
+title = "GUBER Doors Opening Reveal"
+description = "Cinematic 9:16 portrait video — neon doors close, then swing open to reveal JAC, Gubee, and D.D. in the Team GUBER welcome scene."
