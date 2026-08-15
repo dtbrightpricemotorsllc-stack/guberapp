@@ -866,13 +866,13 @@ export default function Home() {
       <section className="relative z-10 px-5 pt-10 pb-4 text-center max-w-2xl mx-auto w-full" data-testid="section-brand-hero">
         <p className="text-[11px] font-display tracking-[0.3em] text-muted-foreground/50 mb-4 uppercase">Team GUBER</p>
         <h1 className="text-4xl sm:text-5xl font-display font-black tracking-tight leading-[1.05] mb-3 text-white">
-          Want more<br />out of life?
-        </h1>
-        <h2 className="text-2xl sm:text-3xl font-display font-black tracking-wider mb-5" style={{ color: "hsl(152 100% 44%)" }}>
           Join Team GUBER.
-        </h2>
-        <p className="text-muted-foreground/70 text-sm sm:text-base max-w-xs mx-auto leading-relaxed italic">
-          "Bring what's behind your eyes in front of your eyes."
+        </h1>
+        <p className="text-base sm:text-lg text-muted-foreground/70 mb-1 leading-snug">
+          Don't only chase the gold.
+        </p>
+        <p className="text-base sm:text-lg font-semibold leading-snug mb-5" style={{ color: "hsl(152 100% 44%)" }}>
+          Own the roads the gold travels on.
         </p>
       </section>
 
