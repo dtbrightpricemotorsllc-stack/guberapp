@@ -530,14 +530,13 @@ export function JacHomepage() {
     enterChatCalledRef.current = true;
     unlockAudioContext();
     setMode("chat");
-    // Speak the greeting immediately using the pre-cached static MP3
-    // (public/jac-audio/welcome.mp3 — zero API cost, JAC's real voice).
-    // The splash tap IS a browser gesture, so audio is already unlocked.
-    // greetingSpokenRef prevents replay if the user subsequently taps the mic.
-    if (!greetingSpokenRef.current) {
-      greetingSpokenRef.current = true;
-      speak(GREETING.content);
-    }
+    // Greeting is shown as text immediately.
+    // Audio is intentionally NOT auto-played here:
+    //   - Web Speech (boring robot voice) is a poor first impression.
+    //   - When the user taps the mic, ConvAI greets in JAC's real ElevenLabs
+    //     voice — that IS JAC speaking first, with the right voice.
+    //   - Playing both causes a double-welcome (boring voice → excited voice).
+    // greetingSpokenRef stays false so text-mode TTS still works for replies.
   }
 
   // Returning-visitor personalisation — ConvAI now voices the greeting, so we
