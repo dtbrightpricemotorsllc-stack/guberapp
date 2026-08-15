@@ -660,3 +660,10 @@ uri = "file://attached_assets/generated_videos/guber-doors-reveal.mp4"
 type = "video"
 title = "GUBER Doors Opening Reveal"
 description = "Cinematic 9:16 portrait video — neon doors close, then swing open to reveal JAC, Gubee, and D.D. in the Team GUBER welcome scene."
+
+[[outputs]]
+id = "qmw_EYikE9yZIBkkJ0fsS"
+uri = "file://attached_assets/generated_videos/guber-doors-real.mp4"
+type = "video"
+title = "GUBER Doors Opening — Your Actual Images"
+description = "Kling v1.6 image-to-video using your exact artwork as start and end frames. Closed neon doors → reveal of JAC and the team."
