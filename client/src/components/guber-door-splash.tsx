@@ -70,6 +70,8 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   function choose(voice: boolean) {
     if (phase !== "open") return;
     unlockAudioContext(); // lock in audio permission within this gesture
+    // Mark splash as seen so returning users skip it on next visit
+    try { localStorage.setItem("guberDoorSplashSeen", "1"); } catch {}
     setPhase("exiting");
     schedule(() => {
       setMounted(false);

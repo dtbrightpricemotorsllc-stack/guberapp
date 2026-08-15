@@ -806,9 +806,17 @@ export default function Home() {
   // ── Door splash gate — shown on first visit, skipped on native ────────────
   const [doorSplashDone, setDoorSplashDone] = useState(() => {
     if (typeof window !== "undefined" && (window as any).Capacitor?.isNativePlatform?.()) return true;
-    if (import.meta.env.DEV && typeof window !== "undefined") {
-      if (new URLSearchParams(window.location.search).has("nosplash")) return true;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      // ?doortest=1 forces the splash regardless of stored flag (dev/QA helper)
+      if (params.has("doortest")) return false;
+      // ?nosplash skips in any environment
+      if (params.has("nosplash")) return true;
     }
+    // Returning users who have already seen the splash skip it
+    try {
+      if (localStorage.getItem("guberDoorSplashSeen") === "1") return true;
+    } catch {}
     return false;
   });
   // autoEnterAfterSplash: true only when the door splash was shown AND the user
