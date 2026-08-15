@@ -707,6 +707,8 @@ function App() {
     if (import.meta.env.DEV && typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       if (params.has("nosplash")) return true;
+      // ?doortest=1 — skip only the auth loading splash so the door splash is testable
+      if (params.has("doortest")) return true;
     }
     return false;
   });

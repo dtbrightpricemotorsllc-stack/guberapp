@@ -290,11 +290,26 @@ function GuberContextCard({ msg }: { msg: string }) {
   );
 }
 
-export function JacHomepage() {
+interface JacHomepageProps {
+  /**
+   * When true, skip the "Meet JAC" splash card and go directly to chat.
+   * Used after GuberDoorSplash has already served as the entry gate.
+   */
+  autoEnterChat?: boolean;
+  /**
+   * When true (and autoEnterChat is true), also start live voice mode on mount.
+   * Set this when the user tapped "TALK TO JAC" in the door splash.
+   */
+  startVoice?: boolean;
+}
+
+export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHomepageProps) {
   // "splash" = gesture gate (required by browsers before any audio)
   // "chat"   = full chat panel + auto-speak fires immediately on enter
   // "intro"  = minimized chip selector (reached via minimize button)
-  const [mode, setMode] = useState<"splash" | "intro" | "chat">("splash");
+  const [mode, setMode] = useState<"splash" | "intro" | "chat">(
+    autoEnterChat ? "chat" : "splash"
+  );
 
   // Detect in-app browsers for post-failure "Open GUBER for full voice" hint only.
   // This does NOT block voice — we attempt voice on every platform and fall back
@@ -517,6 +532,19 @@ export function JacHomepage() {
       try { localStorage.setItem("jac_crt_seen", "1"); } catch {}
     }, 3200);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [mode]);
+
+  // Auto-start voice after GuberDoorSplash "TALK TO JAC" tap.
+  // Audio was already unlocked by the user gesture in the door splash,
+  // so this useEffect fires with a working AudioContext.
+  const startVoiceOnMountRef = useRef(startVoice && autoEnterChat);
+  useEffect(() => {
+    if (!startVoiceOnMountRef.current) return;
+    if (mode !== "chat") return;
+    startVoiceOnMountRef.current = false; // only once
+    const t = setTimeout(() => toggleLiveMode(), 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   // Guard against double-tap on the splash card: if enterChat fires a second
