@@ -3,9 +3,8 @@ import { jacSpeak, unlockAudioContext } from "@/lib/jac-tts";
 
 // ── Source images (served statically from public/splash/) ──────────────────
 const DOOR_CLOSED = "/splash/door-closed.png";
-const HQ_REVEAL   = "/splash/hq-reveal.png";
 
-// ── Animation timing (ms from the moment ENTER GUBER is tapped) ───────────
+const HQ_BG       = "/splash/hq-reveal-bg.png";   // HQ scene, character areas blur-filled
 const SEAM_FLASH_AT   = 100;  // neon seam flashes
 const DOORS_START_AT  = 300;  // doors begin sliding
 const DOORS_END_AT    = 1300; // doors fully open
@@ -98,6 +97,19 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     ? `transform ${hqScaleDuration} cubic-bezier(0.4, 0, 0.2, 1) ${HQ_SCALE_START - DOORS_START_AT}ms`
     : "none";
 
+  // Shared style for the HQ background + character layers so they stay
+  // pixel-aligned regardless of viewport aspect ratio.
+  const hqLayerStyle: import("react").CSSProperties = {
+    position: "absolute",
+    inset: 0,
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    objectPosition: "top center",
+    display: "block",
+    userSelect: "none",
+  };
+
   return (
     <>
       <style>{`
@@ -111,9 +123,17 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           0%, 100% { box-shadow: inset 0 0 40px rgba(0,0,0,0.7); }
           50%       { box-shadow: inset 0 0 40px rgba(100,80,255,0.15); }
         }
-        @keyframes guber-hq-idle-pulse {
-          0%, 100% { filter: brightness(1) saturate(1); }
-          50%       { filter: brightness(1.04) saturate(1.06); }
+        @keyframes guber-jac-sway {
+          0%, 100% { transform: translateX(-3px); }
+          50%       { transform: translateX(3px); }
+        }
+        @keyframes guber-gubee-breathe {
+          0%, 100% { transform: scale(1); }
+          50%       { transform: scale(1.03); }
+        }
+        @keyframes guber-dd-hover {
+          0%, 100% { transform: translateY(-6px); }
+          50%       { transform: translateY(6px); }
         }
         @keyframes guber-floor-ring {
           0%, 100% { opacity: 0.45; transform: scale(1); }
@@ -156,25 +176,45 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
             position: "absolute",
             inset: 0,
             overflow: "hidden",
-            // Subtle idle breathing when fully open
-            animation: isOpen ? "guber-hq-idle-pulse 3.5s ease-in-out infinite" : "none",
+            willChange: "transform",
+            // Scale 94 % → 100 % as doors open (perspective push effect)
+            transform: (isOpening || isOpen) ? "scale(1)" : "scale(0.94)",
+            transition: hqTransition,
           }}
         >
+          {/* HQ background (characters blur-filled out) */}
+          <img src={HQ_BG} alt="" draggable={false} style={hqLayerStyle} />
+          {/* Gubee — behind JAC, slow breathe */}
           <img
-            src={HQ_REVEAL}
+            src={CHAR_GUBEE}
             alt=""
             draggable={false}
             style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              objectPosition: "top center",
-              display: "block",
-              userSelect: "none",
+              ...hqLayerStyle,
               willChange: "transform",
-              // Scale 94 % → 100 % as doors open (perspective push effect)
-              transform: (isOpening || isOpen) ? "scale(1)" : "scale(0.94)",
-              transition: hqTransition,
+              animation: isOpen ? "guber-gubee-breathe 3s ease-in-out infinite" : "none",
+            }}
+          />
+          {/* JAC — center, gentle side-to-side sway */}
+          <img
+            src={CHAR_JAC}
+            alt=""
+            draggable={false}
+            style={{
+              ...hqLayerStyle,
+              willChange: "transform",
+              animation: isOpen ? "guber-jac-sway 2.5s ease-in-out infinite" : "none",
+            }}
+          />
+          {/* D.D. — front-left robot, vertical hover float */}
+          <img
+            src={CHAR_DD}
+            alt=""
+            draggable={false}
+            style={{
+              ...hqLayerStyle,
+              willChange: "transform",
+              animation: isOpen ? "guber-dd-hover 1.8s ease-in-out infinite" : "none",
             }}
           />
         </div>
@@ -385,3 +425,9 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     </>
   );
 }
+
+const CHAR_GUBEE  = "/splash/hq-char-gubee.png";  // badger, behind JAC (right)
+
+const CHAR_JAC    = "/splash/hq-char-jac.png";    // center, largest
+
+const CHAR_DD     = "/splash/hq-char-dd.png";     // small robot, front-left
