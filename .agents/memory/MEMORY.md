@@ -46,3 +46,4 @@
 - [Capacitor WKWebView black screen](capacitor-wkwebview-black-screen.md) — three bugs in ViewController.swift cause instant black screen; fix: dark bg in capacitorDidLoad(), deferred retry for NSURLErrorCancelled, anchor overlay to self.view.
 - [iPad black screen diagnosis](ipad-black-screen.md) — LoadingSplash (#000 fixed overlay) + no auth fetch timeout = permanent black on Autoscale cold starts; fix: timeout + skip splash on native.
 - [ElevenLabs API key workspace + permissions](elevenlabs-api-key-workspace.md) — key needs correct workspace (owns agent_4901kw…) AND convai_write scope; wrong workspace=404, missing scope=401; staging key sk_e36cf… must never be used.
+- [JAC Door Scene](jac-door-scene.md) — GuberDoorSplash is sole web entry (no mascot loader); 4 JAC states via JacAnimatedCharacter + canvas mouth overlay; _greetingHasFired guards replay; ConvAI handles continuous turns.
