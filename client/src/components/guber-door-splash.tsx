@@ -1,50 +1,54 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { jacSpeak, unlockAudioContext } from "@/lib/jac-tts";
 
-// ── Source images (served statically from public/splash/) ──────────────────
-const DOOR_CLOSED = "/splash/door-closed.png";
+// ── Static assets ────────────────────────────────────────────────────────────
+const DOOR_CLOSED  = "/splash/door-closed.png";
+const HQ_BG        = "/splash/hq-new-bg.jpg";     // neon corridor reveal
+const CHAR_JAC     = "/splash/char-jac-v2.png";   // transparent bg — center host
+const CHAR_DD      = "/splash/char-dd-v2.png";    // black bg → screen blend
+const CHAR_GUBEE   = "/splash/char-gubee-v2.png"; // black bg → screen blend
+const BTN_TALK     = "/splash/btn-talk.png";
+const BTN_TYPE     = "/splash/btn-type.png";
 
-const HQ_BG       = "/splash/hq-reveal-bg.png";   // HQ scene, character areas blur-filled
-const SEAM_FLASH_AT   = 100;  // neon seam flashes
-const DOORS_START_AT  = 300;  // doors begin sliding
-const DOORS_END_AT    = 1300; // doors fully open
-const HQ_SCALE_START  = 1000; // HQ scene starts scaling in
-const HQ_SCALE_END    = 1800; // HQ at 100 %
-const GREETING_AT     = 1500; // JAC speaks + text appears
-const BUTTONS_AT      = 1900; // TALK / TYPE buttons fade in
-const DOOR_SLIDE_MS   = DOORS_END_AT - DOORS_START_AT; // 1000 ms
-const HQ_SCALE_MS     = HQ_SCALE_END - HQ_SCALE_START; // 800 ms
+// ── Timing (ms from handleEnter) ────────────────────────────────────────────
+const SEAM_FLASH_AT  = 100;
+const DOORS_START_AT = 300;
+const DOORS_END_AT   = 1300;
+const WELCOME_AT     = 1350;  // headline appears right as doors finish
+const GREETING_AT    = 1650;  // JAC speaks + greeting text
+const SPEAKING_DUR   = 9000;  // approx TTS audio duration
+const BUTTONS_AT     = 2100;  // CTA buttons fade in
+const DOOR_SLIDE_MS  = DOORS_END_AT - DOORS_START_AT;
 
-const GREETING_TEXT = "Hey, welcome to Team GUBER. What are you trying to make happen?";
+const GREETING_TEXT =
+  "I'm JAC. What's on your mind? Let's get the vision behind your eyes in front of your eyes.";
 
-type Phase =
-  | "closed"     // standing by, ENTER GUBER tap target
-  | "unlocking"  // 0 – 300 ms: neon flash + seam crack
-  | "opening"    // 300 – 1300 ms: doors slide, HQ scales
-  | "open"       // idle, waiting for TALK / TYPE choice
-  | "exiting";   // fade-out before handing off
+type Phase = "closed" | "unlocking" | "opening" | "open" | "exiting";
 
 export interface GuberDoorSplashProps {
   onEnterVoice: () => void;
   onEnterText:  () => void;
-  /** Skip the whole splash — used on native or ?nosplash */
   skip?: boolean;
 }
 
 export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSplashProps) {
-  const [phase,       setPhase]       = useState<Phase>("closed");
-  const [seamFlash,   setSeamFlash]   = useState(false);
-  const [showButtons, setShowButtons] = useState(false);
-  const [mounted,     setMounted]     = useState(true);
+  const [phase,        setPhase]        = useState<Phase>("closed");
+  const [seamFlash,    setSeamFlash]    = useState(false);
+  const [showWelcome,  setShowWelcome]  = useState(false);
+  const [showGreeting, setShowGreeting] = useState(false);
+  const [isSpeaking,   setIsSpeaking]  = useState(false);
+  const [showButtons,  setShowButtons]  = useState(false);
+  const [mounted,      setMounted]      = useState(true);
   const timerRefs = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const schedule = useCallback((fn: () => void, ms: number) => {
     const t = setTimeout(fn, ms);
     timerRefs.current.push(t);
+    return t;
   }, []);
 
   useEffect(() => {
-    if (skip) { setMounted(false); }
+    if (skip) setMounted(false);
     return () => { timerRefs.current.forEach(clearTimeout); };
   }, [skip]);
 
@@ -53,28 +57,28 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     unlockAudioContext();
     setPhase("unlocking");
 
-    schedule(() => setSeamFlash(true),              SEAM_FLASH_AT);
-    schedule(() => setSeamFlash(false),             SEAM_FLASH_AT + 220);
-    schedule(() => setPhase("opening"),             DOORS_START_AT);
+    schedule(() => setSeamFlash(true),  SEAM_FLASH_AT);
+    schedule(() => setSeamFlash(false), SEAM_FLASH_AT + 220);
+    schedule(() => setPhase("opening"), DOORS_START_AT);
+    schedule(() => setShowWelcome(true), WELCOME_AT);
     schedule(() => {
       setPhase("open");
-      // JAC greeting — static pre-generated MP3 plays instantly with zero
-      // API round-trip.  Falls back to live ElevenLabs / Web Speech if the
-      // file is absent (GREETING_TEXT keywords match the homepage-welcome slug).
+      setShowGreeting(true);
+      setIsSpeaking(true);
       jacSpeak(GREETING_TEXT, { staticSrc: "/jac-audio/homepage-welcome.mp3" }).catch(() => {});
     }, GREETING_AT);
-    schedule(() => setShowButtons(true),            BUTTONS_AT);
+    schedule(() => setIsSpeaking(false), GREETING_AT + SPEAKING_DUR);
+    schedule(() => setShowButtons(true), BUTTONS_AT);
   }
 
   function choose(voice: boolean) {
     if (phase !== "open") return;
-    unlockAudioContext(); // lock in audio permission within this gesture
-    // No localStorage flag — doors replay on every cold load (session-only suppression).
+    unlockAudioContext();
     setPhase("exiting");
     schedule(() => {
       setMounted(false);
       if (voice) onEnterVoice(); else onEnterText();
-    }, 400);
+    }, 420);
   }
 
   if (!mounted) return null;
@@ -84,77 +88,111 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const isUnlocking = phase === "unlocking";
   const exiting     = phase === "exiting";
 
-  // Door slide progress (0 → 1 over DOOR_SLIDE_MS)
-  const doorsSlideDuration = `${DOOR_SLIDE_MS}ms`;
   const doorsTransition = (isOpening || isOpen)
-    ? `transform ${doorsSlideDuration} cubic-bezier(0.4, 0, 0.2, 1)`
+    ? `transform ${DOOR_SLIDE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`
     : "none";
 
-  // HQ scale progress
-  const hqScaleDuration = `${HQ_SCALE_MS}ms`;
-  const hqTransition = (isOpening || isOpen)
-    ? `transform ${hqScaleDuration} cubic-bezier(0.4, 0, 0.2, 1) ${HQ_SCALE_START - DOORS_START_AT}ms`
+  const hqRevealTransition = (isOpening || isOpen)
+    ? `transform 820ms cubic-bezier(0.4, 0, 0.2, 1) ${Math.round(DOOR_SLIDE_MS * 0.65)}ms`
     : "none";
-
-  // Shared style for the HQ background + character layers so they stay
-  // pixel-aligned regardless of viewport aspect ratio.
-  const hqLayerStyle: import("react").CSSProperties = {
-    position: "absolute",
-    inset: 0,
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    objectPosition: "top center",
-    display: "block",
-    userSelect: "none",
-  };
 
   return (
     <>
       <style>{`
+        /* ── Seam flash ── */
         @keyframes guber-seam-flash {
-          0%   { opacity: 0; background: rgba(255,255,255,0); }
-          15%  { opacity: 1; background: rgba(255,255,255,0.95); box-shadow: 0 0 30px 12px rgba(0,220,255,0.9); }
-          40%  { opacity: 0.7; background: rgba(0,220,255,0.7); box-shadow: 0 0 20px 8px rgba(0,220,255,0.6); }
+          0%   { opacity: 0; }
+          15%  { opacity: 1; box-shadow: 0 0 32px 14px rgba(0,220,255,0.9); }
+          40%  { opacity: 0.7; }
           100% { opacity: 0; }
         }
-        @keyframes guber-door-glow {
-          0%, 100% { box-shadow: inset 0 0 40px rgba(0,0,0,0.7); }
-          50%       { box-shadow: inset 0 0 40px rgba(100,80,255,0.15); }
+
+        /* ── JAC idle (standing by after doors open) ── */
+        @keyframes jac-idle {
+          0%, 100% { transform: translateX(-50%) translateY(0px)    rotate(-0.4deg) scale(1);     }
+          25%       { transform: translateX(-50%) translateY(-4px)   rotate(0.3deg)  scale(1.005); }
+          50%       { transform: translateX(-50%) translateY(0px)    rotate(0.5deg)  scale(1);     }
+          75%       { transform: translateX(-50%) translateY(3px)    rotate(-0.2deg) scale(0.998); }
         }
-        @keyframes guber-jac-sway {
-          0%, 100% { transform: translateX(-3px); }
-          50%       { transform: translateX(3px); }
+
+        /* ── JAC talking — active head + body micro-motion ── */
+        @keyframes jac-talk {
+          0%,100% { transform: translateX(-50%) translateY(0px)    scale(1)     rotate(0deg);   }
+          7%       { transform: translateX(-50%) translateY(-5px)   scale(1.009) rotate(0.4deg); }
+          14%      { transform: translateX(-50%) translateY(-2px)   scale(0.997) rotate(-0.2deg);}
+          21%      { transform: translateX(-50%) translateY(-6px)   scale(1.007) rotate(0.3deg); }
+          28%      { transform: translateX(-50%) translateY(-1px)   scale(0.999) rotate(0deg);   }
+          35%      { transform: translateX(-50%) translateY(-4px)   scale(1.006) rotate(-0.3deg);}
+          42%      { transform: translateX(-50%) translateY(-3px)   scale(1.003) rotate(0.2deg); }
+          49%      { transform: translateX(-50%) translateY(-5px)   scale(1.005) rotate(-0.1deg);}
+          56%      { transform: translateX(-50%) translateY(-2px)   scale(1.001) rotate(0.3deg); }
+          63%      { transform: translateX(-50%) translateY(-4px)   scale(1.004) rotate(-0.2deg);}
+          70%      { transform: translateX(-50%) translateY(-1px)   scale(0.998) rotate(0.1deg); }
+          77%      { transform: translateX(-50%) translateY(-5px)   scale(1.006) rotate(-0.3deg);}
+          84%      { transform: translateX(-50%) translateY(-3px)   scale(1.002) rotate(0.2deg); }
+          91%      { transform: translateX(-50%) translateY(-4px)   scale(1.004) rotate(-0.1deg);}
         }
-        @keyframes guber-gubee-breathe {
-          0%, 100% { transform: scale(1); }
-          50%       { transform: scale(1.03); }
+
+        /* ── JAC blink (periodic) ── */
+        @keyframes jac-blink {
+          0%, 88%, 100% { filter: brightness(1) saturate(1); }
+          91%            { filter: brightness(0.88) saturate(0.85); }
+          93%            { filter: brightness(1) saturate(1); }
         }
-        @keyframes guber-dd-hover {
-          0%, 100% { transform: translateY(-6px); }
-          50%       { transform: translateY(6px); }
+
+        /* ── D.D. hover float ── */
+        @keyframes dd-hover {
+          0%, 100% { transform: translateY(-10px) scale(1); }
+          50%       { transform: translateY(10px)  scale(1.02); }
         }
-        @keyframes guber-floor-ring {
-          0%, 100% { opacity: 0.45; transform: scale(1); }
-          50%       { opacity: 0.7; transform: scale(1.04); }
+
+        /* ── Gubee breathe ── */
+        @keyframes gubee-breathe {
+          0%, 100% { transform: scale(1) translateY(0); }
+          50%       { transform: scale(1.045) translateY(-5px); }
         }
-        @keyframes guber-fade-in-up {
-          from { opacity: 0; transform: translateY(12px); }
+
+        /* ── Speak glow pulse around JAC ── */
+        @keyframes jac-speak-glow {
+          0%, 100% { opacity: 0.55; transform: translateX(-50%) scale(1);    }
+          50%       { opacity: 0.9;  transform: translateX(-50%) scale(1.08); }
+        }
+
+        /* ── Floor ring pulse ── */
+        @keyframes floor-ring {
+          0%, 100% { opacity: 0.35; transform: translateX(-50%) scale(1);    }
+          50%       { opacity: 0.65; transform: translateX(-50%) scale(1.06); }
+        }
+
+        /* ── Speak dots ── */
+        @keyframes speak-dot {
+          0%, 100% { opacity: 0.3;  transform: translateY(0px);  }
+          50%       { opacity: 1;    transform: translateY(-3px); }
+        }
+
+        /* ── Entry animations ── */
+        @keyframes welcome-in {
+          from { opacity: 0; transform: translateY(-12px); }
           to   { opacity: 1; transform: translateY(0); }
         }
-        @keyframes guber-btn-appear {
-          from { opacity: 0; transform: translateY(16px) scale(0.96); }
-          to   { opacity: 1; transform: translateY(0) scale(1); }
+        @keyframes greeting-in {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
-        @keyframes guber-lock-crack {
-          0%   { transform: translateX(-50%) scaleX(1); }
-          30%  { transform: translateX(-50%) scaleX(2.5); }
-          100% { transform: translateX(-50%) scaleX(0); }
+        @keyframes btn-appear {
+          from { opacity: 0; transform: translateY(22px) scale(0.94); }
+          to   { opacity: 1; transform: translateY(0)    scale(1);    }
+        }
+        @keyframes enter-pulse {
+          0%, 100% { opacity: 0.4; }
+          50%       { opacity: 0.75; }
         }
       `}</style>
 
-      {/* ── Root overlay ─────────────────────────────────────────────────── */}
+      {/* ── Root fixed overlay ───────────────────────────────────────────────── */}
       <div
+        role="region"
+        aria-label={phase === "closed" ? "GUBER entry — tap to enter" : "Team GUBER"}
         style={{
           position: "fixed",
           inset: 0,
@@ -162,76 +200,314 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           background: "#000",
           overflow: "hidden",
           opacity: exiting ? 0 : 1,
-          transition: exiting ? "opacity 380ms ease-in" : "none",
+          transition: exiting ? "opacity 420ms ease-in" : "none",
         }}
-        aria-label={phase === "closed" ? "GUBER entry — tap to enter" : "Loading Team GUBER"}
-        role="region"
       >
 
-        {/* ── HQ reveal layer (behind doors) ──────────────────────────────── */}
+        {/* ════════════════════════════════════════════════════════════════════
+            HQ REVEAL SCENE — sits behind both door panels
+            ════════════════════════════════════════════════════════════════════ */}
         <div
           aria-hidden="true"
           style={{
             position: "absolute",
             inset: 0,
-            overflow: "hidden",
             willChange: "transform",
-            // Scale 94 % → 100 % as doors open (perspective push effect)
-            transform: (isOpening || isOpen) ? "scale(1)" : "scale(0.94)",
-            transition: hqTransition,
+            transform: (isOpening || isOpen) ? "scale(1)" : "scale(0.93)",
+            transition: hqRevealTransition,
           }}
         >
-          {/* HQ background (characters blur-filled out) */}
-          <img src={HQ_BG} alt="" draggable={false} style={hqLayerStyle} />
-          {/* Gubee — behind JAC, slow breathe */}
+          {/* — Neon corridor background — */}
+          <img
+            src={HQ_BG}
+            alt=""
+            draggable={false}
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              objectPosition: "center top",
+              display: "block",
+              userSelect: "none",
+            }}
+          />
+
+          {/* — Depth gradient for legibility — */}
+          <div style={{
+            position: "absolute",
+            inset: 0,
+            background: [
+              "linear-gradient(to bottom,",
+              "  rgba(0,0,10,0.65) 0%,",
+              "  rgba(0,0,10,0.1)  30%,",
+              "  rgba(0,0,10,0.05) 55%,",
+              "  rgba(0,0,10,0.72) 100%)",
+            ].join(""),
+            pointerEvents: "none",
+          }} />
+
+          {/* ── Gubee — right side, neon badger with gold cape ── */}
           <img
             src={CHAR_GUBEE}
             alt=""
             draggable={false}
             style={{
-              ...hqLayerStyle,
+              position: "absolute",
+              right: "-4%",
+              bottom: "13%",
+              height: "clamp(140px, 40vh, 310px)",
+              width: "auto",
+              objectFit: "contain",
+              userSelect: "none",
+              /* black background knocked out by screen blend on dark corridor */
+              mixBlendMode: "screen",
+              filter: "brightness(1.12) saturate(1.15) contrast(1.05)",
               willChange: "transform",
-              animation: isOpen ? "guber-gubee-breathe 3s ease-in-out infinite" : "none",
+              animation: isOpen ? "gubee-breathe 3.4s ease-in-out infinite" : "none",
             }}
           />
-          {/* JAC — center, gentle side-to-side sway */}
+
+          {/* ── JAC speaking glow ring (shows while TTS plays) ── */}
+          {(isOpen || isOpening) && (
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                left: "50%",
+                bottom: "12%",
+                width: "clamp(180px, 55vw, 360px)",
+                height: "clamp(180px, 55vw, 360px)",
+                borderRadius: "50%",
+                transform: "translateX(-50%)",
+                background: "radial-gradient(ellipse, rgba(110,60,255,0.28) 0%, rgba(0,160,255,0.12) 50%, transparent 75%)",
+                animation: isSpeaking ? "jac-speak-glow 1.3s ease-in-out infinite" : "none",
+                opacity: isSpeaking ? 1 : 0,
+                transition: "opacity 600ms ease",
+                pointerEvents: "none",
+              }}
+            />
+          )}
+
+          {/* ── JAC — center, main character, transparent background ── */}
           <img
             src={CHAR_JAC}
-            alt=""
+            alt="JAC — Team GUBER AI Coordinator"
             draggable={false}
             style={{
-              ...hqLayerStyle,
+              position: "absolute",
+              left: "50%",
+              bottom: "14%",
+              height: "clamp(200px, 58vh, 430px)",
+              width: "auto",
+              objectFit: "contain",
+              transform: "translateX(-50%)",
+              userSelect: "none",
               willChange: "transform",
-              animation: isOpen ? "guber-jac-sway 2.5s ease-in-out infinite" : "none",
+              zIndex: 2,
+              /* talking vs idle vs static */
+              animation: isOpen
+                ? isSpeaking
+                  ? "jac-talk 0.65s ease-in-out infinite, jac-blink 4.2s ease-in-out infinite 0.8s"
+                  : "jac-idle 4s ease-in-out infinite, jac-blink 5.5s ease-in-out infinite 2s"
+                : "none",
+              /* neon glow when speaking */
+              filter: isSpeaking
+                ? "drop-shadow(0 0 18px rgba(130,70,255,0.7)) drop-shadow(0 0 36px rgba(0,170,255,0.4)) drop-shadow(0 8px 24px rgba(0,0,0,0.7))"
+                : "drop-shadow(0 8px 28px rgba(0,0,0,0.65))",
+              transition: "filter 700ms ease",
             }}
           />
-          {/* D.D. — front-left robot, vertical hover float */}
+
+          {/* ── D.D. — left side, floating neon robot ── */}
           <img
             src={CHAR_DD}
             alt=""
             draggable={false}
             style={{
-              ...hqLayerStyle,
+              position: "absolute",
+              left: "0%",
+              bottom: "17%",
+              height: "clamp(90px, 28vh, 210px)",
+              width: "auto",
+              objectFit: "contain",
+              userSelect: "none",
+              /* black background knocked out by screen blend on dark corridor */
+              mixBlendMode: "screen",
+              filter: "brightness(1.2) saturate(1.25) contrast(1.08)",
               willChange: "transform",
-              animation: isOpen ? "guber-dd-hover 1.8s ease-in-out infinite" : "none",
+              animation: isOpen ? "dd-hover 2.1s ease-in-out infinite" : "none",
+            }}
+          />
+
+          {/* ── Floor holographic ring ── */}
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              left: "50%",
+              bottom: "10%",
+              width: "clamp(180px, 60vw, 380px)",
+              height: 32,
+              borderRadius: "50%",
+              transform: "translateX(-50%)",
+              background: "radial-gradient(ellipse, rgba(80,60,255,0.4) 0%, rgba(0,190,255,0.18) 55%, transparent 80%)",
+              animation: isOpen ? "floor-ring 2.8s ease-in-out infinite" : "none",
+              pointerEvents: "none",
             }}
           />
         </div>
+        {/* ═════════════════ end HQ scene ═════════════════════════════════════ */}
 
-        {/* ── Left door panel ─────────────────────────────────────────────── */}
+
+        {/* ════════════════════════════════════════════════════════════════════
+            WELCOME HEADLINE — fades in after doors open
+            ════════════════════════════════════════════════════════════════════ */}
+        {showWelcome && (
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              paddingTop: "max(14px, env(safe-area-inset-top, 14px))",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              zIndex: 5,
+              background: "linear-gradient(to bottom, rgba(0,0,12,0.82) 0%, rgba(0,0,12,0.45) 65%, transparent 100%)",
+              animation: "welcome-in 550ms cubic-bezier(0.22, 1, 0.36, 1) both",
+              paddingBottom: 12,
+            }}
+          >
+            <p style={{
+              fontFamily: "'Bebas Neue', 'Inter', sans-serif",
+              fontSize: "clamp(10px, 2.8vw, 13px)",
+              letterSpacing: "0.38em",
+              color: "rgba(255,255,255,0.5)",
+              margin: "0 0 2px 0",
+              userSelect: "none",
+            }}>WELCOME TO</p>
+
+            <p style={{
+              fontFamily: "'Bebas Neue', 'Inter', sans-serif",
+              fontSize: "clamp(36px, 10.5vw, 64px)",
+              fontWeight: 700,
+              letterSpacing: "0.16em",
+              lineHeight: 1,
+              color: "#fff",
+              textShadow: [
+                "0 0 22px rgba(110,60,255,0.75)",
+                "0 0 48px rgba(0,180,255,0.35)",
+                "0 2px 0 rgba(0,0,0,0.5)",
+              ].join(", "),
+              margin: 0,
+              userSelect: "none",
+            }}>TEAM GUBER</p>
+
+            <p style={{
+              fontFamily: "'Bebas Neue', 'Inter', sans-serif",
+              fontSize: "clamp(8px, 2.2vw, 11px)",
+              letterSpacing: "0.30em",
+              color: "rgba(0,230,120,0.85)",
+              margin: "7px 0 0 0",
+              userSelect: "none",
+            }}>YOUR GO-TO FOR WHAT YOU GO THROUGH.</p>
+          </div>
+        )}
+
+
+        {/* ════════════════════════════════════════════════════════════════════
+            JAC GREETING TEXT — appears as JAC speaks
+            ════════════════════════════════════════════════════════════════════ */}
+        {showGreeting && (
+          <div
+            aria-live="polite"
+            style={{
+              position: "absolute",
+              bottom: showButtons
+                ? "calc(118px + env(safe-area-inset-bottom, 0px))"
+                : "calc(22% + env(safe-area-inset-bottom, 0px))",
+              left: 0,
+              right: 0,
+              zIndex: 6,
+              padding: "0 24px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              animation: "greeting-in 480ms cubic-bezier(0.22, 1, 0.36, 1) both",
+              transition: "bottom 300ms cubic-bezier(0.22, 1, 0.36, 1)",
+            }}
+          >
+            {/* Speaking indicator dots */}
+            {isSpeaking && (
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                marginBottom: 7,
+              }}>
+                {[0, 1, 2].map(i => (
+                  <div
+                    key={i}
+                    style={{
+                      width: 5,
+                      height: 5,
+                      borderRadius: "50%",
+                      background: "rgba(0,230,120,0.95)",
+                      animation: `speak-dot 0.85s ease-in-out infinite ${i * 0.22}s`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
+            <p style={{
+              fontFamily: "'Bebas Neue', 'Inter', sans-serif",
+              fontSize: "clamp(15px, 4.5vw, 20px)",
+              letterSpacing: "0.09em",
+              lineHeight: 1.25,
+              color: "#fff",
+              textShadow: "0 0 14px rgba(120,70,255,0.55), 0 2px 8px rgba(0,0,0,0.7)",
+              margin: 0,
+              textAlign: "center",
+              userSelect: "none",
+            }}>
+              I'M JAC. WHAT'S ON YOUR MIND?
+            </p>
+
+            <p style={{
+              fontFamily: "'Bebas Neue', 'Inter', sans-serif",
+              fontSize: "clamp(10px, 2.8vw, 13px)",
+              letterSpacing: "0.06em",
+              color: "rgba(255,255,255,0.55)",
+              margin: "5px 0 0 0",
+              textAlign: "center",
+              userSelect: "none",
+              lineHeight: 1.4,
+            }}>
+              LET'S GET THE VISION BEHIND YOUR EYES IN FRONT OF YOUR EYES.
+            </p>
+          </div>
+        )}
+
+
+        {/* ════════════════════════════════════════════════════════════════════
+            DOOR PANELS — slide left/right on open
+            ════════════════════════════════════════════════════════════════════ */}
+
+        {/* Left panel */}
         <div
           aria-hidden="true"
           style={{
             position: "absolute",
-            left: 0,
-            top: 0,
-            width: "50%",
-            height: "100%",
+            left: 0, top: 0,
+            width: "50%", height: "100%",
             overflow: "hidden",
             willChange: "transform",
             transform: (isOpening || isOpen) ? "translateX(-100%)" : "translateX(0)",
             transition: doorsTransition,
-            animation: (!isOpening && !isOpen) ? "guber-door-glow 4s ease-in-out infinite" : "none",
           }}
         >
           <img
@@ -240,32 +516,27 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
             draggable={false}
             style={{
               position: "absolute",
-              left: 0,
-              top: 0,
-              width: "200%",
-              height: "100%",
+              left: 0, top: 0,
+              width: "200%", height: "100%",
               objectFit: "cover",
               objectPosition: "left center",
-              userSelect: "none",
               display: "block",
+              userSelect: "none",
             }}
           />
         </div>
 
-        {/* ── Right door panel ────────────────────────────────────────────── */}
+        {/* Right panel */}
         <div
           aria-hidden="true"
           style={{
             position: "absolute",
-            right: 0,
-            top: 0,
-            width: "50%",
-            height: "100%",
+            right: 0, top: 0,
+            width: "50%", height: "100%",
             overflow: "hidden",
             willChange: "transform",
             transform: (isOpening || isOpen) ? "translateX(100%)" : "translateX(0)",
             transition: doorsTransition,
-            animation: (!isOpening && !isOpen) ? "guber-door-glow 4s ease-in-out infinite 2s" : "none",
           }}
         >
           <img
@@ -274,79 +545,72 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
             draggable={false}
             style={{
               position: "absolute",
-              right: 0,
-              top: 0,
-              width: "200%",
-              height: "100%",
+              right: 0, top: 0,
+              width: "200%", height: "100%",
               objectFit: "cover",
               objectPosition: "right center",
-              userSelect: "none",
               display: "block",
+              userSelect: "none",
             }}
           />
         </div>
 
-        {/* ── Center seam line (always present, flashes on unlock) ────────── */}
+
+        {/* ════════════════════════════════════════════════════════════════════
+            CENTER SEAM LINE
+            ════════════════════════════════════════════════════════════════════ */}
         <div
           aria-hidden="true"
           style={{
             position: "absolute",
-            left: "50%",
-            top: 0,
-            bottom: 0,
+            left: "50%", top: 0, bottom: 0,
             width: 2,
             transform: "translateX(-50%)",
-            background: "rgba(0,180,255,0.25)",
+            background: "rgba(0,185,255,0.28)",
             opacity: (isOpening || isOpen) ? 0 : 1,
-            transition: (isOpening || isOpen) ? "opacity 200ms" : "none",
+            transition: (isOpening || isOpen) ? "opacity 180ms" : "none",
             animation: seamFlash ? "guber-seam-flash 220ms ease-out forwards" : "none",
           }}
         />
 
-        {/* ── TEAM GUBER foreground overlay — single node so seam passes behind ─ */}
-        <div
-          aria-hidden={isOpening || isOpen}
-          style={{
-            position: "absolute",
-            inset: 0,
-            zIndex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            pointerEvents: "none",
-            opacity: (isOpening || isOpen) ? 0 : 1,
-            transition: (isOpening || isOpen) ? "opacity 350ms ease-out" : "none",
-          }}
-        >
-          <p style={{
-            fontFamily: "'Bebas Neue', 'Inter', sans-serif",
-            fontSize: "clamp(30px, 9vw, 56px)",
-            fontWeight: 700,
-            letterSpacing: "0.22em",
-            color: "#fff",
-            textShadow: "0 0 28px rgba(0,229,118,0.55), 0 0 56px rgba(0,180,255,0.25)",
-            margin: 0,
-            lineHeight: 1,
-            userSelect: "none",
-          }}>TEAM GUBER</p>
-          <p style={{
-            marginTop: 20,
-            fontFamily: "'Bebas Neue', 'Inter', sans-serif",
-            fontSize: "clamp(10px, 2.2vw, 13px)",
-            letterSpacing: "0.45em",
-            color: "rgba(255,255,255,0.38)",
-            margin: "20px 0 0 0",
-            userSelect: "none",
-            animation: "guber-fade-in-up 0.7s ease-out 0.4s both",
-          }}>ENTER</p>
-        </div>
 
-        {/* ── Tap target (doors-closed state) — transparent, sits above overlay ── */}
+        {/* ════════════════════════════════════════════════════════════════════
+            CLOSED-DOOR OVERLAY — ENTER only (no TEAM GUBER text)
+            ════════════════════════════════════════════════════════════════════ */}
+        {!isOpening && !isOpen && (
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              pointerEvents: "none",
+            }}
+          >
+            <p style={{
+              fontFamily: "'Bebas Neue', 'Inter', sans-serif",
+              fontSize: "clamp(11px, 3vw, 14px)",
+              letterSpacing: "0.50em",
+              color: "rgba(255,255,255,0.42)",
+              margin: 0,
+              userSelect: "none",
+              animation: "enter-pulse 2.4s ease-in-out infinite 0.6s",
+            }}>ENTER</p>
+          </div>
+        )}
+
+
+        {/* ════════════════════════════════════════════════════════════════════
+            TAP TARGET — transparent button covers full screen while closed
+            ════════════════════════════════════════════════════════════════════ */}
         {(phase === "closed" || isUnlocking) && (
           <button
             onClick={handleEnter}
-            aria-label="Enter GUBER"
+            aria-label="Enter Team GUBER"
             style={{
               position: "absolute",
               inset: 0,
@@ -358,103 +622,96 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           />
         )}
 
-        {/* ── Post-open CTA buttons ────────────────────────────────────────── */}
+
+        {/* ════════════════════════════════════════════════════════════════════
+            CTA BUTTONS — branded PNG images as real interactive elements
+            ════════════════════════════════════════════════════════════════════ */}
         {showButtons && (
           <div
             style={{
               position: "absolute",
-              bottom: 0,
-              left: 0,
-              right: 0,
-              padding: "20px 20px calc(20px + env(safe-area-inset-bottom, 0px))",
-              display: "flex",
-              gap: 12,
+              bottom: 0, left: 0, right: 0,
               zIndex: 10,
-              // Gradient so buttons sit on a dark base regardless of image content
-              background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 70%, transparent 100%)",
-              animation: "guber-btn-appear 380ms cubic-bezier(0.34,1.1,0.64,1) both",
+              padding: "0 20px calc(16px + env(safe-area-inset-bottom, 0px))",
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+              background: "linear-gradient(to top, rgba(0,0,10,0.92) 0%, rgba(0,0,10,0.55) 55%, transparent 100%)",
+              animation: "btn-appear 400ms cubic-bezier(0.34, 1.1, 0.64, 1) both",
             }}
           >
             {/* TALK TO JAC */}
             <button
               onClick={() => choose(true)}
-              style={{
-                flex: 1,
-                height: 52,
-                borderRadius: 14,
-                border: "1.5px solid rgba(0,229,118,0.7)",
-                background: "rgba(0,0,0,0.55)",
-                backdropFilter: "blur(8px)",
-                color: "#00E576",
-                fontFamily: "'Bebas Neue', 'Inter', sans-serif",
-                fontWeight: 700,
-                fontSize: 15,
-                letterSpacing: "0.12em",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                boxShadow: "0 0 18px rgba(0,229,118,0.25), inset 0 0 14px rgba(0,229,118,0.05)",
-                transition: "transform 120ms, box-shadow 120ms",
-              }}
-              onPointerDown={e => (e.currentTarget.style.transform = "scale(0.97)")}
-              onPointerUp={e => (e.currentTarget.style.transform = "scale(1)")}
-              onPointerLeave={e => (e.currentTarget.style.transform = "scale(1)")}
               aria-label="Talk to JAC with voice"
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                display: "block",
+                width: "100%",
+                lineHeight: 0,
+                borderRadius: 12,
+                overflow: "hidden",
+                transition: "transform 120ms ease, filter 120ms ease",
+              }}
+              onPointerDown={e => {
+                e.currentTarget.style.transform = "scale(0.96)";
+                e.currentTarget.style.filter = "brightness(1.12)";
+              }}
+              onPointerUp={e => {
+                e.currentTarget.style.transform = "scale(1)";
+                e.currentTarget.style.filter = "brightness(1)";
+              }}
+              onPointerLeave={e => {
+                e.currentTarget.style.transform = "scale(1)";
+                e.currentTarget.style.filter = "brightness(1)";
+              }}
             >
-              {/* waveform icon */}
-              <svg width="18" height="14" viewBox="0 0 18 14" fill="none" aria-hidden="true">
-                <rect x="0"  y="4" width="2" height="6"  rx="1" fill="currentColor" opacity="0.6"/>
-                <rect x="3"  y="2" width="2" height="10" rx="1" fill="currentColor" opacity="0.8"/>
-                <rect x="6"  y="0" width="2" height="14" rx="1" fill="currentColor"/>
-                <rect x="9"  y="2" width="2" height="10" rx="1" fill="currentColor" opacity="0.8"/>
-                <rect x="12" y="4" width="2" height="6"  rx="1" fill="currentColor" opacity="0.6"/>
-                <rect x="15" y="5" width="2" height="4"  rx="1" fill="currentColor" opacity="0.4"/>
-              </svg>
-              TALK TO JAC
+              <img
+                src={BTN_TALK}
+                alt="Talk to JAC"
+                draggable={false}
+                style={{ width: "100%", height: "auto", display: "block" }}
+              />
             </button>
 
             {/* TYPE INSTEAD */}
             <button
               onClick={() => choose(false)}
-              style={{
-                flex: 1,
-                height: 52,
-                borderRadius: 14,
-                border: "1.5px solid rgba(0,229,118,0.35)",
-                background: "rgba(0,0,0,0.45)",
-                backdropFilter: "blur(8px)",
-                color: "rgba(0,229,118,0.75)",
-                fontFamily: "'Bebas Neue', 'Inter', sans-serif",
-                fontWeight: 700,
-                fontSize: 15,
-                letterSpacing: "0.12em",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                boxShadow: "0 0 10px rgba(0,229,118,0.1)",
-                transition: "transform 120ms",
-              }}
-              onPointerDown={e => (e.currentTarget.style.transform = "scale(0.97)")}
-              onPointerUp={e => (e.currentTarget.style.transform = "scale(1)")}
-              onPointerLeave={e => (e.currentTarget.style.transform = "scale(1)")}
               aria-label="Type to JAC instead"
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                display: "block",
+                width: "100%",
+                lineHeight: 0,
+                borderRadius: 12,
+                overflow: "hidden",
+                transition: "transform 120ms ease, filter 120ms ease",
+              }}
+              onPointerDown={e => {
+                e.currentTarget.style.transform = "scale(0.96)";
+                e.currentTarget.style.filter = "brightness(1.12)";
+              }}
+              onPointerUp={e => {
+                e.currentTarget.style.transform = "scale(1)";
+                e.currentTarget.style.filter = "brightness(1)";
+              }}
+              onPointerLeave={e => {
+                e.currentTarget.style.transform = "scale(1)";
+                e.currentTarget.style.filter = "brightness(1)";
+              }}
             >
-              {/* keyboard icon */}
-              <svg width="16" height="12" viewBox="0 0 16 12" fill="none" aria-hidden="true">
-                <rect x="0" y="0" width="16" height="12" rx="2" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-                <rect x="2" y="2.5" width="2" height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
-                <rect x="5" y="2.5" width="2" height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
-                <rect x="8" y="2.5" width="2" height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
-                <rect x="11" y="2.5" width="3" height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
-                <rect x="2" y="6"   width="2" height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
-                <rect x="5" y="6"   width="6" height="2" rx="0.5" fill="currentColor" opacity="0.9"/>
-                <rect x="12" y="6"  width="2" height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
-              </svg>
-              TYPE INSTEAD
+              <img
+                src={BTN_TYPE}
+                alt="Type instead"
+                draggable={false}
+                style={{ width: "100%", height: "auto", display: "block" }}
+              />
             </button>
           </div>
         )}
@@ -463,9 +720,3 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     </>
   );
 }
-
-const CHAR_GUBEE  = "/splash/hq-char-gubee.png";  // badger, behind JAC (right)
-
-const CHAR_JAC    = "/splash/hq-char-jac.png";    // center, largest
-
-const CHAR_DD     = "/splash/hq-char-dd.png";     // small robot, front-left
