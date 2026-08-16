@@ -30,6 +30,8 @@ import {
   isBiometricSessionUnlocked,
 } from "@/lib/biometric";
 
+import { GuberDoorSplash } from "@/components/guber-door-splash";
+
 // Core pages — eagerly loaded (fast path for first-visit users)
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
@@ -701,6 +703,28 @@ function JacNavPoll() {
   return null;
 }
 
+// ── Universal entry door ─────────────────────────────────────────────────────
+// Shows on every cold page load (no localStorage suppression).
+// Native / ?nosplash skip it. Internal SPA navigation never re-triggers it
+// because the component state lives only in memory for the session lifetime.
+function DoorGate() {
+  const [done, setDone] = useState(() => {
+    if (isNativeApp) return true;
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search);
+      if (p.has("nosplash")) return true;
+    }
+    return false;
+  });
+  if (done) return null;
+  return (
+    <GuberDoorSplash
+      onEnterVoice={() => setDone(true)}
+      onEnterText={() => setDone(true)}
+    />
+  );
+}
+
 function App() {
   const [splashDone, setSplashDone] = useState(() => {
     if (isNativeApp) return true;
@@ -727,6 +751,7 @@ function App() {
             <UploadProgressPill />
             <GoogleAuthOverlay />
             {!splashDone && <SplashWrapper onDone={() => setSplashDone(true)} />}
+            {splashDone && <DoorGate />}
             <GpsTrackingBanner />
             <InstallPrompt />
             <AnnouncementPopup />

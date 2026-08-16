@@ -14,7 +14,6 @@ import { SiGoogleplay, SiApple } from "react-icons/si";
 import { OpportunityMap } from "@/components/opportunity-map";
 import { SignUpWall } from "@/components/signup-wall";
 import { JacHomepage } from "@/components/jac-homepage";
-import { GuberDoorSplash } from "@/components/guber-door-splash";
 
 import logoImg          from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
 import day1OGImg        from "@assets/Gubergoldday1_1772434950756.png";
@@ -803,28 +802,6 @@ export default function Home() {
   const [currentSlide,  setCurrentSlide]  = useState(SLIDES[0]);
   const { enabled: investorPitchPublic } = useFeatureFlag("investor_pitch_public");
 
-  // ── Door splash gate — shown on first visit, skipped on native ────────────
-  const [doorSplashDone, setDoorSplashDone] = useState(() => {
-    if (typeof window !== "undefined" && (window as any).Capacitor?.isNativePlatform?.()) return true;
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      // ?doortest=1 forces the splash regardless of stored flag (dev/QA helper)
-      if (params.has("doortest")) return false;
-      // ?nosplash skips in any environment
-      if (params.has("nosplash")) return true;
-    }
-    // Returning users who have already seen the splash skip it
-    try {
-      if (localStorage.getItem("guberDoorSplashSeen") === "1") return true;
-    } catch {}
-    return false;
-  });
-  // autoEnterAfterSplash: true only when the door splash was shown AND the user
-  // tapped through it (never true for native / ?nosplash paths). Kept separate so
-  // JacHomepage's useState/useRef initializers receive the correct values at mount.
-  const [autoEnterAfterSplash, setAutoEnterAfterSplash] = useState(false);
-  const [jacStartVoice, setJacStartVoice] = useState(false);
-
   // Scroll to top on mount AND every time the app is foregrounded.
   // iOS WKWebView preserves exact scroll position when backgrounded — the page
   // is never reloaded on resume, so index.html/useEffect fixes don't fire.
@@ -899,28 +876,9 @@ export default function Home() {
         </p>
       </section>
 
-      {/* ── Door splash — entry gate (fixed overlay, dismissed on first interaction) ── */}
-      {!doorSplashDone && (
-        <GuberDoorSplash
-          onEnterVoice={() => {
-            setJacStartVoice(true);
-            setAutoEnterAfterSplash(true);
-            setDoorSplashDone(true);
-          }}
-          onEnterText={() => {
-            setAutoEnterAfterSplash(true);
-            setDoorSplashDone(true);
-          }}
-        />
-      )}
-
-      {/* ── JAC Homepage Assistant — mounted only after door splash completes so its
-           useState/useRef initializers receive the correct autoEnterChat/startVoice
-           values. On native / ?nosplash paths doorSplashDone starts true and
-           autoEnterAfterSplash stays false, giving the normal homepage experience. ── */}
-      {doorSplashDone && (
-        <JacHomepage autoEnterChat={autoEnterAfterSplash} startVoice={jacStartVoice} />
-      )}
+      {/* ── JAC Homepage Assistant — door is now handled at App level (DoorGate).
+           JacHomepage mounts directly once the Router renders home.tsx. ── */}
+      <JacHomepage />
 
       {/* ── Hero Slideshow — moved below JAC so conversation loads first ── */}
       <HeroSlideshow onSlideChange={setCurrentSlide} />

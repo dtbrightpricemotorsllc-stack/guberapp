@@ -356,30 +356,50 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
   const powerOnPlayedRef = useRef(_crtAlreadySeen);
   const liveModeRef = useRef(false);
   useEffect(() => { liveModeRef.current = liveMode; }, [liveMode]);
+  // Tracks whether JAC is currently speaking — used to suppress echo turns
+  const isSpeakingRef = useRef(false);
 
   const handleConvaiPhaseChange = useCallback((phase: ConvaiPhase) => {
     // "error" is never emitted by the phase-derivation effect in JacConvaiSession;
     // errors arrive via onError → handleConvaiError instead.  Skip this branch
     // so a stale or future "error" phase doesn't silently kill the session.
-    if (phase === "speaking") setLiveState("speaking");
-    else if (phase === "listening") setLiveState("recording");
-    else if (phase === "muted") setLiveState("listening");
-    else if (phase === "connecting") setLiveState("listening"); // show "listening" not "connecting" while warming up
-    else setLiveState("listening");
+    if (phase === "speaking") {
+      isSpeakingRef.current = true;
+      setLiveState("speaking");
+    } else {
+      isSpeakingRef.current = false;
+      if (phase === "listening") setLiveState("recording");
+      else if (phase === "muted") setLiveState("listening");
+      else if (phase === "connecting") setLiveState("listening"); // show "listening" not "connecting" while warming up
+      else setLiveState("listening");
+    }
   }, []);
 
   const handleConvaiUserTranscript = useCallback((text: string) => {
-    setMessages(prev => [...prev, { role: "user" as const, content: text }]);
+    // ── Transcript guards ────────────────────────────────────────────────────
+    // 1. Skip while JAC is speaking — prevents her own audio from becoming a user turn.
+    if (isSpeakingRef.current) return;
+    const trimmed = text.trim();
+    // 2. Skip empty / whitespace-only transcripts.
+    if (!trimmed) return;
+    // 3. Skip "..." and similar filler artifacts from silence / partial STT.
+    if (/^[.…\s]+$/.test(trimmed)) return;
+    // 4. Skip punctuation-only strings (no letters or digits — not a real utterance).
+    if (!/[a-zA-Z0-9]/.test(trimmed)) return;
+    setMessages(prev => [...prev, { role: "user" as const, content: trimmed }]);
   }, []);
 
   const handleConvaiJacResponse = useCallback((text: string) => {
+    // Strip internal voice/emotion tags e.g. [happy], [excited] before displaying.
+    const sanitized = text.replace(/\[[^\]]*\]/g, "").trim();
+    if (!sanitized) return; // nothing left after stripping — discard silently
     setMessages(prev => {
       // Replace the initial static greeting with the first ConvAI transcript
       // so only one greeting bubble is ever shown (ConvAI's own words).
       if (prev.length === 1 && prev[0].role === "assistant") {
-        return [{ role: "assistant" as const, content: text }];
+        return [{ role: "assistant" as const, content: sanitized }];
       }
-      return [...prev, { role: "assistant" as const, content: text }];
+      return [...prev, { role: "assistant" as const, content: sanitized }];
     });
   }, []);
 

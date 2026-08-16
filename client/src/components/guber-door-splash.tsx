@@ -69,8 +69,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   function choose(voice: boolean) {
     if (phase !== "open") return;
     unlockAudioContext(); // lock in audio permission within this gesture
-    // Mark splash as seen so returning users skip it on next visit
-    try { localStorage.setItem("guberDoorSplashSeen", "1"); } catch {}
+    // No localStorage flag — doors replay on every cold load (session-only suppression).
     setPhase("exiting");
     schedule(() => {
       setMounted(false);
@@ -304,7 +303,46 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           }}
         />
 
-        {/* ── ENTER GUBER tap target (doors-closed state) ─────────────────── */}
+        {/* ── TEAM GUBER foreground overlay — single node so seam passes behind ─ */}
+        <div
+          aria-hidden={isOpening || isOpen}
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "none",
+            opacity: (isOpening || isOpen) ? 0 : 1,
+            transition: (isOpening || isOpen) ? "opacity 350ms ease-out" : "none",
+          }}
+        >
+          <p style={{
+            fontFamily: "'Bebas Neue', 'Inter', sans-serif",
+            fontSize: "clamp(30px, 9vw, 56px)",
+            fontWeight: 700,
+            letterSpacing: "0.22em",
+            color: "#fff",
+            textShadow: "0 0 28px rgba(0,229,118,0.55), 0 0 56px rgba(0,180,255,0.25)",
+            margin: 0,
+            lineHeight: 1,
+            userSelect: "none",
+          }}>TEAM GUBER</p>
+          <p style={{
+            marginTop: 20,
+            fontFamily: "'Bebas Neue', 'Inter', sans-serif",
+            fontSize: "clamp(10px, 2.2vw, 13px)",
+            letterSpacing: "0.45em",
+            color: "rgba(255,255,255,0.38)",
+            margin: "20px 0 0 0",
+            userSelect: "none",
+            animation: "guber-fade-in-up 0.7s ease-out 0.4s both",
+          }}>ENTER</p>
+        </div>
+
+        {/* ── Tap target (doors-closed state) — transparent, sits above overlay ── */}
         {(phase === "closed" || isUnlocking) && (
           <button
             onClick={handleEnter}
