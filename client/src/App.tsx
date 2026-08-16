@@ -725,18 +725,22 @@ function DoorGate() {
   );
 }
 
-function App() {
-  const [splashDone, setSplashDone] = useState(() => {
-    if (isNativeApp) return true;
-    if (import.meta.env.DEV && typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      if (params.has("nosplash")) return true;
-      // ?doortest=1 — skip only the auth loading splash so the door splash is testable
-      if (params.has("doortest")) return true;
-    }
-    return false;
-  });
+// Fires the GUBER cold-start ping sound once per tab session (web only).
+// The visual badger loader has been removed; this keeps the audio cue alive.
+function ColdStartPing() {
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(COLD_START_PING_KEY) === "1") return;
+      sessionStorage.setItem(COLD_START_PING_KEY, "1");
+    } catch { return; }
+    import("@/lib/notification-sound")
+      .then(({ playGuberPing }) => playGuberPing())
+      .catch(() => {});
+  }, []);
+  return null;
+}
 
+function App() {
   return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
@@ -750,8 +754,10 @@ function App() {
             <Toaster />
             <UploadProgressPill />
             <GoogleAuthOverlay />
-            {!splashDone && <SplashWrapper onDone={() => setSplashDone(true)} />}
-            {splashDone && <DoorGate />}
+            {/* Native app keeps the badger loader; web goes straight to the door */}
+            {isNativeApp && <SplashWrapper onDone={() => {}} />}
+            {!isNativeApp && <ColdStartPing />}
+            <DoorGate />
             <GpsTrackingBanner />
             <InstallPrompt />
             <AnnouncementPopup />
