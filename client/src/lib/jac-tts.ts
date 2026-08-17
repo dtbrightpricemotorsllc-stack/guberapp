@@ -9,6 +9,7 @@
 
 import { applyJacVoice } from "./jac-voice";
 import { isIOS } from "./platform";
+import { registerJacAnalyser, unlockJacAnalyserContext } from "./jac-audio-analyser";
 
 /** Pronunciation rewrites applied before any TTS call */
 export function normalizeTtsText(text: string): string {
@@ -148,6 +149,9 @@ export function isJacSpeaking(): boolean {
  * Unlocks audio playback on all platforms (mobile browsers, PWA, native Capacitor).
  */
 export function unlockAudioContext() {
+  // Unlock the mouth-animation analyser context inside this same gesture so
+  // the ConvAI WebRTC audio tap works on gesture-gated browsers (iOS Safari).
+  unlockJacAnalyserContext();
   // Create / resume the Web Audio API context inside this user gesture.
   // AudioContext routes audio through the main speaker on all platforms;
   // raw <audio> elements can default to earpiece routing on some phones.
@@ -483,12 +487,21 @@ async function playViaAudioCtx(arrayBuffer: ArrayBuffer, onStart?: () => void): 
     const gain = ctx.createGain();
     gain.gain.value = _jacVolume; // 0.5 – 6.0, default 2.0
 
+    // Inline analyser tap — lets the JAC character read real speech amplitude
+    // (jac-audio-analyser.ts). AnalyserNode is a pass-through: no audio change.
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.4;
+    const unregisterAnalyser = registerJacAnalyser(analyser, ctx);
+
     source.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(analyser);
+    analyser.connect(ctx.destination);
     _audioCtxSource = source;
     return new Promise<boolean>((resolve) => {
       source.onended = () => {
         if (_audioCtxSource === source) _audioCtxSource = null;
+        unregisterAnalyser();
         resolve(true);
       };
       source.start(0);
