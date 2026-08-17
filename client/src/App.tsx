@@ -30,8 +30,6 @@ import {
   isBiometricSessionUnlocked,
 } from "@/lib/biometric";
 
-import { GuberDoorSplash } from "@/components/guber-door-splash";
-
 // Core pages — eagerly loaded (fast path for first-visit users)
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
@@ -637,9 +635,6 @@ export function NativeDeepLinkHandler() {
 // signature GUBER ping (once per tab session). This is gated by
 // sessionStorage so it never replays on hot reloads, route changes, or
 // in-app loading splashes — only the true app-launch moment. iOS
-// requires a prior user gesture for audio playback, so the call may be
-// silently no-op'd on the first ever launch; that's intentional.
-const COLD_START_PING_KEY = "guber_cold_start_pinged";
 function SplashWrapper({ onDone }: { onDone: () => void }) {
   const { isLoading } = useAuth();
   useEffect(() => {
@@ -703,43 +698,6 @@ function JacNavPoll() {
   return null;
 }
 
-// ── Universal entry door ─────────────────────────────────────────────────────
-// Shows on every cold page load (no localStorage suppression).
-// Native / ?nosplash skip it. Internal SPA navigation never re-triggers it
-// because the component state lives only in memory for the session lifetime.
-function DoorGate() {
-  const [done, setDone] = useState(() => {
-    if (isNativeApp) return true;
-    if (typeof window !== "undefined") {
-      const p = new URLSearchParams(window.location.search);
-      if (p.has("nosplash")) return true;
-    }
-    return false;
-  });
-  if (done) return null;
-  return (
-    <GuberDoorSplash
-      onEnterVoice={() => setDone(true)}
-      onEnterText={() => setDone(true)}
-    />
-  );
-}
-
-// Fires the GUBER cold-start ping sound once per tab session (web only).
-// The visual badger loader has been removed; this keeps the audio cue alive.
-function ColdStartPing() {
-  useEffect(() => {
-    try {
-      if (sessionStorage.getItem(COLD_START_PING_KEY) === "1") return;
-      sessionStorage.setItem(COLD_START_PING_KEY, "1");
-    } catch { return; }
-    import("@/lib/notification-sound")
-      .then(({ playGuberPing }) => playGuberPing())
-      .catch(() => {});
-  }, []);
-  return null;
-}
-
 function App() {
   return (
     <ThemeProvider>
@@ -754,10 +712,7 @@ function App() {
             <Toaster />
             <UploadProgressPill />
             <GoogleAuthOverlay />
-            {/* Native app keeps the badger loader; web goes straight to the door */}
-            {isNativeApp && <SplashWrapper onDone={() => {}} />}
-            {!isNativeApp && <ColdStartPing />}
-            <DoorGate />
+            <SplashWrapper onDone={() => {}} />
             <GpsTrackingBanner />
             <InstallPrompt />
             <AnnouncementPopup />
