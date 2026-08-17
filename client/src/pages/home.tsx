@@ -14,6 +14,7 @@ import { SiGoogleplay, SiApple } from "react-icons/si";
 import { OpportunityMap } from "@/components/opportunity-map";
 import { SignUpWall } from "@/components/signup-wall";
 import { JacHomepage } from "@/components/jac-homepage";
+import { JacLiveExperience } from "@/components/jac/jac-live-experience";
 
 import logoImg          from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
 import day1OGImg        from "@assets/Gubergoldday1_1772434950756.png";
@@ -876,9 +877,10 @@ export default function Home() {
         </p>
       </section>
 
-      {/* ── JAC Homepage Assistant — door is now handled at App level (DoorGate).
-           JacHomepage mounts directly once the Router renders home.tsx. ── */}
-      <JacHomepage />
+      {/* ── JAC Live Experience — two-surface character interface ── */}
+      <section className="relative z-10 w-full px-4 sm:px-6 pb-8 max-w-5xl mx-auto">
+        <JacLiveExperience />
+      </section>
 
       {/* ── Hero Slideshow — moved below JAC so conversation loads first ── */}
       <HeroSlideshow onSlideChange={setCurrentSlide} />
