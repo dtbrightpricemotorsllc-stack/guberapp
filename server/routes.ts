@@ -59,6 +59,7 @@ import { signMobileCheckoutToken, verifyMobileCheckoutToken, isValidProduct } fr
 import { verifyJacVoiceToken, signJacVoiceToken } from "./jac-voice-token";
 import { sanitizeAssistMessages, resolveVoiceToken, newCompletionId, writeOpenAiStream, buildNonStreamCompletion, checkConvaiRateLimit } from "./jac-convai";
 import { getJacSession, setJacSession, clearJacSession, summarizeSession } from "./jac-session";
+import { normalizeOnboardActions } from "./jac-onboard-actions";
 import { recordVoiceEvent } from "./jac-voice-telemetry";
 import { evaluatePayoutMultiFactor } from "./payout-guard";
 import * as assetCustody from "./asset-custody";
@@ -17528,7 +17529,9 @@ Never expose API keys, private user data, other investor conversations, or confi
         _jacOnboardRL.set(ip, { count: 1, reset: now + 60_000 });
       }
 
-      const { messages, mode, guest_session_id: onboardGuestSessionId } = req.body as { messages?: any[]; mode?: string; guest_session_id?: string };
+      const { messages, mode, guest_session_id: onboardGuestSessionId, surface: onboardSurface } = req.body as { messages?: any[]; mode?: string; guest_session_id?: string; surface?: string };
+      // The in-scene signup card exists only in the GUBER door scene.
+      const isDoorSurface = onboardSurface === "door";
       const jacMode: "homepage" | "investor" | "app" | "admin" =
         mode === "investor" ? "investor" : mode === "admin" ? "admin" : mode === "app" ? "app" : "homepage";
 
@@ -17713,7 +17716,9 @@ If they say "same as last time" or similar, use memory to fill in what you know.
       // dollar amount/category/zip together, so this heuristic leaves normal
       // KB shortcuts intact while letting action-heavy messages reach the LLM.
       const _lastUserMsg = sanitized.filter(m => m.role === "user").pop()?.content ?? "";
-      const _looksLikeActionDetail = !!onboardUserId && _lastUserMsg.length > 40 &&
+      // (Applies to guests too: a long, detail-heavy guest message must reach
+      // the LLM so it can gauge signal and surface the inline signup card.)
+      const _looksLikeActionDetail = _lastUserMsg.length > 40 &&
         /\$\d|\bbudget\b|\bcategory\b|\bprice\s+is\b|\bzip\s*code\b|\bzip\b\s*\d{5}|\bcondition\s+is\b|\btransport(ing)?\b|\bpickup\b|\bdeliver(y|ing)?\b|\binspect(ion)?\b/i.test(_lastUserMsg);
       if (_lastUserMsg && !_looksLikeActionDetail) {
         try {
@@ -17928,6 +17933,9 @@ First:
 Then, when continuing requires a GUBER account, naturally explain the benefit and invite them to become a Day1 OG.
 
 The signup should feel like: "You have a path. Now let's execute it." — not "Sign up before I'll help you."
+${(onboardUserId || !isDoorSurface) ? "" : `
+INLINE SIGNUP CARD (guests only):
+When you have gathered enough real signal about this visitor (their goal plus at least one of: transportation, skills, assets, availability) AND the natural next step requires a GUBER account, include {"action":"show_signup"} as one entry in the actions array (alongside any normal {label,message} actions). This surfaces a signup card directly inside the conversation — when you use it, do NOT also set route to /signup in the same reply. Use it at most once per conversation, only when confidence is high and the moment is earned.`}
 
 ═══════════════════════════════════
 COMMUNICATION STYLE
@@ -18554,7 +18562,7 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
             reply: j.reply.trim(),
             confidence: ["high", "medium", "low"].includes(j.confidence) ? j.confidence : "medium",
             route: typeof j.route === "string" && j.route.trim() ? j.route.trim() : null,
-            actions: Array.isArray(j.actions) ? j.actions.filter((a: any) => a?.label && a?.message).slice(0, 4) : [],
+            actions: j.actions, // normalized below (show_signup slot reservation + caps)
             options: Array.isArray(j.options) ? j.options.filter((a: any) => a?.label && a?.message).slice(0, 11) : [],
             tracking: j.tracking && typeof j.tracking === "object" ? j.tracking : {},
             feedbackDraft: (j.feedbackDraft?.ready === true && typeof j.feedbackDraft?.category === "string")
@@ -18564,6 +18572,29 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
           };
           if (j.proposedAction && typeof j.proposedAction === "object" && isValidActionType(j.proposedAction.type)) {
             proposedAction = { type: j.proposedAction.type, fields: j.proposedAction.fields ?? {} };
+          }
+
+          // In-scene signup card (door surface only): normalize actions with a
+          // reserved show_signup slot, deterministic trigger, and a
+          // once-per-guest-session guard. See server/jac-onboard-actions.ts.
+          const _guestSignupMoment = !onboardUserId && (
+            !!guestDraftRaw ||
+            (parsed.confidence === "high" && typeof parsed.route === "string" && parsed.route.startsWith("/signup"))
+          );
+          const _validGuestSid = !onboardUserId && typeof onboardGuestSessionId === "string" && onboardGuestSessionId.length === 36;
+          let _signupAlreadyOffered = false;
+          if (_validGuestSid && isDoorSurface) {
+            try { _signupAlreadyOffered = (ensureGuestSession(onboardGuestSessionId!) as any).signupOffered === true; } catch {}
+          }
+          const { actions: _normActions, offeredSignup } = normalizeOnboardActions(parsed.actions, {
+            isGuest: !onboardUserId,
+            isDoorSurface,
+            alreadyOffered: _signupAlreadyOffered,
+            signupMoment: _guestSignupMoment,
+          });
+          parsed.actions = _normActions;
+          if (offeredSignup && _validGuestSid) {
+            try { (ensureGuestSession(onboardGuestSessionId!) as any).signupOffered = true; } catch {}
           }
 
           // Auto-save guest draft to in-memory guest session when one is present
