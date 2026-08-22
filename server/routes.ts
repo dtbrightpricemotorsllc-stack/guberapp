@@ -13583,7 +13583,7 @@ export async function registerRoutes(
   // preconfigured Stripe Price IDs are required.
   app.get("/api/studio/tiers", studioTiersHandler);
 
-  app.post("/api/stripe/studio-subscription-checkout", requireAuth, demoGuard, async (req: Request, res: Response) => {
+  app.post("/api/stripe/studio-subscription-checkout", requireAuth, demoGuard, requireFullCommerce, async (req: Request, res: Response) => {
     try {
       const tierId = String(req.body?.tier || "") as StudioTierPlanId;
       const plan = STUDIO_TIER_PLANS[tierId];

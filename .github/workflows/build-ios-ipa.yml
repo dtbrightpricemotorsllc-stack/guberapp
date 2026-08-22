@@ -35,11 +35,11 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync ios
 
-      - name: Check iOS permission declarations and WKUIDelegate handler
-        run: bash scripts/check-ios-permissions.sh
-
       - name: Repair packageClassList after cap sync
         run: node scripts/post-cap-sync-ios.mjs
+
+      - name: Check iOS permission declarations and WKUIDelegate handler
+        run: bash scripts/check-ios-permissions.sh
 
       - name: Restore BiometricAuthNative Swift source
         run: |
@@ -57,7 +57,10 @@ jobs:
       - name: Compute build number
         id: buildnum
         run: |
-          BUILD_NUMBER=$(( ${{ github.run_number }} + 100 ))
+          # Project build 124 has already been used. A fixed offset keeps every
+          # CI upload safely above it while github.run_number provides monotonic
+          # builds from this workflow onward.
+          BUILD_NUMBER=$(( ${{ github.run_number }} + 10000 ))
           echo "Using CURRENT_PROJECT_VERSION=$BUILD_NUMBER"
           echo "number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
 
@@ -71,11 +74,8 @@ jobs:
           elif [ -d /Applications/Xcode_26.app ]; then
             sudo xcode-select -s /Applications/Xcode_26.app/Contents/Developer
           else
-            # Fallback: pick the highest available non-16.x Xcode
-            XCODE=$(ls -d /Applications/Xcode_*.app 2>/dev/null | grep -v 'Xcode_16' | sort -V | tail -1)
-            if [ -n "$XCODE" ]; then
-              sudo xcode-select -s "$XCODE/Contents/Developer"
-            fi
+            echo "Xcode 26 is required for App Store uploads. No supported installation was found."
+            exit 1
           fi
           xcodebuild -version
 
@@ -140,7 +140,9 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM=${{ env.TEAM_ID }} \
             PROVISIONING_PROFILE_SPECIFIER="" \
-            COMPILER_INDEX_STORE_ENABLE=NO
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ENABLE_ON_DEMAND_RESOURCES=NO \
+            APP_THINNING=None
 
       - name: Export IPA and upload to App Store Connect
         env:

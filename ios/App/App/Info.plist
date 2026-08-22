@@ -49,8 +49,6 @@
         <true/>
         <key>NSLocationWhenInUseUsageDescription</key>
         <string>GUBER uses your location to match you with nearby opportunities, support navigation, verify pickup and drop-off activity, and track active jobs or transportation sessions.</string>
-        <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-        <string>GUBER uses your location to match you with nearby opportunities, support navigation, verify pickup and drop-off activity, and track active jobs or transportation sessions. With your permission, location may continue in the background only during active work, delivery, transport, or verification sessions.</string>
         <key>NSCameraUsageDescription</key>
         <string>GUBER uses the camera to capture proof photos and videos for job completion, ID verification, and See For Me tasks.</string>
         <key>NSPhotoLibraryUsageDescription</key>
@@ -77,7 +75,6 @@
         <key>UIBackgroundModes</key>
         <array>
                 <string>remote-notification</string>
-                <string>location</string>
         </array>
 </dict>
 </plist>

@@ -58,6 +58,7 @@ if [[ "${1:-}" == "--self-test" ]]; then
   GOOD_SWIFT="$TMPDIR_FIXTURES/ViewController_good.swift"
   BAD_PLIST_COMMENT="$TMPDIR_FIXTURES/Info_comment.plist"
   BAD_PLIST_ABSENT="$TMPDIR_FIXTURES/Info_absent.plist"
+  BAD_PLIST_BACKGROUND_LOCATION="$TMPDIR_FIXTURES/Info_background_location.plist"
   BAD_SWIFT_LINE_COMMENT="$TMPDIR_FIXTURES/ViewController_line_comment.swift"
   BAD_SWIFT_BLOCK_COMMENT="$TMPDIR_FIXTURES/ViewController_block_comment.swift"
   BAD_SWIFT_NON_HANDLER="$TMPDIR_FIXTURES/ViewController_non_handler.swift"
@@ -120,6 +121,24 @@ XML
 </plist>
 XML
 
+  # ── Bad fixture: background location is not permitted for this app ────────
+  cat > "$BAD_PLIST_BACKGROUND_LOCATION" <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>We use the microphone for audio recording.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>We use location to match you with nearby jobs.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>We keep tracking location in the background.</string>
+    <key>UIBackgroundModes</key>
+    <array><string>location</string></array>
+</dict>
+</plist>
+XML
+
   # ── Bad fixture: handler only in a // line comment ────────────────────────
   cat > "$BAD_SWIFT_LINE_COMMENT" <<'SWIFT'
 import UIKit
@@ -165,6 +184,7 @@ SWIFT
   assert_guard_exit "good fixtures pass (exit 0)"                                               0 "$GOOD_PLIST"        "$GOOD_SWIFT"
   assert_guard_exit "NSMicrophoneUsageDescription in XML comment fails (exit 1)"                1 "$BAD_PLIST_COMMENT" "$GOOD_SWIFT"
   assert_guard_exit "NSLocationWhenInUseUsageDescription absent fails (exit 1)"                 1 "$BAD_PLIST_ABSENT"  "$GOOD_SWIFT"
+  assert_guard_exit "background location declaration fails (exit 1)"                            1 "$BAD_PLIST_BACKGROUND_LOCATION" "$GOOD_SWIFT"
   assert_guard_exit "requestMediaCapturePermissionFor only in // comment fails (exit 1)"        1 "$GOOD_PLIST"        "$BAD_SWIFT_LINE_COMMENT"
   assert_guard_exit "requestMediaCapturePermissionFor only in /* */ comment fails (exit 1)"     1 "$GOOD_PLIST"        "$BAD_SWIFT_BLOCK_COMMENT"
   assert_guard_exit "requestMediaCapturePermissionFor as non-handler identifier fails (exit 1)" 1 "$GOOD_PLIST"        "$BAD_SWIFT_NON_HANDLER"
@@ -211,6 +231,35 @@ echo ""
 echo "Checking Info.plist ($INFO_PLIST) ..."
 check_plist_key "NSMicrophoneUsageDescription"
 check_plist_key "NSLocationWhenInUseUsageDescription"
+
+check_review_safe_location_permissions() {
+  local result
+  result=$(python3 - "$INFO_PLIST" <<'PYEOF'
+import plistlib, sys
+
+with open(sys.argv[1], "rb") as f:
+    data = plistlib.load(f)
+
+issues = []
+if "NSLocationAlwaysAndWhenInUseUsageDescription" in data:
+    issues.append("NSLocationAlwaysAndWhenInUseUsageDescription")
+if "NSLocationAlwaysUsageDescription" in data:
+    issues.append("NSLocationAlwaysUsageDescription")
+if "location" in data.get("UIBackgroundModes", []):
+    issues.append("UIBackgroundModes.location")
+
+print(",".join(issues) if issues else "ok")
+PYEOF
+)
+  if [ "$result" = "ok" ]; then
+    echo "  [OK]  foreground-only location declarations are review-safe"
+  else
+    echo "  [FAIL] Apple-rejected background location declarations found: ${result}"
+    FAIL=1
+  fi
+}
+
+check_review_safe_location_permissions
 
 # ── 2. Swift sources — comment-stripped method-declaration check ──────────────
 # Uses Python to strip ALL Swift comment forms (// line comments and /* */
