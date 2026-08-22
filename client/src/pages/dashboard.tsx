@@ -998,6 +998,15 @@ export default function Dashboard() {
                   POST A JOB <ChevronRight className="w-4 h-4" />
                 </button>
               </Link>
+              <Link href="/services" className="block mt-2">
+                <button
+                  className="w-full h-10 rounded-2xl font-display font-bold text-xs tracking-[0.08em] text-blue-100 flex items-center justify-center gap-2 border border-blue-400/30 transition-all active:scale-[0.98]"
+                  style={{ background: "rgba(59,130,246,0.10)" }}
+                  data-testid="button-browse-services"
+                >
+                  BROWSE SERVICES <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </Link>
               <p className="text-[10px] text-white/30 mt-2 text-center">Fast local help in minutes</p>
             </div>
           ) : (
@@ -1023,6 +1032,15 @@ export default function Dashboard() {
                   data-testid="button-find-work-near-me"
                 >
                   FIND WORK NEAR ME <ChevronRight className="w-4 h-4" />
+                </button>
+              </Link>
+              <Link href="/offer-service" className="block mt-2">
+                <button
+                  className="w-full h-10 rounded-2xl font-display font-bold text-xs tracking-[0.08em] text-green-100 flex items-center justify-center gap-2 border border-green-400/30 transition-all active:scale-[0.98]"
+                  style={{ background: "rgba(34,197,94,0.10)" }}
+                  data-testid="button-offer-service"
+                >
+                  OFFER A SERVICE <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </Link>
               <p className="text-[10px] text-white/30 mt-2 text-center">On-Demand • General Labor • Skilled Labor • See For Me</p>

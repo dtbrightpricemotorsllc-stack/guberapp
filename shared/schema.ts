@@ -542,6 +542,50 @@ export const jobs = pgTable("jobs", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// ── Services Offered — supply-side service catalog ───────────────────────────
+// A service offer is a provider's reusable, public capability. It is deliberately
+// separate from `jobs`: offers describe what someone can do, while jobs remain
+// the paid, scheduled work agreement that powers payouts and proof.
+export const serviceOffers = pgTable("service_offers", {
+  id: serial("id").primaryKey(),
+  providerUserId: integer("provider_user_id").notNull().references(() => users.id),
+  title: text("title").notNull(),
+  description: text("description"),
+  category: text("category").notNull(),
+  serviceType: text("service_type"),
+  serviceClass: text("service_class").notNull().default("general"), // general | skilled_pro
+  capabilities: text("capabilities").array(),
+  equipment: text("equipment").array(),
+  pricingType: text("pricing_type").notNull().default("quote"), // quote | starting_at | hourly
+  startingPrice: real("starting_price"),
+  hourlyRate: real("hourly_rate"),
+  serviceRadius: integer("service_radius").default(25),
+  zip: text("zip"),
+  lat: real("lat"),
+  lng: real("lng"),
+  availableNow: boolean("available_now").default(false),
+  status: text("status").notNull().default("draft"), // draft | published | paused | archived | removed
+  moderationStatus: text("moderation_status").notNull().default("approved"), // approved | pending | rejected
+  publishedAt: timestamp("published_at"),
+  pausedAt: timestamp("paused_at"),
+  archivedAt: timestamp("archived_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export const insertServiceOfferSchema = createInsertSchema(serviceOffers).omit({
+  id: true,
+  providerUserId: true,
+  status: true,
+  moderationStatus: true,
+  publishedAt: true,
+  pausedAt: true,
+  archivedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type ServiceOffer = typeof serviceOffers.$inferSelect;
+export type InsertServiceOffer = z.infer<typeof insertServiceOfferSchema>;
+
 export const assignments = pgTable("assignments", {
   id: serial("id").primaryKey(),
   jobId: integer("job_id").notNull(),
@@ -3015,7 +3059,7 @@ export type InsertJacFeedbackReport = typeof jacFeedbackReports.$inferInsert;
 export const jacPendingActions = pgTable("jac_pending_actions", {
   id:         serial("id").primaryKey(),
   userId:     integer("user_id").notNull().references(() => users.id),
-  actionType: text("action_type").notNull(), // post_job | marketplace_listing | transport_request | vi_request
+  actionType: text("action_type").notNull(), // post_job | marketplace_listing | transport_request | vi_request | service_offer
   payload:    jsonb("payload").$type<Record<string, unknown>>().notNull(),
   summary:    text("summary").notNull(),
   status:     text("status").notNull().default("pending"), // pending | confirmed | executed | failed | cancelled | expired

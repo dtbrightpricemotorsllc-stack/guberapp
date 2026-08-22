@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { setupCampaignLabRoutes } from "./campaign-lab";
 import { setupBusinessStudioRoutes } from "./business-studio";
+import { registerServiceOfferRoutes } from "./service-offers";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { getStudioToolsCache, setStudioToolsCache } from "./studio-tools-cache";
@@ -886,6 +887,8 @@ export async function registerRoutes(
     }
     next();
   }
+
+  registerServiceOfferRoutes(app, { requireAuth, requireAdmin, checkSuspended });
 
   app.get("/api/config", (_req: Request, res: Response) => {
     res.json({ googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "" });

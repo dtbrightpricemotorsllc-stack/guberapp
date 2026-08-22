@@ -53,6 +53,8 @@ import { LoadingSplash } from "@/components/loading-splash";
 // Authenticated consumer pages — lazy loaded
 const Dashboard = lazy(() => import("@/pages/dashboard"));
 const BrowseJobs = lazy(() => import("@/pages/browse-jobs"));
+const BrowseServices = lazy(() => import("@/pages/services"));
+const OfferService = lazy(() => import("@/pages/offer-service"));
 const JobDetail = lazy(() => import("@/pages/job-detail"));
 const JobNavigate = lazy(() => import("@/pages/job-navigate"));
 const PostJob = lazy(() => import("@/pages/post-job"));
@@ -415,6 +417,8 @@ function Router() {
       <Route path="/admin/growth-engine" component={() => <AdminRoute component={AdminGrowthEngine} />} />
       <Route path="/admin/local-businesses" component={() => <AdminRoute component={AdminLocalBusinesses} />} />
       <Route path="/og-advantage" component={() => <Suspense fallback={<PageLoader />}><OgAdvantage /></Suspense>} />
+       <Route path="/services" component={() => <ProtectedRoute component={BrowseServices} />} />
+       <Route path="/offer-service" component={() => <ProtectedRoute component={OfferService} />} />
       <Route path="/community-tasks" component={() => { window.location.replace("/browse-jobs"); return null; }} />
       <Route path="/growth/leaderboard" component={GrowthLeaderboard} />
       <Route path="/ai-or-not" component={() => <ProtectedRoute component={AiOrNot} />} />

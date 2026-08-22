@@ -18,7 +18,8 @@ export type JacActionType =
   | "post_job"
   | "marketplace_listing"
   | "transport_request"
-  | "vi_request";
+  | "vi_request"
+  | "service_offer";
 
 interface ActionDef {
   path: string;
@@ -130,6 +131,28 @@ const ACTION_DEFS: Record<JacActionType, ActionDef> = {
       (f.zip ? ` in ${f.zip}` : "") +
       (f.budget ? ` — budget ${money(f.budget)}` : " — budget defaults to $50 if unset") +
       ". This provides visual documentation only, not a guarantee of condition or ownership.",
+  },
+  service_offer: {
+    path: "/api/service-offers",
+    requiredFields: ["title", "category"],
+    buildBody: (f) => ({
+      title: f.title,
+      category: f.category,
+      serviceType: f.serviceType ?? null,
+      description: f.description ?? null,
+      capabilities: f.capabilities ?? [],
+      equipment: f.equipment ?? [],
+      pricingType: f.pricingType ?? "quote",
+      startingPrice: f.startingPrice ?? null,
+      hourlyRate: f.hourlyRate ?? null,
+      availableNow: !!f.availableNow,
+    }),
+    buildSummary: (f) =>
+      `Save a private service-offer draft for "${f.title}" in ${f.category}` +
+      (f.serviceType ? ` — ${f.serviceType}` : "") +
+      (f.pricingType === "hourly" && f.hourlyRate ? ` at ${money(f.hourlyRate)} per hour` : "") +
+      (f.pricingType === "starting_at" && f.startingPrice ? ` starting at ${money(f.startingPrice)}` : "") +
+      ". You can review and publish it after identity and any required credential verification.",
   },
 };
 

@@ -1871,6 +1871,59 @@ app.use((req, res, next) => {
       ADD COLUMN IF NOT EXISTS new_balance      INTEGER;
   `).catch(e => console.error("[migration] credit_ledger audit columns error:", e));
 
+  // ── Services Offered: provider supply-side catalog ────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS service_offers (
+      id                 SERIAL PRIMARY KEY,
+      provider_user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title              TEXT NOT NULL,
+      description        TEXT,
+      category           TEXT NOT NULL,
+      service_type       TEXT,
+      service_class      TEXT NOT NULL DEFAULT 'general',
+      capabilities       TEXT[],
+      equipment          TEXT[],
+      pricing_type       TEXT NOT NULL DEFAULT 'quote',
+      starting_price     REAL,
+      hourly_rate        REAL,
+      service_radius     INTEGER DEFAULT 25,
+      zip                TEXT,
+      lat                REAL,
+      lng                REAL,
+      available_now      BOOLEAN DEFAULT FALSE,
+      status             TEXT NOT NULL DEFAULT 'draft',
+      moderation_status  TEXT NOT NULL DEFAULT 'approved',
+      published_at       TIMESTAMP,
+      paused_at          TIMESTAMP,
+      archived_at        TIMESTAMP,
+      created_at         TIMESTAMP DEFAULT NOW(),
+      updated_at         TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_service_offers_provider ON service_offers(provider_user_id, status);
+    CREATE INDEX IF NOT EXISTS idx_service_offers_discovery ON service_offers(status, moderation_status, category, published_at DESC);
+  `).catch(e => console.error("[migration] service_offers tables error:", e));
+
+  // Let JAC recognize provider-supply intent, while still staging only a
+  // private draft through jac-actions until the user explicitly confirms.
+  await pool.query(`
+    INSERT INTO jac_intents
+      (intent_name, display_name, sample_phrases, required_fields, target_flow, target_route, backend_action, fallback_response)
+    VALUES
+      ('service_offer', 'Offer a Service',
+       '["offer a service","list my services","I provide services","advertise my skills","find customers for my service"]'::jsonb,
+       '["title","category"]'::jsonb, 'service_offer', '/offer-service', 'service_offer',
+       'I can help you save a private service-offer draft. What service do you provide and which category fits it best?')
+    ON CONFLICT (intent_name) DO UPDATE SET
+      display_name = EXCLUDED.display_name,
+      sample_phrases = EXCLUDED.sample_phrases,
+      required_fields = EXCLUDED.required_fields,
+      target_flow = EXCLUDED.target_flow,
+      target_route = EXCLUDED.target_route,
+      backend_action = EXCLUDED.backend_action,
+      fallback_response = EXCLUDED.fallback_response,
+      updated_at = NOW();
+  `).catch(e => console.error("[migration] service_offer JAC intent error:", e));
+
   await registerRoutes(httpServer, app);
   await startOSRuntime(app);
   startStudioToolsListener();
