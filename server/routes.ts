@@ -61,6 +61,7 @@ import { sanitizeAssistMessages, resolveVoiceToken, newCompletionId, writeOpenAi
 import { getJacSession, setJacSession, clearJacSession, summarizeSession } from "./jac-session";
 import { normalizeOnboardActions } from "./jac-onboard-actions";
 import { recordVoiceEvent } from "./jac-voice-telemetry";
+import { DAY1_OG_PROMOTION_ENDS_AT, DAY1_OG_PROMOTION_END_LABEL, canCreateDay1OgCheckout, day1OgPromotionEndsAt, isDay1OgPromotionActive } from "@shared/day1og-promotion";
 import { evaluatePayoutMultiFactor } from "./payout-guard";
 import * as assetCustody from "./asset-custody";
 import {
@@ -6912,13 +6913,14 @@ export async function registerRoutes(
     return res.json(result);
   });
 
-  // Public ZIP founder status — used by day1og.html
+  // Public local activation status — used by day1og.html. Day-1 OG purchase
+  // availability is time-bound, never quota-bound by ZIP.
   app.get("/api/zip-founder-status", async (req: Request, res: Response) => {
     try {
       const zip = ((req.query.zip as string) || "").trim().replace(/\D/g, "").slice(0, 5);
       if (!zip || zip.length !== 5) return res.status(400).json({ message: "Valid 5-digit ZIP required" });
 
-      const OG_SPOTS_PER_ZIP = 100;
+      const OG_ACTIVATION_THRESHOLD = 100;
       const USER_ACTIVATION_THRESHOLD = 250;
 
       const [ogResult, totalResult] = await Promise.all([
@@ -6928,32 +6930,28 @@ export async function registerRoutes(
 
       const ogCount = Number((ogResult.rows[0] as any)?.count ?? 0);
       const totalCount = Number((totalResult.rows[0] as any)?.count ?? 0);
-      const spotsRemaining = Math.max(0, OG_SPOTS_PER_ZIP - ogCount);
-      const founderClassClosed = ogCount >= OG_SPOTS_PER_ZIP;
-      const activated = founderClassClosed || totalCount >= USER_ACTIVATION_THRESHOLD;
+      const activated = ogCount >= OG_ACTIVATION_THRESHOLD || totalCount >= USER_ACTIVATION_THRESHOLD;
 
-      const ogProgress = Math.min(100, Math.round((ogCount / OG_SPOTS_PER_ZIP) * 100));
+      const ogProgress = Math.min(100, Math.round((ogCount / OG_ACTIVATION_THRESHOLD) * 100));
       const userProgress = Math.min(100, Math.round((totalCount / USER_ACTIVATION_THRESHOLD) * 100));
       const overallProgress = Math.max(ogProgress, userProgress);
 
-      let status: "Building" | "Activated" | "Founder Class Closed";
-      if (founderClassClosed) status = "Founder Class Closed";
-      else if (activated) status = "Activated";
-      else status = "Building";
+      const status: "Building" | "Activated" = activated ? "Activated" : "Building";
 
       return res.json({
         zip,
         ogCount,
         totalCount,
-        spotsRemaining,
-        founderClassClosed,
         activated,
         ogProgress,
         userProgress,
         overallProgress,
         status,
-        ogSpotsTotal: OG_SPOTS_PER_ZIP,
+        ogActivationThreshold: OG_ACTIVATION_THRESHOLD,
         userActivationThreshold: USER_ACTIVATION_THRESHOLD,
+        campaignActive: isDay1OgPromotionActive(),
+        campaignEndsAt: DAY1_OG_PROMOTION_ENDS_AT,
+        campaignEndLabel: DAY1_OG_PROMOTION_END_LABEL,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -13414,6 +13412,17 @@ export async function registerRoutes(
   // STRIPE - DAY-1 OG
   app.post("/api/stripe/og-checkout", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
+      const campaignEndsAt = day1OgPromotionEndsAt();
+      // Stripe requires a Checkout Session to remain open for at least 30
+      // minutes. Refuse the final window instead of issuing a session that
+      // could accept a payment after the advertised campaign deadline.
+      if (!isDay1OgPromotionActive() || !canCreateDay1OgCheckout()) {
+        return res.status(410).json({
+          message: `The Day-1 OG founding offer ended on ${DAY1_OG_PROMOTION_END_LABEL}.`,
+          campaignEndsAt: DAY1_OG_PROMOTION_ENDS_AT,
+        });
+      }
+
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "User not found" });
       if (user.day1OG) return res.status(400).json({ message: "Already a Day-1 OG" });
@@ -13434,6 +13443,7 @@ export async function registerRoutes(
           quantity: 1,
         }],
         mode: "payment",
+        expires_at: Math.floor(Math.min(campaignEndsAt.getTime(), Date.now() + 23 * 60 * 60 * 1000) / 1000),
         success_url: `${baseUrl}/og-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/profile`,
         metadata: { userId: String(user.id), userEmail: user.email, type: "day1og" },

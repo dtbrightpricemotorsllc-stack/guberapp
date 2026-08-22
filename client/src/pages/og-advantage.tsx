@@ -4,6 +4,7 @@ import { Crown, CheckCircle, Zap, Lock, Star, ArrowRight, ChevronLeft, Shield, G
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useCommerceMode } from "@/lib/commerce-mode";
+import { DAY1_OG_PROMOTION_END_LABEL, isDay1OgPromotionActive } from "@shared/day1og-promotion";
 import logoImg from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
 import day1OGImg from "@assets/Gubergoldday1_1772434950756.png";
 
@@ -49,7 +50,7 @@ const PERKS = [
 const HOW_TO_QUALIFY = [
   "Create a free GUBER account",
   "Complete ID verification",
-  "Join before Day-1 OG slots close",
+  `Activate by ${DAY1_OG_PROMOTION_END_LABEL}`,
   "Remain an active community member",
 ];
 
@@ -192,6 +193,7 @@ export default function OgAdvantage() {
 
   const isLoggedIn = !!me;
   const isOG = !!(me as any)?.day1OG;
+  const campaignActive = isDay1OgPromotionActive();
 
   return (
     <div className="min-h-screen bg-background text-foreground" data-testid="page-og-advantage">
@@ -230,7 +232,7 @@ export default function OgAdvantage() {
           </div>
           <div className="inline-flex items-center gap-2 mb-5 px-3 py-1 rounded-full text-[10px] font-display tracking-widest"
             style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.35)", color: "#fbbf24" }}>
-            <Crown className="w-3 h-3" /> LIMITED AVAILABILITY
+            <Crown className="w-3 h-3" /> LIMITED-TIME FOUNDING OFFER · ENDS SEPT 30
           </div>
           <h1 className="text-3xl sm:text-4xl font-display font-black tracking-wider mb-4"
             style={{ background: "linear-gradient(135deg,#fbbf24,#f59e0b,#d97706)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
@@ -240,18 +242,18 @@ export default function OgAdvantage() {
             You found GUBER early. That means something. Day-1 OG status is a permanent designation
             for the founding members who helped build this community from the ground up.
           </p>
-          {isLoggedIn ? (
+          {isLoggedIn && isOG ? (
             <Link href="/credits" className="inline-flex items-center gap-2 h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black"
               style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 28px rgba(245,158,11,0.4), 0 4px 16px rgba(0,0,0,0.3)" }}
               data-testid="link-og-get-started">
               VIEW YOUR CREDITS <ArrowRight className="w-4 h-4" />
             </Link>
-          ) : canPurchase ? (
+          ) : campaignActive && canPurchase ? (
             <div className="flex flex-col items-center gap-3">
               <div className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-display tracking-wider"
                 style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", color: "#fbbf24" }}>
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                One-time founding fee: <span className="font-black ml-1">$2.00</span> — that&apos;s it, forever
+                One-time founding fee: <span className="font-black ml-1">$2.00</span> · Ends {DAY1_OG_PROMOTION_END_LABEL}
               </div>
               <Link href="/profile" className="inline-flex items-center gap-2 h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black"
                 style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 28px rgba(245,158,11,0.4), 0 4px 16px rgba(0,0,0,0.3)" }}
@@ -260,6 +262,8 @@ export default function OgAdvantage() {
               </Link>
               <p className="text-[10px] text-muted-foreground">Secure payment via Stripe · No subscription · No hidden fees</p>
             </div>
+          ) : !campaignActive ? (
+            <p className="text-sm text-muted-foreground">This limited-time founding offer ended on {DAY1_OG_PROMOTION_END_LABEL}.</p>
           ) : (
             <div className="flex flex-col items-center gap-3">
               <Link href="/signup" className="inline-flex items-center gap-2 h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black"
@@ -320,11 +324,11 @@ export default function OgAdvantage() {
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-display tracking-wider mb-4"
             style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", color: "#fbbf24" }}>
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-            OG SLOTS ARE LIMITED PER CITY
+            OFFER AVAILABLE THROUGH SEPTEMBER 30
           </div>
           <p className="text-muted-foreground text-xs max-w-md mx-auto leading-relaxed">
-            Day-1 OG status is granted to qualifying early members on a city-by-city basis.
-            Once the founding cohort for your city is full, this designation will no longer be available.
+            Day-1 OG is available to qualifying early members during this limited-time campaign,
+            through {DAY1_OG_PROMOTION_END_LABEL}. There is no ZIP or city founder quota during the offer.
             Benefits apply to verified members in good standing. GUBER reserves the right to revoke
             OG status for violations of community standards or terms of service.
           </p>

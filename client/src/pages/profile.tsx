@@ -37,6 +37,7 @@ import { Switch } from "@/components/ui/switch";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import type { User, Review } from "@shared/schema";
+import { DAY1_OG_PROMOTION_END_LABEL, isDay1OgPromotionActive } from "@shared/day1og-promotion";
 
 function VerifBadge({ verified, pending }: { verified: boolean; pending?: boolean }) {
   if (verified) return <span className="text-[10px] font-display text-primary flex items-center gap-0.5"><CheckCircle className="w-2.5 h-2.5" />Verified</span>;
@@ -770,7 +771,7 @@ export default function Profile() {
           )}
         </Card>
 
-        {isOwnProfile && !displayUser.day1OG && !isDemoUser && !isStoreBuild && !ogCardHidden && (() => {
+        {isOwnProfile && !displayUser.day1OG && !isDemoUser && !isStoreBuild && !ogCardHidden && isDay1OgPromotionActive() && (() => {
           const profileIncomplete = !displayUser.userBio || !displayUser.profilePhoto || !displayUser.publicUsername || !displayUser.zipcode;
           const accountAgeMs = displayUser.createdAt ? Date.now() - new Date(displayUser.createdAt).getTime() : 0;
           const isOnboardingWindow = accountAgeMs > 0 && accountAgeMs < 14 * 24 * 60 * 60 * 1000;
@@ -784,7 +785,7 @@ export default function Profile() {
               <div className="flex-1 min-w-0">
                 <h3 className="font-display font-bold text-sm text-amber-400">Day-1 OG Badge</h3>
                 <p className="text-xs text-foreground mt-1 leading-relaxed">
-                  Permanent founding-member badge with FREE urgent toggle on every job you post (normally $10 each). One-time <span className="font-semibold text-amber-300">$1.99</span> — never billed again.
+                  Permanent founding-member badge with FREE urgent toggle on every job you post (normally $10 each). One-time <span className="font-semibold text-amber-300">$1.99</span> — never billed again. Offer ends {DAY1_OG_PROMOTION_END_LABEL}.
                 </p>
               </div>
             </div>

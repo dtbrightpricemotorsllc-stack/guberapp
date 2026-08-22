@@ -50,3 +50,4 @@
 - [JAC Door Scene](jac-door-scene.md) — GuberDoorSplash is sole web entry (no mascot loader); 4 JAC states via JacAnimatedCharacter + canvas mouth overlay; _greetingHasFired guards replay; ConvAI handles continuous turns.
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 - [JAC mouth live amplitude](jac-mouth-live-amplitude.md) — real-audio mouth needs gesture-unlocked analyser ctx; cross-context local streams read silent in Chromium — test via WebRTC loopback.
+- [Day-1 OG limited-time campaign](day1og-limited-time-campaign.md) — offer availability is time-bound, not ZIP- or city-capped; earned status remains permanent.

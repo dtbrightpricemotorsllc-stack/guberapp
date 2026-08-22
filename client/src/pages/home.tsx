@@ -968,7 +968,7 @@ export default function Home() {
               <span className="text-[12px] font-display font-black tracking-wider text-amber-300">💎 DAY-1 OG ADVANTAGE</span>
               <span className="text-[9px] font-display font-bold px-2 py-0.5 rounded-full animate-pulse"
                 style={{ background: "rgba(239,68,68,0.2)", color: "#f87171", border: "1px solid rgba(239,68,68,0.4)" }}>
-                ⏳ LIMITED TIME
+                ⏳ ENDS SEPT 30 · 11:59 PM ET
               </span>
             </div>
             <p className="text-[10px] text-amber-100/80 mt-0.5">Permanent 5% fee discount + OG badge · <span className="text-amber-300 font-bold">you can't lose</span></p>
