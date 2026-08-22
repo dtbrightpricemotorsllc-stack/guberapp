@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
@@ -45,6 +46,7 @@ describe("TaskTrackingService", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(TaskTrackingService.prototype as any, "startForegroundService").mockResolvedValue(undefined);
     try { localStorage.clear(); } catch { /* node env */ }
     (gpsStartWatchPosition as any).mockImplementation(async (s: SuccessCb) => {
       success = s;

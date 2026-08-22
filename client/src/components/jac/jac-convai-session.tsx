@@ -500,6 +500,10 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           const platform = detectJacPlatform();
           platformRef.current = platform; // capture for use by onConnect/onError/onDisconnect
           const isIAB = /iab/.test(platform); // facebook_iab, instagram_iab, etc.
+          if (isIAB) {
+            cbRef.current.onError("IAB_NO_VOICE");
+            return;
+          }
 
           // Capability-test getUserMedia with a timeout so browsers that hang
           // the call indefinitely (some IAB environments) resolve within 7 s

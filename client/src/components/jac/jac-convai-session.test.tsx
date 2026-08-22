@@ -3,8 +3,8 @@
 // Unit tests: JAC voice session controller.
 //
 // Covers:
-//   1. WebSocket transport guarantee — startSession() must always receive
-//      connectionType: "websocket" (WebRTC/LiveKit caused Samsung Internet hangs).
+//   1. WebSocket transport guarantee — signed URLs are passed directly to the
+//      SDK, which selects WebSocket transport in the installed SDK version.
 //   2. IAB early-exit guard — Facebook, Instagram, TikTok, LinkedIn in-app
 //      browsers must never reach getUserMedia (it hangs indefinitely there).
 //   3. Connection timeout guard — onError fires after 12 s if the SDK never
@@ -207,24 +207,24 @@ describe("JacConvaiSession — WebSocket transport guarantee", () => {
     );
   }
 
-  it("passes connectionType: 'websocket' and signedUrl (not agentId) when the session returns a signedUrl", async () => {
+  it("passes signedUrl (not agentId) without unsupported transport options", async () => {
     await mountAndBoot();
 
     const params = startSessionSpy.mock.calls[0][0];
-    expect(params.connectionType).toBe("websocket");
     expect(params.signedUrl).toBe("wss://api.elevenlabs.io/v1/convai/real-time?token=test");
     expect(params.agentId).toBeUndefined();
-    expect(params.connectionDelay?.android).toBe(0);
+    expect(params.connectionType).toBeUndefined();
+    expect(params.connectionDelay).toBeUndefined();
   });
 
-  it("passes connectionType: 'websocket' and agentId (not signedUrl) on the public-agent fallback path", async () => {
+  it("passes agentId (not signedUrl) on the public-agent fallback path", async () => {
     await mountAndBoot({ signedUrl: undefined });
 
     const params = startSessionSpy.mock.calls[0][0];
-    expect(params.connectionType).toBe("websocket");
     expect(params.agentId).toBe("agent-abc123");
     expect(params.signedUrl).toBeUndefined();
-    expect(params.connectionDelay?.android).toBe(0);
+    expect(params.connectionType).toBeUndefined();
+    expect(params.connectionDelay).toBeUndefined();
   });
 });
 

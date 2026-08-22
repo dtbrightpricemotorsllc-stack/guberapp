@@ -520,9 +520,11 @@ describe("Studio Usage — recentFailures mapping logic", () => {
 //   test_kling_t558 → 2 succeeded (80 cr) + 1 failed (0 cr)
 
 describe("Studio Usage — /api/admin/qa/studio/usage (real DB, real routes)", () => {
-  // Unique synthetic tool keys isolate our rows from any ambient test data.
-  const TOOL_A = "test_wan_t558";
-  const TOOL_B = "test_kling_t558";
+  // A per-run suffix isolates this fixture from a previous interrupted run or
+  // another test worker sharing the development database.
+  const fixtureId = `${process.pid}_${Date.now().toString(36)}`;
+  const TOOL_A = `test_wan_${fixtureId}`;
+  const TOOL_B = `test_kling_${fixtureId}`;
   // No FK constraint on user_id in this table; any integer works.
   const FAKE_USER_ID = 99_999_999;
 

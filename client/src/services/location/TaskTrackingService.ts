@@ -420,7 +420,7 @@ export class TaskTrackingService {
       // breadcrumbs: if the job ended, was reassigned, or this is the wrong
       // user, the server replies { active:false } / 403 / 404 and the tracker
       // tears itself down instead of running an orphaned watch.
-      void this.flush(true, true);
+      await this.flush(true, true);
     } catch { /* ignore */ }
   }
 }

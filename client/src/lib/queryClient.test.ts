@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@capacitor/core", () => ({
-  Capacitor: { isNativePlatform: () => false },
+  Capacitor: {
+    isNativePlatform: () => false,
+    getPlatform: () => "web",
+  },
 }));
 
 vi.mock("@capacitor/preferences", () => ({

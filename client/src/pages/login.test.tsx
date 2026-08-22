@@ -9,6 +9,10 @@ vi.mock("@capacitor/core", () => ({
     isNativePlatform: () => false,
     getPlatform: () => "web",
   },
+  registerPlugin: vi.fn(() => ({
+    isAvailable: vi.fn(),
+    signIn: vi.fn(),
+  })),
 }));
 vi.mock("@capacitor/preferences", () => ({
   Preferences: {

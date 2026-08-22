@@ -8792,10 +8792,10 @@ export async function registerRoutes(
         listingSlug: item?.publicSlug || null,
         listingPhoto: (item?.photos as string[])?.[0] || null,
         listingCategory: item?.category || null,
-        buyerName: buyer ? `${buyer.firstName} ${buyer.lastName}`.trim() : "Buyer",
-        sellerName: seller ? `${seller.firstName} ${seller.lastName}`.trim() : "Seller",
-        buyerAvatarUrl: buyer?.avatarUrl || null,
-        sellerAvatarUrl: seller?.avatarUrl || null,
+        buyerName: buyer?.fullName || buyer?.username || "Buyer",
+        sellerName: seller?.fullName || seller?.username || "Seller",
+        buyerAvatarUrl: buyer?.profilePhoto || null,
+        sellerAvatarUrl: seller?.profilePhoto || null,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -13729,6 +13729,12 @@ export async function registerRoutes(
       if (!product || !isValidProduct(product)) {
         return res.status(400).json({ message: "Invalid product" });
       }
+      if (product === "day1og" && (!isDay1OgPromotionActive() || !canCreateDay1OgCheckout())) {
+        return res.status(410).json({
+          message: `The Day-1 OG founding offer ended on ${DAY1_OG_PROMOTION_END_LABEL}.`,
+          campaignEndsAt: DAY1_OG_PROMOTION_ENDS_AT,
+        });
+      }
       const userId = req.session.userId!;
       const token = signMobileCheckoutToken(userId, product, options as Record<string, string>);
       const appUrl = process.env.APP_URL || "https://guberapp.app";
@@ -13824,6 +13830,13 @@ export async function registerRoutes(
         sessionUrl = stripeSession.url;
 
       } else if (product === "day1og") {
+        const campaignEndsAt = day1OgPromotionEndsAt();
+        // Re-check the promotion here because a signed mobile token can outlive
+        // the campaign boundary. Never redirect it into a purchasable session
+        // after the public deadline or during Stripe's 30-minute minimum window.
+        if (!isDay1OgPromotionActive() || !canCreateDay1OgCheckout()) {
+          return res.redirect(`${APP_BASE}/profile?error=day1og_promotion_ended`);
+        }
         if (user.day1OG) return res.redirect(`${APP_BASE}/profile?error=already_og`);
         const stripeSession = await stripe.checkout.sessions.create({
           payment_method_types: ["card"],
@@ -13837,6 +13850,7 @@ export async function registerRoutes(
             quantity: 1,
           }],
           mode: "payment",
+          expires_at: Math.floor(Math.min(campaignEndsAt.getTime(), Date.now() + 23 * 60 * 60 * 1000) / 1000),
           success_url: resolveSuccessUrl(options.successUrl, `${APP_BASE}/profile?day1og=success`),
           cancel_url: `${APP_BASE}/profile`,
           metadata: { userId: String(user.id), userEmail: user.email, type: "day1og" },
@@ -19700,7 +19714,7 @@ CRITICAL — respond with JSON ONLY, no other text:
         dynamicVariableName: "secret__jac_voice_token",
         // Non-secret context ElevenLabs can embed in system prompt via {{jac_mode}}, {{first_name}}, etc.
         userContext: {
-          firstName: user.firstName || user.username || "there",
+          firstName: user.fullName?.trim().split(/\s+/)[0] || user.username || "there",
           role,
           platform,
           jac_mode: convaiMode,
@@ -26535,7 +26549,8 @@ OUTPUT STYLE:
 
   app.put("/api/admin/settings/:key", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { key } = req.params;
+      const key = Array.isArray(req.params.key) ? req.params.key[0] : req.params.key;
+      if (!key) return res.status(400).json({ message: "Setting key is required" });
       const { value } = req.body;
       await db.insert(platformSettings)
         .values({ key, value: String(value), updatedAt: new Date() })
@@ -26803,7 +26818,7 @@ OUTPUT STYLE:
       const enriched = await Promise.all(attempts.map(async (a: any) => {
         const uid = a.user_id || a.userId;
         const user = await storage.getUser(uid);
-        return { ...a, user_name: user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.username : `User #${uid}` };
+        return { ...a, user_name: user?.fullName?.trim() || user?.username || `User #${uid}` };
       }));
       const filtered = includeDemo
         ? enriched
@@ -27174,7 +27189,6 @@ OUTPUT STYLE:
             await sendPushToUser(adminUser.id, {
               title: "💸 Winner Chose Payout Method",
               body: `${submitter?.fullName || "Winner"} picked ${methodLabel} for "${drop?.title || "Cash Drop"}".`,
-              data: { type: "cash_drop", cashDropId: String(dropId) },
             });
           } catch (e) { /* push optional */ }
         }
@@ -29070,7 +29084,7 @@ OUTPUT STYLE:
           await resend.emails.send({
             from: "GUBER <no-reply@guberapp.app>",
             to: user.email,
-            subject: "Thanks for your feedback, " + (user.firstName || "there") + " 💚",
+            subject: "Thanks for your feedback, " + (user.fullName?.trim().split(/\s+/)[0] || "there") + " 💚",
             html: `<div style="font-family:sans-serif;max-width:480px;margin:auto;padding:24px">
               <h2 style="color:#22C55E">We got your feedback!</h2>
               <p>${autoResponse}</p>

@@ -139,10 +139,12 @@ import { createServer } from "http";
 import supertest from "supertest";
 import { signMobileCheckoutToken, verifyMobileCheckoutToken } from "../mobile-checkout-token";
 import { registerRoutes } from "../routes";
+import { day1OgPromotionEndsAt } from "../../shared/day1og-promotion";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 let currentUserId: number | null = null;
+const DAY1_OG_ACTIVE_NOW = day1OgPromotionEndsAt().getTime() - 24 * 60 * 60 * 1000;
 
 async function buildAgent() {
   const app = express();
@@ -151,6 +153,10 @@ async function buildAgent() {
     if (!(req as any).session) (req as any).session = {};
     if (currentUserId !== null) (req as any).session.userId = currentUserId;
     (req as any).session.destroy = (cb: any) => cb && cb();
+    next();
+  });
+  app.use((_req, res, next) => {
+    res.locals.commerceMode = "FULL_COMMERCE";
     next();
   });
   const httpServer = createServer(app);
@@ -251,6 +257,8 @@ describe("mobile checkout HTTP routes (registerRoutes)", () => {
   });
 
   beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(Date, "now").mockReturnValue(DAY1_OG_ACTIVE_NOW);
     state.audits.length = 0;
     state.stripeSessionsCreated.length = 0;
     state.stripeCustomersCreated.length = 0;
@@ -326,6 +334,35 @@ describe("mobile checkout HTTP routes (registerRoutes)", () => {
         expect(payload!.product).toBe(product);
       },
     );
+
+    it("returns 410 instead of minting a Day-1 OG token after the campaign ends", async () => {
+      const now = vi.spyOn(Date, "now").mockReturnValue(day1OgPromotionEndsAt().getTime() + 1);
+      try {
+        const res = await agent
+          .post("/api/mobile/checkout-link")
+          .send({ product: "day1og" })
+          .expect(410);
+
+        expect(res.body.campaignEndsAt).toBe(day1OgPromotionEndsAt().toISOString());
+        expect(res.body.url).toBeUndefined();
+      } finally {
+        now.mockRestore();
+      }
+    });
+
+    it("returns 410 instead of minting a Day-1 OG token in Stripe's final 30-minute window", async () => {
+      const now = vi.spyOn(Date, "now").mockReturnValue(
+        day1OgPromotionEndsAt().getTime() - 29 * 60 * 1000,
+      );
+      try {
+        await agent
+          .post("/api/mobile/checkout-link")
+          .send({ product: "day1og" })
+          .expect(410);
+      } finally {
+        now.mockRestore();
+      }
+    });
   });
 
   // ── End-to-end bridge: POST checkout-link → GET checkout-redirect ───────────
@@ -534,6 +571,12 @@ describe("mobile checkout HTTP routes (registerRoutes)", () => {
         .expect(302);
       expect(res.headers.location).toMatch(/checkout\.stripe\.com/);
       expect(state.stripeSessionsCreated[0].params.metadata.type).toBe("day1og");
+      expect(state.stripeSessionsCreated[0].params.expires_at).toBe(
+        Math.floor(Math.min(
+          day1OgPromotionEndsAt().getTime(),
+          Date.now() + 23 * 60 * 60 * 1000,
+        ) / 1000),
+      );
     });
 
     it("day1og: redirects to error page when user is already OG", async () => {
@@ -543,6 +586,45 @@ describe("mobile checkout HTTP routes (registerRoutes)", () => {
         .get(`/api/mobile/checkout-redirect?token=${encodeURIComponent(token)}`)
         .expect(302);
       expect(res.headers.location).toMatch(/profile.*already_og/);
+    });
+
+    it("day1og: rejects a signed token after the campaign deadline without creating a Stripe session", async () => {
+      const now = vi.spyOn(Date, "now");
+      try {
+        // Simulate a still-valid link minted by an older app version one minute
+        // before the deadline, before the token-mint endpoint enforced the
+        // final 30-minute restriction.
+        now.mockReturnValue(day1OgPromotionEndsAt().getTime() - 60 * 1000);
+        const token = signMobileCheckoutToken(USER_ID, "day1og", {});
+        now.mockReturnValue(day1OgPromotionEndsAt().getTime() + 1);
+
+        const res = await agent
+          .get(`/api/mobile/checkout-redirect?token=${encodeURIComponent(token)}`)
+          .expect(302);
+
+        expect(res.headers.location).toMatch(/profile.*day1og_promotion_ended/);
+        expect(state.stripeSessionsCreated).toHaveLength(0);
+      } finally {
+        now.mockRestore();
+      }
+    });
+
+    it("day1og: rejects a signed token in Stripe's final 30-minute window", async () => {
+      const now = vi.spyOn(Date, "now").mockReturnValue(
+        day1OgPromotionEndsAt().getTime() - 29 * 60 * 1000,
+      );
+      try {
+        const token = signMobileCheckoutToken(USER_ID, "day1og", {});
+
+        const res = await agent
+          .get(`/api/mobile/checkout-redirect?token=${encodeURIComponent(token)}`)
+          .expect(302);
+
+        expect(res.headers.location).toMatch(/profile.*day1og_promotion_ended/);
+        expect(state.stripeSessionsCreated).toHaveLength(0);
+      } finally {
+        now.mockRestore();
+      }
     });
 
     // ── trust_box ───────────────────────────────────────────────────────────
