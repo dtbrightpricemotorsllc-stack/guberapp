@@ -17,6 +17,18 @@ doing a final production smoke test immediately before release.
 in the GUBER staging / test environment. The account must be logged in on the
 device before starting.
 
+## Review-safe Commerce Mode
+
+Before an App Store resubmission, GUBER's Commerce Mode must remain
+`EARNED_CREDITS_ONLY`. In this mode, paid digital-benefit checkout is
+intentionally unavailable. Do **not** run TC-01 through TC-08 or TC-11 through
+TC-17 as purchase-success cases unless an authorized release owner has explicitly
+changed Commerce Mode to `FULL_COMMERCE` for a separate test environment.
+
+For an App Review build, run TC-24 below instead. It verifies that the review-safe
+lock gives a clear in-app response and never begins a Stripe or external-browser
+checkout.
+
 ---
 
 ## TC-01 — Disclosure sheet appears on credit-pack tap
@@ -297,6 +309,108 @@ Pass criteria: ✅ Green banner visible on `/biz/dashboard` after extra unlocks 
 
 ---
 
+## TC-18 — Sign in with Apple completes on iPhone and iPad
+
+**Devices:** Physical iPhone and iPad with an Apple ID available for Sign in with
+Apple. Run this once on each device class.
+
+| # | Step | Expected result |
+|---|------|-----------------|
+| 1 | Open the TestFlight build while signed out and select **Sign in with Apple**. | Apple's native Sign in with Apple sheet opens. No generic GUBER error toast appears. |
+| 2 | Complete authentication with the QA Apple ID. | The sheet closes and the app signs into the QA account. |
+| 3 | Force-close and reopen the app. | The session remains valid and the app renders authenticated content. |
+
+Pass criteria: ✅ Native Apple sheet opens and the QA account signs in on both device classes.
+
+---
+
+## TC-19 — Proof-photo camera capture
+
+**Devices:** Physical iPhone and iPad. Use a disposable QA job or test mission
+that permits proof submission; do not submit a production job.
+
+| # | Step | Expected result |
+|---|------|-----------------|
+| 1 | Open the proof-submission surface and select the proof-photo action. | The native camera opens, or iOS requests camera access with GUBER's usage description. |
+| 2 | Grant permission if prompted and take a photo. | The photo returns to the proof surface as an attached preview. |
+| 3 | Cancel from the camera, then reopen it. | Cancellation leaves the form usable; reopening presents the camera again. |
+
+Pass criteria: ✅ A live photo can be captured and attached, with no unresponsive control.
+
+---
+
+## TC-20 — Change profile photo
+
+**Devices:** Physical iPhone and iPad.
+
+| # | Step | Expected result |
+|---|------|-----------------|
+| 1 | Open your profile and tap **Change profile photo**. | The native iOS picker presents **Take Photo** and **Choose from Library** options. |
+| 2 | Choose one option and select or capture an image. | The image uploads and the profile avatar updates. |
+| 3 | Cancel the picker and tap the control again. | The profile stays usable and the picker can be reopened. |
+
+Pass criteria: ✅ The control is responsive and a changed photo persists after refresh.
+
+---
+
+## TC-21 — Wallet renders a visible state
+
+**Devices:** Physical iPhone and iPad. Use a QA account with either wallet history
+or no wallet history; both states are valid as long as one is visibly rendered.
+
+| # | Step | Expected result |
+|---|------|-----------------|
+| 1 | Navigate to **Wallet** after authentication. | The page progresses past its loading state. |
+| 2 | Wait up to 10 seconds. | Balance/history content, an empty state, or an actionable error state is visible — never a blank screen. |
+| 3 | Leave and return to Wallet. | The visible state remains usable; no crash or permanent spinner occurs. |
+
+Pass criteria: ✅ Wallet is never blank on either device class.
+
+---
+
+## TC-22 — In-app account deletion
+
+**Devices:** Physical iPhone and iPad. **Use a new disposable QA account only.**
+This flow permanently anonymizes the account and signs it out.
+
+| # | Step | Expected result |
+|---|------|-----------------|
+| 1 | Open Profile → Account Settings → Danger Zone → **Delete**. | The first warning dialog explains immediate profile/login removal and retention. |
+| 2 | Continue and enter the disposable QA account's exact email. | **DELETE MY ACCOUNT** is disabled until the matching email is entered. |
+| 3 | Confirm deletion. | The app signs out and the deleted account cannot sign back in. |
+
+Pass criteria: ✅ A user can complete deletion within the app without contacting support.
+
+---
+
+## TC-23 — `guber://` deep link opens the TestFlight app
+
+**Devices:** Physical iPhone and iPad.
+
+| # | Step | Expected result |
+|---|------|-----------------|
+| 1 | Force-quit GUBER. In Safari, open a GUBER return page containing the return banner, then tap **Tap here to return to the GUBER app**. | iOS opens or prompts to open GUBER using `guber://`; GUBER launches without a crash or alert. |
+| 2 | Repeat while GUBER is already foregrounded. | The app stays functional; no error dialog appears. |
+
+Pass criteria: ✅ The registered custom scheme opens the installed TestFlight build on both device classes.
+
+---
+
+## TC-24 — Review-safe digital-purchase lock
+
+**Devices:** Physical iPhone and iPad. **Prerequisite:** Confirm Commerce Mode is
+`EARNED_CREDITS_ONLY`; do not switch it for App Review verification.
+
+| # | Step | Expected result |
+|---|------|-----------------|
+| 1 | Open `/studio/credits` and select any paid digital credit pack or tier entry point that is visible. | The app explains that paid digital purchases are unavailable in the current mode, or the paid entry point is not offered. |
+| 2 | Check that no system disclosure, SFSafariViewController, Safari app, or Stripe page opens. | No external checkout begins. |
+| 3 | Repeat on another digital-benefit surface if available (Day-1 OG, Trust Box, Business Scout). | The same review-safe block applies. |
+
+Pass criteria: ✅ Paid digital-benefit checkout cannot start, while earned-credit and real-world-service functionality remain unaffected.
+
+---
+
 ## Sign-off record
 
 Before each App Store submission, a team member must run TC-01 through TC-05 on a
@@ -330,4 +444,50 @@ TC-16 Banner on /biz/dashboard after Scout Plan purchase [ ] Pass  [ ] Fail  Not
 TC-17 Banner on /biz/dashboard after extra unlocks buy   [ ] Pass  [ ] Fail  Notes: ___
 
 Overall: [ ] APPROVED  [ ] BLOCKED — do not submit
+```
+
+### App Review recovery record — 2026-08-22
+
+**Status: BLOCKED — do not resubmit yet.** This Linux workspace has no Xcode,
+physical iPhone/iPad, TestFlight install access, or eligible Apple ID, so it
+cannot truthfully record a physical-device pass. No reviewer-facing device
+screenshots or screen recordings were captured here.
+
+Completed non-device checks:
+
+- ✅ iOS permission guard and its negative self-test passed: camera/microphone
+  WebView handling is present; only foreground location is declared.
+- ✅ Apple Sign-In plugin registration check passed: `AppleSignInPlugin` is in
+  the iOS Capacitor package list and the `guber` URL scheme is declared.
+- ✅ Browser checks completed with the QA account: the Change Photo control is
+  enabled; Account Deletion reaches its two-step, email-gated confirmation;
+  Wallet renders a nonblank shell; and review-safe Commerce Mode offers no
+  Stripe path.
+- ✅ The mobile Safari user-agent Playwright check passed for the actual
+  `/studio?credits=success` redirect target after restoring its return banner.
+
+Still required from the person holding the new TestFlight build:
+
+```
+Build:          _______________   (must be the newly uploaded build)
+TestFlight date: _______________
+Tester:         _______________
+
+TC-18 Apple Sign-In (iPhone)                 [ ] Pass  [ ] Fail  Evidence: ___
+TC-18 Apple Sign-In (iPad)                   [ ] Pass  [ ] Fail  Evidence: ___
+TC-19 Proof-photo capture (iPhone)           [ ] Pass  [ ] Fail  Evidence: ___
+TC-19 Proof-photo capture (iPad)             [ ] Pass  [ ] Fail  Evidence: ___
+TC-20 Change profile photo (iPhone)          [ ] Pass  [ ] Fail  Evidence: ___
+TC-20 Change profile photo (iPad)            [ ] Pass  [ ] Fail  Evidence: ___
+TC-21 Wallet visible state (iPhone)          [ ] Pass  [ ] Fail  Evidence: ___
+TC-21 Wallet visible state (iPad)            [ ] Pass  [ ] Fail  Evidence: ___
+TC-22 Account deletion, disposable QA (iPhone) [ ] Pass [ ] Fail Evidence: ___
+TC-22 Account deletion, disposable QA (iPad) [ ] Pass  [ ] Fail  Evidence: ___
+TC-23 guber:// deep link (iPhone)            [ ] Pass  [ ] Fail  Evidence: ___
+TC-23 guber:// deep link (iPad)              [ ] Pass  [ ] Fail  Evidence: ___
+TC-24 review-safe purchase lock (iPhone)     [ ] Pass  [ ] Fail  Evidence: ___
+TC-24 review-safe purchase lock (iPad)       [ ] Pass  [ ] Fail  Evidence: ___
+
+Final physical-device status: [ ] APPROVED — resubmission allowed
+                              [ ] BLOCKED — do not submit
 ```

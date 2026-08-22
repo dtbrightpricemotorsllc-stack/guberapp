@@ -3,10 +3,11 @@
 // Job 2: Video Agent (Smart Asset-Aware AI Video, 4-phase pipeline)
 
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
 import { Coins, ImageIcon, Layers, ChevronRight, Sparkles, Zap, Megaphone } from "lucide-react";
+import { MobileReturnBanner } from "@/components/mobile-return-banner";
 
 type StudioMe = {
   credits: number;
@@ -23,6 +24,10 @@ const TIER_COLOR: Record<string, string> = {
 
 export default function StudioPage() {
   const { user } = useAuth();
+  const searchParams = new URLSearchParams(useSearch());
+  const purchaseSuccess =
+    searchParams.get("credits") === "success" ||
+    searchParams.get("subscription") === "success";
 
   const meQuery = useQuery<StudioMe>({
     queryKey: ["/api/studio/me"],
@@ -36,6 +41,10 @@ export default function StudioPage() {
 
   return (
     <div className="min-h-screen text-white" style={{ background: "hsl(222 47% 3%)" }}>
+      <MobileReturnBanner
+        show={purchaseSuccess}
+        paramsToStrip={["credits", "subscription"]}
+      />
 
       {/* Header */}
       <div

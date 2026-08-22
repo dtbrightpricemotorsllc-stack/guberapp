@@ -24,6 +24,10 @@ async function loginAs(
   password: string
 ) {
   await page.goto("/login");
+  // The Replit development update banner can appear over the form and
+  // intercept the submit click. It is not part of the application UI under
+  // test, so remove it before interacting with the login controls.
+  await page.locator("#guber-update-banner").evaluate((banner) => banner.remove()).catch(() => {});
   await page.getByTestId("input-email").fill(email);
   await page.getByTestId("input-password").fill(password);
   await page.getByTestId("button-login-submit").click();
