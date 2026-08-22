@@ -14,11 +14,16 @@ structure, so this file deliberately avoids restating paths/constants.
 - Tracking runs ONLY for an actively accepted/in-progress task. NEVER during
   browsing, searching, map-viewing, or posting. **Why:** continuous GPS while
   merely browsing is both a battery cost and an App Store privacy red flag.
-- Foreground only — OS-level background tracking is deliberately deferred.
-  **How to apply:** do NOT add a background location mode or the iOS "Always"
-  location entitlement; only When-In-Use is permitted. A reviewer will reject
-  the build if the over-broad "Always" key reappears without a real background
-  use case.
+- iOS is foreground only — OS-level background tracking is deliberately
+  deferred. **Why:** Apple's review and privacy disclosures must agree with the
+  actual iOS permission model. **How to apply:** do NOT add a background
+  location mode, an iOS "Always" entitlement, or an in-app Always prompt; only
+  When-In-Use is permitted.
+- Android may use its separately disclosed active-job background tracker after
+  foreground permission is granted. **Why:** the Android foreground service is
+  product behavior, not an iOS capability. **How to apply:** keep Android's
+  permission disclosure platform-specific; never describe its behavior as
+  applying to iOS.
 
 ## Leak / lifecycle invariants (each was a real bug or review failure)
 - **Clear Capacitor GPS watches via the gps wrapper, never raw

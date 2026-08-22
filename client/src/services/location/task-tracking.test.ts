@@ -221,4 +221,11 @@ describe("watch cleanup guards (source scan)", () => {
       expect(src.includes("navigator.geolocation.clearWatch")).toBe(false);
     });
   }
+
+  it("uses the foreground GPS wrapper instead of the removed iOS background bridge", () => {
+    const src = readFileSync(resolve(process.cwd(), "client/src/services/location/TaskTrackingService.ts"), "utf8");
+    expect(src.includes("gpsStartWatchPosition")).toBe(true);
+    expect(src.includes("bg-geolocation")).toBe(false);
+    expect(src.includes("bgStartWatch")).toBe(false);
+  });
 });

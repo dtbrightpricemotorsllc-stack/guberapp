@@ -1,9 +1,8 @@
 /**
- * Background location permission flow (Android + iOS).
+ * Background location permission flow for Android.
  *
- * Both Google Play and Apple App Store (guideline 5.1.c) require an in-app
- * disclosure explaining WHY background location is needed BEFORE the OS
- * permission dialog fires.
+ * Google Play requires an in-app disclosure explaining WHY background location
+ * is needed before the Android OS permission dialog fires.
  *
  * This module uses the same event-driven pattern as gps.ts / GpsDisclaimerModal:
  * ensureBackgroundLocation() fires a window event → BackgroundLocationModal
@@ -80,34 +79,10 @@ export async function requestBackgroundLocationFromOS(): Promise<"granted" | "de
 }
 
 /**
- * Perform the iOS background-location disclosure modal and resolve.
- * On iOS we show the disclosure but don't call ForegroundTracking — the native
- * plugin's requestPermissions:true in bgStartWatch() handles the actual OS ask.
- */
-function showIOSDisclosure(
-  context: "job" | "load_board" | "asset_protection",
-): Promise<boolean> {
-  return new Promise<boolean>((resolve) => {
-    pending.push(resolve);
-    disclosurePending = true;
-    try {
-      window.dispatchEvent(
-        new CustomEvent("guber:show-bg-location-disclosure", { detail: { context, platform: "ios" } }),
-      );
-    } catch {
-      pending.splice(pending.indexOf(resolve), 1);
-      resolve(false);
-    }
-  });
-}
-
-/**
  * Ensure background location permission, showing the in-app disclosure if
  * needed. Always resolves — never rejects. Returns true if granted/acknowledged.
  *
  * - Web: no-op (returns true immediately).
- * - iOS native: shows in-app disclosure per App Store guideline 5.1(c); the
- *   actual OS permission is requested by the native plugin when bgStartWatch fires.
  * - Android: shows disclosure + requests ACCESS_BACKGROUND_LOCATION from OS.
  *
  * If we already asked once and they denied, shows the disclosure again only if
@@ -117,16 +92,8 @@ export function ensureBackgroundLocation(
   context: "job" | "load_board" | "asset_protection",
   opts?: { forceReprompt?: boolean },
 ): Promise<boolean> {
-  if (!Capacitor.isNativePlatform()) return Promise.resolve(true);
-
-  const platform = Capacitor.getPlatform();
-
-  // iOS — show our in-app disclosure first; native plugin handles OS permission
-  if (platform === "ios") {
-    if (hasRequestedBackgroundLocation() && !opts?.forceReprompt) {
-      return Promise.resolve(true); // Already acknowledged once
-    }
-    return showIOSDisclosure(context);
+  if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "android") {
+    return Promise.resolve(true);
   }
 
   // Android — check OS permission state then show disclosure if needed

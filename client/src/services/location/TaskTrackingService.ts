@@ -1,6 +1,6 @@
 import { gpsStartWatchPosition, gpsClearWatch } from "@/lib/gps";
-import { bgStartWatch, bgStopWatch } from "@/lib/bg-geolocation";
 import { startForegroundTracking, stopForegroundTracking } from "@/lib/foreground-tracking";
+import { isAndroid } from "@/lib/platform";
 import { apiRequest } from "@/lib/queryClient";
 
 // Standalone, UI-independent live-location tracker for an actively in-progress
@@ -74,7 +74,6 @@ export class TaskTrackingService {
   private activeJobId: number | null = null;
   private activeType: "job" | "load_board" = "job";
   private watchId: number | null = null;
-  private bgWatchId: number | null = null;
   private starting = false;
   private subscribers = new Set<Subscriber>();
   private geofenceSubscribers = new Set<GeofenceSubscriber>();
@@ -154,66 +153,27 @@ export class TaskTrackingService {
     this.persistMeta();
     console.info(`[GUBER TRACKING] startTask jobId=${jobId}`);
     try {
-      // iOS: use the background-capable plugin so tracking survives the app
-      // being backgrounded or the screen locking. Falls back to the standard
-      // foreground watch on Android and web.
-      const bgId = await bgStartWatch(
-        (c) => {
-          if (!this.activeJobId) return;
-          const acc = c.accuracy;
-          if (typeof acc === "number" && acc > ACCURACY_CEILING_M) return;
-          if (this.startedAt && Date.now() - this.startedAt > MAX_SESSION_MS) {
-            void this.stopTask(this.activeJobId);
-            return;
-          }
-          const coords: Coords = { lat: c.lat, lng: c.lng };
-          if (!this.shouldAccept(coords, c.ts)) return;
-          const point: TrackPoint = { lat: c.lat, lng: c.lng, ts: c.ts };
-          this.lastAccepted = point;
-          this.latest = coords;
-          this.queue.push(point);
-          this.persistQueue();
-          this.persistLast(coords);
-          this.emit(coords);
-          if (this.queue.length >= BATCH_SIZE) void this.flush(true);
+      // Every platform uses the foreground GPS watch. iOS must remain
+      // foreground-only and never surface an "Always" location request.
+      const id = await gpsStartWatchPosition(
+        (pos) => this.onPosition(pos),
+        (err) => {
+          console.warn(`[GUBER TRACKING] gps watch error code=${(err as any)?.code} msg=${(err as any)?.message}`);
         },
-        (code) => {
-          console.warn("[tracking] bg-geo error", code);
-          if (code === "NOT_AUTHORIZED") void this.stopTask(this.activeJobId ?? undefined);
-        },
-        MIN_DISTANCE_M,
+        { enableHighAccuracy: true, maximumAge: 15_000, timeout: 20_000 },
       );
-
       if (this.activeJobId !== jobId) {
-        if (bgId !== null) await bgStopWatch(bgId);
+        await gpsClearWatch(id);
         return;
       }
-
-      if (bgId !== null) {
-        // iOS background path — plugin handles delivery; no foreground watch needed.
-        this.bgWatchId = bgId;
-        this.startFlushTimer();
-        console.info(`[GUBER TRACKING] iOS bg-geo watch started id=${bgId} jobId=${jobId}`);
-      } else {
-        // Android / web — standard foreground watch + optional foreground service.
-        const id = await gpsStartWatchPosition(
-          (pos) => this.onPosition(pos),
-          (err) => {
-            console.warn(`[GUBER TRACKING] gps watch error code=${(err as any)?.code} msg=${(err as any)?.message}`);
-          },
-          { enableHighAccuracy: true, maximumAge: 15_000, timeout: 20_000 },
-        );
-        if (this.activeJobId !== jobId) {
-          await gpsClearWatch(id);
-          return;
-        }
-        this.watchId = id;
-        this.startFlushTimer();
-        console.info(`[GUBER TRACKING] foreground watch started id=${id} jobId=${jobId}`);
-        void this.startForegroundService(jobId);
-      }
+      this.watchId = id;
+      this.startFlushTimer();
+      console.info(`[GUBER TRACKING] foreground watch started id=${id} jobId=${jobId}`);
+      if (isAndroid) void this.startForegroundService(jobId);
       console.info(`[GUBER TRACKING] tracking ACTIVE jobId=${jobId}`);
-      window.dispatchEvent(new CustomEvent("guber:gps-tracking-changed", { detail: { active: true, jobId } }));
+      try {
+        window.dispatchEvent(new CustomEvent("guber:gps-tracking-changed", { detail: { active: true, jobId } }));
+      } catch { /* non-browser test environment */ }
     } finally {
       this.starting = false;
     }
@@ -227,15 +187,10 @@ export class TaskTrackingService {
   async stopTask(jobId?: number, opts?: { flush?: boolean }): Promise<void> {
     if (jobId != null && this.activeJobId != null && jobId !== this.activeJobId) return;
     const id = this.watchId;
-    const bgId = this.bgWatchId;
     this.watchId = null;
-    this.bgWatchId = null;
     this.stopFlushTimer();
     if (id !== null) {
       try { await gpsClearWatch(id); } catch { /* ignore */ }
-    }
-    if (bgId !== null) {
-      try { await bgStopWatch(bgId); } catch { /* ignore */ }
     }
     if (opts?.flush !== false) {
       await this.flush(true);
@@ -251,7 +206,9 @@ export class TaskTrackingService {
     // iOS/web). Best-effort.
     void stopForegroundTracking();
     console.info(`[GUBER TRACKING] tracking STOPPED jobId=${stoppedJobId}`);
-    window.dispatchEvent(new CustomEvent("guber:gps-tracking-changed", { detail: { active: false } }));
+    try {
+      window.dispatchEvent(new CustomEvent("guber:gps-tracking-changed", { detail: { active: false } }));
+    } catch { /* non-browser test environment */ }
   }
 
   private onPosition(pos: GeolocationPosition): void {

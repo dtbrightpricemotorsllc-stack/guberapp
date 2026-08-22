@@ -3,7 +3,7 @@ import { GuberLogo } from "@/components/guber-logo";
 import { useAuth } from "@/lib/auth-context";
 import { Link } from "wouter";
 
-const LAST_UPDATED = "June 13, 2026";
+const LAST_UPDATED = "August 22, 2026";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -45,7 +45,8 @@ function PrivacyContent() {
             <li>GPS coordinates (latitude/longitude) when you use location-based features</li>
             <li>Job addresses and location descriptions</li>
             <li>Clock-in and clock-out locations for work sessions</li>
-            <li>During active Asset Protection and Transport jobs: continuous location updates collected in the background to provide shipment visibility, ETA, and safety monitoring. Background tracking begins only when a transporter starts a protected trip and stops immediately when the trip is completed, cancelled, or ended.</li>
+            <li>On iOS, during active jobs and transportation sessions while you use the app: location updates that support navigation, pickup and drop-off verification, ETA information, and safety documentation.</li>
+            <li>On Android, during an accepted active job or transportation session: background location updates may be collected to share real-time position with the job poster. This begins only after foreground location is granted and the active job begins, and stops when the job ends.</li>
           </ul>
           <p><strong className="text-foreground">Payment & Financial Data</strong></p>
           <ul className="list-disc pl-5 space-y-1">
@@ -92,7 +93,7 @@ function PrivacyContent() {
             <li>Show nearby jobs, listings, workers, transport requests, and local opportunities</li>
             <li>Process payments and payouts through Stripe</li>
             <li>Send push notifications about jobs near you, messages, offers, payments, verification updates, transport updates, and trip activity</li>
-            <li>Provide shipment visibility, ETA updates, and safety monitoring during active Asset Protection and Transport trips</li>
+            <li>Provide location-relevant job and transportation support while you use the app</li>
             <li>Verify user identity and maintain trust tiers</li>
             <li>Review and investigate disputes, fraud, and abuse reports</li>
             <li>Preserve proof submissions and trip history for dispute resolution and safety compliance</li>
@@ -105,13 +106,14 @@ function PrivacyContent() {
         <Section title="4. Location Data — Detailed Disclosure">
           <p><strong className="text-foreground">Location While Using the App</strong></p>
           <p>GUBER collects your location while you are actively using the app to show nearby jobs, listings, workers, transport requests, and local opportunities. This requires "While Using the App" / "When In Use" location permission.</p>
-          <p><strong className="text-foreground">Background Location (Asset Protection & Transport Only)</strong></p>
-          <p>GUBER may collect your location in the background only during active Asset Protection and Transport jobs. Background tracking begins only when a transporter explicitly starts a protected trip and stops immediately when the trip is completed, cancelled, or ended by the transporter, customer, or admin. This requires "Always Allow" / background location permission, which is requested only at the moment a protected trip is started — never at signup.</p>
-          <p>Background location data is used exclusively for: shipment visibility for the customer, ETA calculations, safety monitoring, and asset protection dispute documentation.</p>
+          <p><strong className="text-foreground">iOS: Foreground Location Only</strong></p>
+          <p>GUBER on iOS does not request or collect location in the background. It uses the "While Using the App" / "When In Use" permission only during location-relevant foreground flows, such as nearby opportunities, navigation, pickup and drop-off verification, and active job or transportation sessions.</p>
+          <p><strong className="text-foreground">Android: Active-Job Background Location</strong></p>
+          <p>On Android, GUBER may request background location only after foreground location is granted and a worker starts an accepted active job or transportation session. The app uses this limited tracking to share real-time position with the job poster and support active-job safety and ETA information. It stops when the job is ended, completed, or cancelled.</p>
           <p><strong className="text-foreground">Job Alerts Without Live GPS</strong></p>
           <p>Workers and providers can set a saved service area (ZIP code, city, and radius) to receive job alerts when the app is closed. These alerts use your saved area — not live GPS tracking.</p>
           <p><strong className="text-foreground">How to Turn Location Off</strong></p>
-          <p>You can revoke location permissions at any time in your device settings. Revoking "While Using" permission will disable nearby job matching and map features. Revoking background location will disable Asset Protection tracking. Job alerts based on your saved ZIP code will continue to work regardless of live location permission.</p>
+          <p>You can revoke location permission at any time in your device settings. On iOS, revoking "While Using" permission will disable nearby job matching, map features, and location-relevant active-job tools. On Android, you can also revoke background location; this stops continuous active-job position sharing. Job alerts based on your saved ZIP code will continue to work regardless of live location permission.</p>
         </Section>
 
         <Section title="5. Push Notifications">
