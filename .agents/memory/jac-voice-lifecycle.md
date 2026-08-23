@@ -14,7 +14,23 @@ Every mic tap → new session → ElevenLabs speaks that greeting.
 The `startOnGesture` effect registered click/touchstart/keydown at document level.
 Clicking the text box → voice session attempted → often timed out → `handleConvaiError` was
 then calling `jacSpeak(GREETING_TTS)` → user heard greeting for seemingly no reason.
-**Fix**: Removed the auto-start-on-gesture effect entirely. Voice ONLY starts on explicit mic tap.
+**Fix**: Removed the document-level auto-start-on-gesture effect entirely. It remains
+important that text input and ordinary page gestures never trigger voice.
+
+### 2a. Public live homepage intentionally auto-boots voice
+The dedicated public live JAC experience is the exception: its product behavior is
+to automatically attempt the voice session when that component mounts, rather than
+wait for an explicit mic tap. If microphone access is unavailable, it must leave
+JAC visible, keep text chat usable, and show the failure inline rather than
+covering the character with a blocking overlay.
+
+**Why:** The desired first impression is that JAC immediately comes alive on the
+homepage. Removing that automatic attempt made the experience feel less welcoming.
+
+**How to apply:** Preserve automatic boot only on the public live homepage. Keep
+document-level gesture listeners removed, and retain explicit mic control for
+legacy and signed-in assistant surfaces unless their product behavior is separately
+changed.
 
 ### 3. handleConvaiError replayed the greeting via TTS
 Any voice failure called `jacSpeak(GREETING_TTS)` — the greeting text spoken aloud.
