@@ -37,6 +37,7 @@ const FAKE_SIG = "t=1,v1=fakesig";
 const mockConstructEvent = vi.hoisted(() => vi.fn());
 const mockCheckoutSessionsCreate = vi.hoisted(() => vi.fn());
 const mockCustomersCreate = vi.hoisted(() => vi.fn());
+const mockVerifyJWT = vi.hoisted(() => vi.fn());
 
 vi.mock("stripe", () => ({
   default: class MockStripe {
@@ -156,7 +157,7 @@ vi.mock("connect-pg-simple", async () => {
 
 vi.mock("../jwt", () => ({
   generateJWT: vi.fn(),
-  verifyJWT: vi.fn().mockReturnValue(null),
+  verifyJWT: mockVerifyJWT,
 }));
 
 vi.mock("../push", () => ({
@@ -275,6 +276,7 @@ describe("Stripe Connect webhook — checkout.session.completed (task-580)", () 
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockVerifyJWT.mockReturnValue(null);
     dbSelectResult.rows = [];
     mockStorage.getUser.mockResolvedValue(defaultUser());
     mockStorage.getAllUsers.mockResolvedValue([]);
@@ -293,6 +295,139 @@ describe("Stripe Connect webhook — checkout.session.completed (task-580)", () 
       .set("content-type", "application/json")
       .send(JSON.stringify(event));
   }
+
+  it("runs a provider-specific request through the existing Checkout Session and webhook funding path", async () => {
+    const hirerId = USER_ID;
+    const providerId = 777_101;
+    const offerId = 902;
+    const jobId = 901;
+    const paymentIntentId = "pi_service_offer_test";
+    const checkoutSessionId = "cs_service_offer_test";
+    const directOffer: any = {
+      id: offerId,
+      jobId,
+      serviceOfferId: 12,
+      hirerUserId: hirerId,
+      workerUserId: providerId,
+      currentOfferAmount: 125,
+      jobSummary: "Assemble the selected service request",
+      status: "agreed_payment_pending",
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      fundedAt: null,
+      stripePaymentIntentId: null,
+    };
+    const linkedJob = {
+      id: jobId,
+      jobType: "service_request",
+      postedById: hirerId,
+      assignedHelperId: providerId,
+      status: "accepted_pending_payment",
+      isPaid: false,
+      paymentAuthorized: false,
+    };
+
+    mockVerifyJWT.mockImplementation((token: string) =>
+      token === "service-offer-hirer"
+        ? { sub: hirerId, email: "hirer@guber.app" }
+        : null,
+    );
+    mockStorage.getUser.mockImplementation(async (id: number) => {
+      if (id === providerId) {
+        return {
+          ...defaultUser(),
+          id: providerId,
+          fullName: "Verified Provider",
+          stripeAccountId: "acct_provider_service_offer",
+          stripeAccountStatus: "active",
+        };
+      }
+      return { ...defaultUser(), id: hirerId, email: "hirer@guber.app" };
+    });
+    mockStorage.getDirectOffer.mockImplementation(async (id: number) =>
+      id === offerId ? directOffer : undefined,
+    );
+    mockStorage.updateDirectOffer.mockImplementation(async (_id: number, changes: any) => {
+      Object.assign(directOffer, changes);
+      return { ...directOffer };
+    });
+    mockStorage.updateJob.mockImplementation(async (_id: number, changes: any) => ({
+      ...linkedJob,
+      ...changes,
+    }));
+    mockStorage.createGuberPayment.mockResolvedValue({ id: 444 });
+    mockCheckoutSessionsCreate.mockResolvedValue({
+      id: checkoutSessionId,
+      url: "https://checkout.stripe.com/cs_service_offer_test",
+    });
+
+    const agent = await buildAgent();
+
+    const checkoutResponse = await agent
+      .post(`/api/direct-offers/${offerId}/create-payment`)
+      .set("Authorization", "Bearer service-offer-hirer")
+      .expect(200);
+
+    expect(checkoutResponse.body).toMatchObject({
+      checkoutUrl: "https://checkout.stripe.com/cs_service_offer_test",
+      offerId,
+    });
+    expect(mockCheckoutSessionsCreate).toHaveBeenCalledOnce();
+    const checkoutParams = mockCheckoutSessionsCreate.mock.calls[0][0];
+    expect(checkoutParams.mode).toBe("payment");
+    expect(checkoutParams.metadata).toMatchObject({
+      offerId: String(offerId),
+      hirerUserId: String(hirerId),
+      workerUserId: String(providerId),
+      type: "direct_offer_payment",
+    });
+    expect(checkoutParams.payment_intent_data.metadata).toMatchObject({
+      offerId: String(offerId),
+      flowType: "direct_offer",
+    });
+    expect(directOffer).toMatchObject({
+      stripeSessionId: checkoutSessionId,
+      status: "payment_pending",
+    });
+
+    const completedEvent = makeEvent(
+      "checkout.session.completed",
+      {
+        type: "direct_offer_payment",
+        offerId: String(offerId),
+        hirerUserId: String(hirerId),
+        workerUserId: String(providerId),
+      },
+      {
+        id: checkoutSessionId,
+        payment_intent: paymentIntentId,
+      },
+    );
+
+    const webhookResponse = await postConnectWebhook(completedEvent);
+
+    expect(webhookResponse.status).toBe(200);
+    expect(webhookResponse.body.received).toBe(true);
+    expect(directOffer).toMatchObject({
+      status: "funded",
+      fundedAt: expect.any(Date),
+      stripePaymentIntentId: paymentIntentId,
+    });
+    expect(mockStorage.updateJob).toHaveBeenCalledWith(jobId, expect.objectContaining({
+      status: "funded",
+      isPaid: true,
+      paymentAuthorized: true,
+      stripePaymentIntentId: paymentIntentId,
+    }));
+    expect(mockStorage.createGuberPayment).toHaveBeenCalledWith(expect.objectContaining({
+      offerId,
+      jobId,
+      payerUserId: hirerId,
+      payeeUserId: providerId,
+      stripeCheckoutSessionId: checkoutSessionId,
+      stripePaymentIntentId: paymentIntentId,
+      paymentStatus: "funded",
+    }));
+  });
 
   // ── day1og ─────────────────────────────────────────────────────────────────
 
