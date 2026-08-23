@@ -50,6 +50,27 @@ function approximateArea(zip: string | null): string {
   return zip && zip.length >= 3 ? `Near ${zip.slice(0, 3)}••` : "Local service area";
 }
 
+function requestText(value: unknown, field: string, max: number, required = false): string | null {
+  const text = safeText(value, max);
+  if (required && !text) throw new Error(`${field} is required.`);
+  return text;
+}
+
+function requestAmount(value: unknown): number {
+  const amount = toNumber(value, 5, 100000);
+  if (amount === null) throw new Error("Budget is required.");
+  return Math.round(amount * 100) / 100;
+}
+
+function requestCoordinate(value: unknown, min: number, max: number, field: string): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const coordinate = Number(value);
+  if (!Number.isFinite(coordinate) || coordinate < min || coordinate > max) {
+    throw new Error(`${field} is invalid.`);
+  }
+  return coordinate;
+}
+
 function publicOffer(row: any) {
   const availableNow = !!row.available_now && !!row.provider_available;
   return {
@@ -292,21 +313,106 @@ export function registerServiceOfferRoutes(app: Express, guards: RouteGuards) {
     }
   });
 
-  app.post("/api/service-offers/:id/hire", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/service-offers/:id/hire", requireAuth, checkSuspended, async (req: Request, res: Response) => {
     try {
       const offer = await getOffer(Number(req.params.id));
       if (!offer || offer.status !== "published" || offer.moderation_status !== "approved") {
         return res.status(404).json({ message: "Service offer not found" });
       }
       if (offer.provider_user_id === req.session.userId) return res.status(400).json({ message: "You cannot hire your own service offer." });
-      const params = new URLSearchParams({
-        category: offer.category,
-        service: offer.service_type || offer.title,
-        providerOfferId: String(offer.id),
-      });
-      res.json({ handoffUrl: `/post-job?${params.toString()}` });
+
+      const scope = requestText(req.body.scope, "Scope", 1500, true)!;
+      const timing = requestText(req.body.timing, "Timing", 160, true)!;
+      const budget = requestAmount(req.body.budget);
+      const location = requestText(req.body.location, "Location", 300, true)!;
+      const zip = requestText(req.body.zip, "ZIP code", 16, true)!;
+      const lat = requestCoordinate(req.body.lat, -90, 90, "Latitude");
+      const lng = requestCoordinate(req.body.lng, -180, 180, "Longitude");
+      const estimatedMinutes = toNumber(req.body.estimatedMinutes, 15, 7 * 24 * 60);
+      const startTime = req.body.startTime ? new Date(req.body.startTime) : null;
+      if (startTime && Number.isNaN(startTime.getTime())) throw new Error("Requested time is invalid.");
+
+      // The request is a real, private job from the beginning. The direct
+      // offer is bound to the published provider and controls negotiation,
+      // payment, proof, disputes, and payout; the job supplies the familiar
+      // scheduling and activity surface after the provider accepts.
+      const client = await pool.connect();
+      let jobId: number | null = null;
+      let directOfferId: number | null = null;
+      try {
+        await client.query("BEGIN");
+        const jobResult = await client.query(
+          `INSERT INTO jobs
+            (title, description, category, budget, location, location_approx, zip, lat, lng, start_time,
+              status, posted_by_id, assigned_helper_id, service_type, job_type, job_details, is_paid, is_published, visibility)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'draft',$11,$12,$13,'service_request',$14::jsonb,FALSE,FALSE,'private')
+           RETURNING id`,
+          [
+            offer.title,
+            scope,
+            offer.category,
+            budget,
+            location,
+            approximateArea(zip),
+            zip,
+            lat,
+            lng,
+            startTime,
+            req.session.userId,
+            offer.provider_user_id,
+            offer.service_type || offer.title,
+            JSON.stringify({
+              serviceOfferId: String(offer.id),
+              requestTiming: timing,
+              requestSource: "service_offer",
+            }),
+          ],
+        );
+        jobId = jobResult.rows[0].id;
+
+        const directOfferResult = await client.query(
+          `INSERT INTO direct_offers
+            (job_id, service_offer_id, hirer_user_id, worker_user_id, initial_offer_amount, current_offer_amount,
+             category, job_summary, job_type, start_timing, estimated_minutes, location, zip, lat, lng, status, expires_at)
+           VALUES ($1,$2,$3,$4,$5,$5,$6,$7,'service_request',$8,$9,$10,$11,$12,$13,'sent',NOW() + INTERVAL '24 hours')
+           RETURNING id`,
+          [
+            jobId,
+            offer.id,
+            req.session.userId,
+            offer.provider_user_id,
+            budget,
+            offer.category,
+            `${offer.title}: ${scope}`,
+            timing,
+            estimatedMinutes,
+            location,
+            zip,
+            lat,
+            lng,
+          ],
+        );
+        directOfferId = directOfferResult.rows[0].id;
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      await pool.query(
+        "INSERT INTO audit_logs (user_id, action, details, ip_address) VALUES ($1,$2,$3,$4)",
+        [req.session.userId, "service_offer_requested", JSON.stringify({ serviceOfferId: offer.id, jobId, directOfferId }), req.ip],
+      );
+      await pool.query(
+        "INSERT INTO notifications (user_id, title, body, type, job_id) VALUES ($1,$2,$3,$4,$5)",
+        [offer.provider_user_id, "New Service Request", `You received a $${budget.toFixed(2)} request for ${offer.title}. Review the protected offer before accepting.`, "direct_offer", jobId],
+      );
+
+      res.status(201).json({ jobId, directOfferId, jobUrl: `/jobs/${jobId}` });
     } catch (error: any) {
-      res.status(500).json({ message: error.message || "Unable to start this request" });
+      res.status(400).json({ message: error.message || "Unable to create this service request" });
     }
   });
 

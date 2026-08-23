@@ -3,7 +3,7 @@ import { gpsGetCurrentPosition } from "@/lib/gps";
 import { triggerLiveCameraCapture } from "@/lib/native-camera-capture";
 import { ensureBackgroundLocation } from "@/lib/background-location";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
-import { useRoute } from "wouter";
+import { useRoute, useSearch } from "wouter";
 import { GuberLayout } from "@/components/guber-layout";
 import { useNavigationCover } from "@/components/navigation-launch-cover";
 import { useAuth } from "@/lib/auth-context";
@@ -142,6 +142,7 @@ function RefPhotoBlock({ url }: { url: string }) {
 
 export default function JobDetail() {
   const [, params] = useRoute("/jobs/:id");
+  const search = useSearch();
   const { user, acceptLiabilityDisclaimer, acceptingLiabilityDisclaimer } = useAuth();
   const { toast } = useToast();
   const showError = useErrorToast();
@@ -244,6 +245,8 @@ export default function JobDetail() {
   const [availableFrom, setAvailableFrom] = useState("");
   const [availableTo, setAvailableTo] = useState("");
   const [confirmedStartTime, setConfirmedStartTime] = useState("");
+  const [serviceActionNote, setServiceActionNote] = useState("");
+  const [serviceProofText, setServiceProofText] = useState("");
   
 
   useEffect(() => {
@@ -271,6 +274,79 @@ export default function JobDetail() {
     refetchInterval: 15000,
     refetchOnWindowFocus: true,
   });
+
+  const { data: directOffer } = useQuery<any | null>({
+    queryKey: ["/api/jobs", jobId, "direct-offer"],
+    enabled: !!jobId && (job as any)?.jobType === "service_request",
+    queryFn: async () => {
+      const [sent, received] = await Promise.all([
+        apiRequest("GET", "/api/direct-offers/sent").then((response) => response.json()),
+        apiRequest("GET", "/api/direct-offers/received").then((response) => response.json()),
+      ]);
+      return [...sent, ...received].find((offer: any) => offer.jobId === Number(jobId)) || null;
+    },
+    refetchInterval: 15000,
+  });
+
+  const refreshDirectOffer = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
+    queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "direct-offer"] });
+  };
+
+  const directOfferMutation = useMutation({
+    mutationFn: async ({ action, counterPct, note }: {
+      action: "accept" | "approve-counter" | "decline" | "counter" | "pay" | "start" | "begin-work" | "submit-proof" | "confirm-complete" | "cancel" | "dispute";
+      counterPct?: number;
+      note?: string;
+    }) => {
+      if (!directOffer) throw new Error("Service request is not available.");
+      if (action === "pay") {
+        const response = await apiRequest("POST", `/api/direct-offers/${directOffer.id}/create-payment`);
+        return { action, ...(await response.json()) };
+      }
+      const method = ["submit-proof", "confirm-complete", "cancel", "dispute"].includes(action) ? "POST" : "PATCH";
+      const payload = action === "counter" ? { counterPct }
+        : action === "submit-proof" ? { proofText: note }
+        : action === "cancel" ? { reasonCode: "other", freeText: note || "Cancelled from protected service request" }
+        : action === "dispute" ? { reason: "service_request_issue", description: note || "Dispute filed from protected service request" }
+        : undefined;
+      const response = await apiRequest(method, `/api/direct-offers/${directOffer.id}/${action}`, payload);
+      return { action, ...(await response.json()) };
+    },
+    onSuccess: (result) => {
+      if (result.action === "pay" && result.checkoutUrl) {
+        window.location.assign(result.checkoutUrl);
+        return;
+      }
+      refreshDirectOffer();
+      const messages: Record<string, { title: string; description?: string }> = {
+        accept: { title: "Request accepted", description: "The hirer can now authorize payment in GUBER." },
+        "approve-counter": { title: "Counter approved", description: "Authorize payment to keep this protected request moving." },
+        decline: { title: "Request declined" },
+        counter: { title: "Counter offer sent" },
+        start: { title: "Service started" },
+        "begin-work": { title: "Work started" },
+        "submit-proof": { title: "Completion proof submitted" },
+        "confirm-complete": { title: "Completion confirmed", description: "Payout has been released through the protected offer." },
+        cancel: { title: "Protected request cancelled" },
+        dispute: { title: "Dispute filed", description: "GUBER will review the protected offer." },
+      };
+      toast(messages[result.action] || { title: "Protected request updated" });
+    },
+    onError: (error: Error) => showError(error, "Service Request"),
+  });
+
+  useEffect(() => {
+    const sessionId = new URLSearchParams(search).get("payment_session_id");
+    if (!sessionId || !directOffer || !["agreed_payment_pending", "payment_pending"].includes(directOffer.status)) return;
+    apiRequest("POST", `/api/direct-offers/${directOffer.id}/confirm-payment`, { sessionId })
+      .then(() => {
+        window.history.replaceState({}, "", `/jobs/${jobId}`);
+        refreshDirectOffer();
+        toast({ title: "Payment confirmed", description: "Your protected service job is now funded." });
+      })
+      .catch((error: Error) => showError(error, "Payment Confirmation"));
+  }, [directOffer, jobId, search]);
 
   const { data: poster } = useQuery<UserType>({
     queryKey: ["/api/users", String(job?.postedById)],
@@ -572,13 +648,17 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const lockSessionId = params.get("lock_session_id");
-    if (lockSessionId && jobId) {
+    if (lockSessionId && jobId && (job as any)?.jobType !== "service_request") {
       confirmLockMutation.mutate(lockSessionId);
     }
-  }, [jobId]);
+  }, [jobId, job]);
 
   const confirmMutation = useMutation({
     mutationFn: async () => {
+      if ((job as any)?.jobType === "service_request" && directOffer) {
+        const resp = await apiRequest("POST", `/api/direct-offers/${directOffer.id}/confirm-complete`);
+        return resp.json();
+      }
       const resp = await apiRequest("POST", `/api/jobs/${jobId}/confirm`);
       return resp.json();
     },
@@ -683,6 +763,13 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
   const reportIssueMutation = useMutation({
     mutationFn: async () => {
+      if ((job as any)?.jobType === "service_request" && directOffer) {
+        const resp = await apiRequest("POST", `/api/direct-offers/${directOffer.id}/dispute`, {
+          reason: reportIssueType || "service_request_issue",
+          description: reportIssueNotes || "Dispute filed from protected service request",
+        });
+        return resp.json();
+      }
       const resp = await apiRequest("POST", `/api/jobs/${jobId}/dispute`, {
         issueType: reportIssueType,
         notes: reportIssueNotes,
@@ -723,6 +810,13 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
   const posterCancelMutation = useMutation({
     mutationFn: async () => {
+      if ((job as any)?.jobType === "service_request" && directOffer) {
+        const resp = await apiRequest("POST", `/api/direct-offers/${directOffer.id}/cancel`, {
+          reasonCode: "other",
+          freeText: posterCancelReason + (posterCancelNote ? ` — ${posterCancelNote}` : ""),
+        });
+        return resp.json();
+      }
       const resp = await apiRequest("POST", `/api/jobs/${jobId}/cancel/poster`, {
         note: posterCancelReason + (posterCancelNote ? ` — ${posterCancelNote}` : ""),
       });
@@ -751,6 +845,16 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       // first transition into "on the way" / "start work".
       safetyConfirmed?: boolean;
     }) => {
+      if ((job as any)?.jobType === "service_request" && directOffer) {
+        if (data.statusType === "cancelled") {
+          const resp = await apiRequest("POST", `/api/direct-offers/${directOffer.id}/cancel`, {
+            reasonCode: "other",
+            freeText: data.cancelNotes || data.cancelReason || "Cancelled from protected service request",
+          });
+          return resp.json();
+        }
+        throw new Error("Protected service requests use the direct-offer lifecycle controls.");
+      }
       const resp = await apiRequest("POST", `/api/jobs/${jobId}/milestone`, data);
       return resp.json();
     },
@@ -1094,6 +1198,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
   }, [jobId]);
   useEffect(() => {
     if (actionFiredRef.current === String(jobId) || !job || !user) return;
+    if ((job as any).jobType === "service_request") return;
     const params = new URLSearchParams(window.location.search);
     const action = params.get("action");
     if (action !== "on_the_way" && action !== "release") return;
@@ -1141,6 +1246,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
   const isOwner = user?.id === job.postedById;
   const isHelper = user?.id === job.assignedHelperId;
+  const isServiceRequest = (job as any).jobType === "service_request";
   const isLockedOrBeyond = ["funded", "active", "in_progress", "completion_submitted", "completed_paid", "proof_submitted"].includes(job.status);
   const isVIJob = job.category === "Verify & Inspect";
   // Liability protection (Task #318): same shared resolver as post-job
@@ -1153,14 +1259,14 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
   });
   const isBountyJob = !!(job as any).isBounty;
   const isPAVJob = isBountyJob && isVIJob;
-  const showClipboard = isHelper && ["funded", "active", "in_progress", "proof_submitted"].includes(job.status);
-  const showProofReview = isOwner && (job.status === "proof_submitted" || (job.proofStatus === "submitted" && job.status === "in_progress"));
+  const showClipboard = !isServiceRequest && isHelper && ["funded", "active", "in_progress", "proof_submitted"].includes(job.status);
+  const showProofReview = !isServiceRequest && isOwner && (job.status === "proof_submitted" || (job.proofStatus === "submitted" && job.status === "in_progress"));
 
-  const isActiveJob = isHelper && ["funded", "active", "in_progress"].includes(job.status);
+  const isActiveJob = !isServiceRequest && isHelper && ["funded", "active", "in_progress"].includes(job.status);
   const helperStage = (job as any).helperStage as string | null;
   const showOnMyWay = isActiveJob && !helperStage;
   const showArrived = isActiveJob && helperStage === "on_the_way";
-  const canEditDelete = isOwner && ["posted_public", "draft"].includes(job.status);
+  const canEditDelete = !isServiceRequest && isOwner && ["posted_public", "draft"].includes(job.status);
 
   return (
     <GuberLayout>
@@ -1575,7 +1681,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             </div>
           )}
 
-          {isOwner && ["accepted_pending_payment", "funded", "active", "in_progress"].includes(job.status) && (
+          {!isServiceRequest && isOwner && ["accepted_pending_payment", "funded", "active", "in_progress"].includes(job.status) && (
             <div className="pt-2">
               <Button
                 variant="outline"
@@ -1592,7 +1698,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         {/* Phase-2 structured no-chat scheduling panel. Only renders for the
             poster + assigned worker once the worker has accepted (i.e. the
             backend has set scheduleStatus). Branches by status + viewer role. */}
-        {(isOwner || isHelper) && (
+        {!isServiceRequest && (isOwner || isHelper) && (
           <SchedulingPanel job={job as any} viewerId={user?.id} />
         )}
 
@@ -2471,6 +2577,69 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         )}
 
         <div className="space-y-3">
+          {isServiceRequest && directOffer && (
+            <div className="rounded-2xl border border-primary/30 bg-primary/[0.05] p-4 space-y-3" data-testid="card-service-request-lifecycle">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-display font-black tracking-[0.18em] text-primary">PROTECTED SERVICE REQUEST</p>
+                  <p className="text-sm font-display font-bold mt-1">${directOffer.currentOfferAmount.toFixed(2)} · {directOffer.startTiming}</p>
+                </div>
+                <Badge variant="outline" className="border-primary/30 text-primary">{String(directOffer.status).replaceAll("_", " ")}</Badge>
+              </div>
+              {isHelper && !directOffer.fundedAt && <p className="text-xs text-muted-foreground">The hirer’s exact address and direct contact are protected until payment is funded.</p>}
+              {["sent", "countered_by_hirer"].includes(directOffer.status) && isHelper && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button onClick={() => directOfferMutation.mutate({ action: "accept" })} disabled={directOfferMutation.isPending} className="h-11 font-display" data-testid="button-accept-service-request"><CheckCircle className="w-4 h-4 mr-1.5" /> Accept</Button>
+                  <Button onClick={() => directOfferMutation.mutate({ action: "decline" })} disabled={directOfferMutation.isPending} variant="outline" className="h-11 border-destructive/40 text-destructive" data-testid="button-decline-service-request">Decline</Button>
+                  {[5, 10, 15].map((counterPct) => <Button key={counterPct} onClick={() => directOfferMutation.mutate({ action: "counter", counterPct })} disabled={directOfferMutation.isPending} variant="outline" className={counterPct === 5 ? "col-span-2 h-10" : "h-10"}>Counter +{counterPct}%</Button>)}
+                </div>
+              )}
+              {["countered_by_worker", "countered_by_hirer"].includes(directOffer.status) && (
+                <p className="text-xs text-muted-foreground">{directOffer.lastCounterBy === "worker" ? "Provider" : "Hirer"} countered at ${directOffer.currentOfferAmount.toFixed(2)}. The other party can respond in the protected offer flow.</p>
+              )}
+              {isOwner && directOffer.status === "countered_by_worker" && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button onClick={() => directOfferMutation.mutate({ action: "approve-counter" })} disabled={directOfferMutation.isPending} className="h-11 font-display" data-testid="button-approve-service-counter"><CheckCircle className="w-4 h-4 mr-1.5" /> Approve counter</Button>
+                  <Button onClick={() => directOfferMutation.mutate({ action: "decline" })} disabled={directOfferMutation.isPending} variant="outline" className="h-11 border-destructive/40 text-destructive" data-testid="button-decline-service-counter">Decline</Button>
+                  {[5, 10, 15].map((counterPct) => <Button key={counterPct} onClick={() => directOfferMutation.mutate({ action: "counter", counterPct })} disabled={directOfferMutation.isPending} variant="outline" className={counterPct === 5 ? "col-span-2 h-10" : "h-10"}>Counter +{counterPct}%</Button>)}
+                </div>
+              )}
+              {isOwner && directOffer.status === "agreed_payment_pending" && (
+                <Button onClick={() => directOfferMutation.mutate({ action: "pay" })} disabled={directOfferMutation.isPending} className="w-full h-11 font-display" data-testid="button-pay-service-request"><Lock className="w-4 h-4 mr-2" /> Authorize protected payment</Button>
+              )}
+              {isOwner && directOffer.status === "funded" && (
+                <Button onClick={() => directOfferMutation.mutate({ action: "start" })} disabled={directOfferMutation.isPending} className="w-full h-11 font-display" data-testid="button-start-service-request"><CheckCircle className="w-4 h-4 mr-2" /> Start protected service</Button>
+              )}
+              {isHelper && directOffer.status === "active" && (
+                <Button onClick={() => directOfferMutation.mutate({ action: "begin-work" })} disabled={directOfferMutation.isPending} className="w-full h-11 font-display" data-testid="button-begin-service-work">Begin work</Button>
+              )}
+              {isHelper && directOffer.status === "in_progress" && (
+                <div className="space-y-2">
+                  <Textarea value={serviceProofText} onChange={(event) => setServiceProofText(event.target.value)} placeholder="Describe the completed work and any proof the hirer should review." className="min-h-20 bg-background" maxLength={1500} data-testid="textarea-service-proof" />
+                  <Button onClick={() => directOfferMutation.mutate({ action: "submit-proof", note: serviceProofText })} disabled={directOfferMutation.isPending || !serviceProofText.trim()} className="w-full h-11 font-display" data-testid="button-submit-service-proof">Submit completion proof</Button>
+                </div>
+              )}
+              {isOwner && directOffer.status === "proof_submitted" && (
+                <div className="space-y-2">
+                  {directOffer.proofText && <p className="rounded-xl bg-background/70 p-3 text-xs leading-relaxed">{directOffer.proofText}</p>}
+                  <Button onClick={() => directOfferMutation.mutate({ action: "confirm-complete" })} disabled={directOfferMutation.isPending} className="w-full h-11 font-display" data-testid="button-confirm-service-complete"><CheckCircle className="w-4 h-4 mr-2" /> Confirm work and release payout</Button>
+                </div>
+              )}
+              {["funded", "active", "in_progress", "proof_submitted"].includes(directOffer.status) && (
+                <div className="space-y-2 border-t border-primary/15 pt-3">
+                  <Textarea value={serviceActionNote} onChange={(event) => setServiceActionNote(event.target.value)} placeholder="Optional note for cancellation or a dispute" className="min-h-16 bg-background" maxLength={1000} data-testid="textarea-service-action-note" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button onClick={() => directOfferMutation.mutate({ action: "dispute", note: serviceActionNote })} disabled={directOfferMutation.isPending} variant="outline" className="border-amber-500/40 text-amber-600 dark:text-amber-400" data-testid="button-dispute-service-request">Open dispute</Button>
+                    <Button onClick={() => directOfferMutation.mutate({ action: "cancel", note: serviceActionNote })} disabled={directOfferMutation.isPending} variant="outline" className="border-destructive/40 text-destructive" data-testid="button-cancel-service-request">Cancel request</Button>
+                  </div>
+                </div>
+              )}
+              {isOwner && directOffer.status === "sent" && <p className="text-xs text-muted-foreground">Waiting for the selected provider to respond. Your service request is private and cannot be picked up by anyone else.</p>}
+              {isOwner && directOffer.status === "countered_by_hirer" && <p className="text-xs text-muted-foreground">Waiting for the provider to respond to your counter.</p>}
+              {directOffer.status === "declined" && <p className="text-xs text-muted-foreground">This request was declined. No payment was authorized and your job remains private.</p>}
+            </div>
+          )}
+
           {job.status === "posted_public" && !isOwner && acceptMutation.error?.message === "STRIPE_CONNECT_REQUIRED" && (
             <div className="bg-card border border-emerald-500/30 rounded-2xl p-5 mb-4 animate-in fade-in slide-in-from-top-4" data-testid="card-stripe-setup-required">
               <div className="flex items-start gap-4">
@@ -2517,7 +2686,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             </>
           )}
 
-          {job.status === "accepted_pending_payment" && isOwner && (
+          {job.status === "accepted_pending_payment" && isOwner && !isServiceRequest && (
             <div className="space-y-3">
               {assignedWorker && (
                 <div className="bg-card rounded-xl border border-yellow-500/20 p-4" data-testid="card-who-accepted">
@@ -2739,7 +2908,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             );
           })()}
 
-          {["in_progress", "active", "funded"].includes(job.status) && isHelper && !job.proofRequired && job.proofStatus !== "rejected" && (
+          {!isServiceRequest && ["in_progress", "active", "funded"].includes(job.status) && isHelper && !job.proofRequired && job.proofStatus !== "rejected" && (
             (job as any).helperConfirmed ? (
               <div className="bg-card rounded-2xl border border-amber-500/20 p-4 text-center" data-testid="card-helper-waiting-buyer">
                 <Clock className="w-5 h-5 text-amber-400 mx-auto mb-2" />
@@ -2761,7 +2930,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             )
           )}
 
-          {job.status === "disputed" && isHelper && (() => {
+          {!isServiceRequest && job.status === "disputed" && isHelper && (() => {
             const deadlineMs = job.helperResponseDeadline ? new Date(job.helperResponseDeadline).getTime() : 0;
             const deadlinePassed = deadlineMs > 0 && Date.now() > deadlineMs;
             const hasResponse = !!job.helperResponse || !!job.helperResponseAt;
@@ -2896,7 +3065,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             );
           })()}
 
-          {["in_progress", "active", "funded", "completion_submitted"].includes(job.status) && isOwner && !(job as any).buyerConfirmed && job.proofStatus !== "rejected" && (
+          {!isServiceRequest && ["in_progress", "active", "funded", "completion_submitted"].includes(job.status) && isOwner && !(job as any).buyerConfirmed && job.proofStatus !== "rejected" && (
             (job as any).helperConfirmed ? (
               <div className="space-y-3" data-testid="panel-poster-review">
                 <div className="rounded-2xl border border-border/30 bg-card/60 p-4">

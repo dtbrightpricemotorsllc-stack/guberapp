@@ -143,6 +143,18 @@ export function sanitizeJobForPublic(
   // fields (so a worker can't see how high the budget will climb if they stall).
   if (isHelper) {
     const stripped = stripPosterOnlyFields(publicJob);
+    // A provider can open their pending service request to negotiate it, but
+    // must not receive the hirer's exact address until the direct offer is
+    // funded. The normal locked-status path restores the protected location.
+    if (job.jobType === "service_request" && !isLocked) {
+      return {
+        ...stripped,
+        location: job.locationApprox || "Approximate location",
+        zip: undefined,
+        lat: fuzzCoordinate(job.lat, job.id, "lat"),
+        lng: fuzzCoordinate(job.lng, job.id, "lng"),
+      };
+    }
     if (isLocked) return stripped;
     return {
       ...stripped,

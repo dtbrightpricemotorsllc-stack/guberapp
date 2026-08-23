@@ -157,6 +157,49 @@ async function notify(
   }).catch(() => {});
 }
 
+/**
+ * A direct offer can exist without a job in legacy flows. Provider-specific
+ * service requests create both records, so keep the linked job in the same
+ * protected lifecycle without changing how legacy direct offers behave.
+ */
+async function syncLinkedDirectOfferJob(
+  offer: { jobId?: number | null; currentOfferAmount: number; stripePaymentIntentId?: string | null },
+  status: "accepted" | "declined" | "funded" | "active" | "in_progress" | "proof_submitted" | "completed" | "canceled" | "refunded" | "disputed" | "countered",
+) {
+  if (!offer.jobId) return;
+
+  const lifecycleUpdate: Record<typeof status, Record<string, unknown>> = {
+    accepted: { status: "accepted_pending_payment", budget: offer.currentOfferAmount, finalPrice: offer.currentOfferAmount },
+    declined: { status: "cancelled" },
+    funded: {
+      status: "funded",
+      isPaid: true,
+      budget: offer.currentOfferAmount,
+      finalPrice: offer.currentOfferAmount,
+      paymentAuthorized: true,
+      stripePaymentIntentId: offer.stripePaymentIntentId || null,
+    },
+    active: { status: "active" },
+    in_progress: { status: "in_progress" },
+    proof_submitted: { status: "proof_submitted" },
+    completed: { status: "completed_paid" },
+    canceled: { status: "cancelled" },
+    // A refunded offer must never leave its linked job looking funded: job
+    // consumers use these fields to decide whether protected details unlock.
+    refunded: {
+      status: "cancelled",
+      isPaid: false,
+      paymentAuthorized: false,
+      stripePaymentIntentId: null,
+      payoutStatus: "refunded",
+    },
+    disputed: { status: "disputed" },
+    countered: { budget: offer.currentOfferAmount, finalPrice: offer.currentOfferAmount },
+  };
+
+  await storage.updateJob(offer.jobId, lifecycleUpdate[status] as any);
+}
+
 const stripe = new Stripe(process.env.STRIPE_CONNECT_SECRET_KEY!, { apiVersion: "2025-01-27.acacia" as any });
 const stripeMain = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-01-27.acacia" as any });
 
@@ -867,6 +910,34 @@ export async function registerRoutes(
     }
     next();
   }
+
+  // Provider-specific service requests use the direct-offer state machine as
+  // their only lifecycle and payment authority. Never let a caller bypass it
+  // by hitting an older /api/jobs mutation directly: that would leave the
+  // linked job and offer disagreeing about funding, assignment, or protection.
+  app.use("/api/jobs/:id", async (req: Request, res: Response, next: Function) => {
+    if (!req.session.userId) return next();
+    const jobId = Number(req.params.id);
+    if (!Number.isInteger(jobId) || jobId <= 0) return next();
+    try {
+      const job = await storage.getJob(jobId);
+      if ((job as any)?.jobType !== "service_request") return next();
+      const isParticipant = req.session.userId === job.postedById || req.session.userId === job.assignedHelperId;
+      const isAdmin = (req as any).currentUser?.role === "admin";
+      // This applies to every linked-job subresource too (proof, payout,
+      // location, etc.), not only the main detail route.
+      if (!isParticipant && !isAdmin) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+      return res.status(409).json({
+        message: "This provider-specific service request must use its protected direct-offer flow.",
+        code: "SERVICE_REQUEST_DIRECT_OFFER_REQUIRED",
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
 
   async function requireAdmin(req: Request, res: Response, next: Function) {
     if (!req.session.userId) {
@@ -5594,7 +5665,7 @@ export async function registerRoutes(
         } else if (metadata?.type === "direct_offer_payment" && metadata?.offerId) {
           const offerId = parseInt(metadata.offerId);
           const offer = await storage.getDirectOffer(offerId);
-          if (offer && (offer.status === "agreed_payment_pending" || offer.status === "payment_pending" || offer.status === "funded")) {
+          if (offer && (offer.status === "agreed_payment_pending" || offer.status === "payment_pending" || offer.status === "expired_unpaid" || offer.status === "funded")) {
             if (!offer.fundedAt) {
               const feeConfig = await getActiveFeeConfig();
               const offerAmount = offer.currentOfferAmount;
@@ -5611,16 +5682,17 @@ export async function registerRoutes(
               }
 
               const now = new Date();
-              await storage.updateDirectOffer(offerId, {
+              const fundedOffer = await storage.updateDirectOffer(offerId, {
                 status: "funded",
                 paidAt: now,
                 fundedAt: now,
                 stripePaymentIntentId: paymentIntentId,
               });
+              await syncLinkedDirectOfferJob(fundedOffer!, "funded");
 
               const payment = await storage.createGuberPayment({
                 offerId,
-                jobId: offer.jobId || null,
+                jobId: offer.jobId ?? undefined,
                 payerUserId: offer.hirerUserId,
                 payeeUserId: offer.workerUserId,
                 grossAmount: grossCharge,
@@ -5637,7 +5709,7 @@ export async function registerRoutes(
 
               await storage.createMoneyLedgerEntry({
                 paymentId: payment.id,
-                jobId: offer.jobId || null,
+                jobId: offer.jobId ?? undefined,
                 userIdOwner: offer.hirerUserId,
                 userIdCounterparty: offer.workerUserId,
                 ledgerType: "offer_funded",
@@ -5673,13 +5745,13 @@ export async function registerRoutes(
                 title: "Offer Funded!",
                 body: `Payment of $${offerAmount.toFixed(2)} confirmed. Full job details are now unlocked.`,
                 type: "offer_funded",
-                jobId: null,
+                jobId: offer.jobId ?? undefined,
               });
               await notify(offer.hirerUserId, {
                 title: "Payment Confirmed",
                 body: `$${grossCharge.toFixed(2)} charged. Worker details unlocked. Job is now active.`,
                 type: "offer_funded",
-                jobId: null,
+                jobId: offer.jobId ?? undefined,
               });
               console.log(`[GUBER][webhook/connect] direct_offer_payment: offer ${offerId} → funded, payment #${payment.id}`);
             } else {
@@ -9095,6 +9167,12 @@ export async function registerRoutes(
       const isOwner = req.session.userId === job.postedById;
       const isHelper = req.session.userId === job.assignedHelperId;
       const isAdmin = await viewerIsAdmin(req);
+      // A provider-specific request is never discoverable: even an
+      // allowlisted account may not view it unless it is the hirer, selected
+      // provider, or an administrator. This remains true after funding.
+      if (job.jobType === "service_request" && !isOwner && !isHelper && !isAdmin) {
+        return res.status(404).json({ message: "Job not found" });
+      }
       // Allowlist visibility (task-462): hide allowlist jobs from non-listed
       // viewers (helpers + owner + admin always pass).
       const { canViewItem } = await import("./visibility.js");
@@ -29655,7 +29733,7 @@ OUTPUT STYLE:
       const offers = await storage.getDirectOffersByWorker(req.session!.userId!);
       const sanitized = offers.map(o => {
         if (!o.fundedAt) {
-          return { ...o, hirerUserId: undefined, location: undefined };
+          return { ...o, hirerUserId: undefined, location: undefined, zip: undefined, lat: undefined, lng: undefined };
         }
         return o;
       });
@@ -29689,6 +29767,9 @@ OUTPUT STYLE:
           } : null;
           responseData.hirerUserId = undefined;
           responseData.location = undefined;
+          responseData.zip = undefined;
+          responseData.lat = undefined;
+          responseData.lng = undefined;
         }
       } else {
         if (userId === offer.workerUserId) {
@@ -29764,6 +29845,7 @@ OUTPUT STYLE:
       else updateData.counterCountHirer = (offer.counterCountHirer || 0) + 1;
 
       const updated = await storage.updateDirectOffer(offerId, updateData);
+      await syncLinkedDirectOfferJob(updated!, "countered");
 
       const otherUserId = isWorker ? offer.hirerUserId : offer.workerUserId;
       await storage.createNotification({
@@ -29787,7 +29869,10 @@ OUTPUT STYLE:
       const offer = await storage.getDirectOffer(offerId);
       if (!offer) return res.status(404).json({ message: "Offer not found" });
       if (offer.workerUserId !== userId) return res.status(403).json({ message: "Only the worker can accept" });
-      const acceptableStatuses = ["sent", "countered_by_worker", "countered_by_hirer"];
+      // A provider's own counter requires the hirer's explicit approval via
+      // approve-counter. The worker may only accept the original request or a
+      // counter sent back by the hirer.
+      const acceptableStatuses = ["sent", "countered_by_hirer"];
       if (!acceptableStatuses.includes(offer.status)) return res.status(400).json({ message: "Offer cannot be accepted in current state" });
       if (new Date() > offer.expiresAt) return res.status(400).json({ message: "Offer has expired" });
 
@@ -29796,13 +29881,47 @@ OUTPUT STYLE:
         acceptedAt: new Date(),
         agreedAt: new Date(),
       });
+      await syncLinkedDirectOfferJob(updated!, "accepted");
 
       await storage.createNotification({
         userId: offer.hirerUserId,
         title: "Offer Accepted",
         body: `Worker accepted your $${offer.currentOfferAmount.toFixed(2)} offer. Complete payment to confirm.`,
         type: "offer_accepted",
-        jobId: null,
+        jobId: offer.jobId || null,
+      });
+
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // A worker counter is not a new offer that requires a separate checkout.
+  // The hirer explicitly approves it here, then follows the same protected
+  // payment-authorization path as an initially accepted offer.
+  app.patch("/api/direct-offers/:id/approve-counter", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const offerId = parseInt(req.params.id);
+      const userId = req.session!.userId!;
+      const offer = await storage.getDirectOffer(offerId);
+      if (!offer) return res.status(404).json({ message: "Offer not found" });
+      if (offer.hirerUserId !== userId) return res.status(403).json({ message: "Only the hirer can approve a provider counter" });
+      if (offer.status !== "countered_by_worker") return res.status(400).json({ message: "There is no provider counter awaiting approval" });
+      if (new Date() > offer.expiresAt) return res.status(400).json({ message: "Offer has expired" });
+
+      const updated = await storage.updateDirectOffer(offerId, {
+        status: "agreed_payment_pending",
+        agreedAt: new Date(),
+      });
+      await syncLinkedDirectOfferJob(updated!, "accepted");
+
+      await storage.createNotification({
+        userId: offer.workerUserId,
+        title: "Counter Approved",
+        body: `The hirer approved your $${offer.currentOfferAmount.toFixed(2)} counter. Payment authorization is next.`,
+        type: "offer_accepted",
+        jobId: offer.jobId || null,
       });
 
       res.json(updated);
@@ -29827,6 +29946,7 @@ OUTPUT STYLE:
         status: "declined",
         declinedAt: new Date(),
       });
+      await syncLinkedDirectOfferJob(updated!, "declined");
 
       const otherUserId = userId === offer.workerUserId ? offer.hirerUserId : offer.workerUserId;
       await storage.createNotification({
@@ -29834,7 +29954,7 @@ OUTPUT STYLE:
         title: "Offer Declined",
         body: `The offer for $${offer.currentOfferAmount.toFixed(2)} was declined.`,
         type: "offer_declined",
-        jobId: null,
+        jobId: offer.jobId || null,
       });
 
       res.json(updated);
@@ -29925,8 +30045,10 @@ OUTPUT STYLE:
             jobSummary: offer.jobSummary.substring(0, 200),
           },
         },
-        success_url: `${baseUrl}/direct-offers/${offerId}?payment_session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${baseUrl}/direct-offers/${offerId}`,
+        success_url: offer.jobId
+          ? `${baseUrl}/jobs/${offer.jobId}?payment_session_id={CHECKOUT_SESSION_ID}`
+          : `${baseUrl}/direct-offers/${offerId}?payment_session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: offer.jobId ? `${baseUrl}/jobs/${offer.jobId}` : `${baseUrl}/direct-offers/${offerId}`,
         metadata: {
           offerId: String(offerId),
           hirerUserId: String(userId),
@@ -29999,6 +30121,7 @@ OUTPUT STYLE:
         fundedAt: now,
         stripePaymentIntentId: paymentIntentId,
       });
+      await syncLinkedDirectOfferJob(updated!, "funded");
 
       const payment = await storage.createGuberPayment({
         offerId,
@@ -30069,7 +30192,7 @@ OUTPUT STYLE:
         title: "Offer Funded!",
         body: `Payment of $${offerAmount.toFixed(2)} confirmed. Full job details are now unlocked.`,
         type: "offer_funded",
-        jobId: null,
+        jobId: offer.jobId || null,
       });
 
       await storage.createNotification({
@@ -30077,7 +30200,7 @@ OUTPUT STYLE:
         title: "Payment Confirmed",
         body: `$${grossCharge.toFixed(2)} charged. Worker details unlocked. Job is now active.`,
         type: "offer_funded",
-        jobId: null,
+        jobId: offer.jobId || null,
       });
 
       console.log(`[GUBER] Direct offer #${offerId} FUNDED — payment #${payment.id}, PI=${paymentIntentId}, gross=$${grossCharge}, worker=$${workerShare}`);
@@ -30220,6 +30343,8 @@ OUTPUT STYLE:
         canceledAt: now,
         cancelReasonCode: reasonCode,
       });
+      const wasFunded = ["funded", "active", "in_progress", "proof_submitted"].includes(offer.status);
+      await syncLinkedDirectOfferJob(updated!, wasFunded ? "refunded" : "canceled");
 
       const existingPayment = await storage.getGuberPaymentByOffer(offerId);
       await storage.createCancellationLogEntry({
@@ -30258,7 +30383,7 @@ OUTPUT STYLE:
         title: "Offer Canceled",
         body: `The direct offer for $${offer.currentOfferAmount.toFixed(2)} was canceled${offer.fundedAt ? " — refund initiated" : ""}.`,
         type: "offer_canceled",
-        jobId: null,
+        jobId: offer.jobId || null,
       });
 
       console.log(`[GUBER] Direct offer #${offerId} CANCELED by ${canceledByRole} (userId=${userId}), reason=${reasonCode}`);
@@ -30324,13 +30449,14 @@ OUTPUT STYLE:
         status: "active",
         activatedAt: new Date(),
       });
+      await syncLinkedDirectOfferJob(updated!, "active");
 
       await storage.createNotification({
         userId: offer.workerUserId,
         title: "Job Started",
         body: `The hirer has started the job. You can now begin work.`,
         type: "direct_offer",
-        jobId: null,
+        jobId: offer.jobId || null,
       });
 
       res.json(updated);
@@ -30352,13 +30478,14 @@ OUTPUT STYLE:
         status: "in_progress",
         inProgressAt: new Date(),
       });
+      await syncLinkedDirectOfferJob(updated!, "in_progress");
 
       await storage.createNotification({
         userId: offer.hirerUserId,
         title: "Worker Started",
         body: `The worker has begun working on your job.`,
         type: "direct_offer",
-        jobId: null,
+        jobId: offer.jobId || null,
       });
 
       res.json(updated);
@@ -30386,13 +30513,14 @@ OUTPUT STYLE:
         proofPhotos: proofPhotos || null,
         proofSubmittedAt: new Date(),
       });
+      await syncLinkedDirectOfferJob(updated!, "proof_submitted");
 
       await storage.createNotification({
         userId: offer.hirerUserId,
         title: "Proof of Completion",
         body: `The worker has submitted proof of completion. Please review and confirm.`,
         type: "direct_offer",
-        jobId: null,
+        jobId: offer.jobId || null,
       });
 
       res.json(updated);
@@ -30449,13 +30577,14 @@ OUTPUT STYLE:
         status: "completed",
         completedAt: now,
       });
+      await syncLinkedDirectOfferJob(updated!, "completed");
 
       await storage.createNotification({
         userId: offer.workerUserId,
         title: "Job Completed",
         body: `The hirer confirmed completion. Payment of $${(existingPayment?.netToWorker || offer.currentOfferAmount).toFixed(2)} has been released.`,
         type: "direct_offer",
-        jobId: null,
+        jobId: offer.jobId || null,
       });
 
       res.json(updated);
@@ -30494,10 +30623,11 @@ OUTPUT STYLE:
         status: "open",
       });
 
-      await storage.updateDirectOffer(offerId, {
+      const updated = await storage.updateDirectOffer(offerId, {
         status: "disputed",
         disputeId: dispute.id,
       });
+      await syncLinkedDirectOfferJob(updated!, "disputed");
 
       const otherUserId = filedByRole === "hirer" ? offer.workerUserId : offer.hirerUserId;
       await storage.createNotification({
@@ -30505,7 +30635,7 @@ OUTPUT STYLE:
         title: "Dispute Filed",
         body: `A dispute has been filed on offer #${offerId}. An admin will review.`,
         type: "dispute",
-        jobId: null,
+        jobId: offer.jobId || null,
       });
 
       res.json(dispute);
@@ -30644,20 +30774,21 @@ OUTPUT STYLE:
         status: "resolved",
         resolvedAt: now,
       });
+      await syncLinkedDirectOfferJob(updated!, finalOutcome === "full_refund" ? "refunded" : "completed");
 
       await storage.createNotification({
         userId: offer.hirerUserId,
         title: "Dispute Resolved",
         body: `The dispute on offer #${offerId} has been resolved: ${resolution}`,
         type: "dispute",
-        jobId: null,
+        jobId: offer.jobId || null,
       });
       await storage.createNotification({
         userId: offer.workerUserId,
         title: "Dispute Resolved",
         body: `The dispute on offer #${offerId} has been resolved: ${resolution}`,
         type: "dispute",
-        jobId: null,
+        jobId: offer.jobId || null,
       });
 
       res.json(updated);
@@ -30676,7 +30807,29 @@ OUTPUT STYLE:
       for (const offer of expired) {
         const paymentStatuses = ["agreed_payment_pending", "payment_pending"];
         const newStatus = paymentStatuses.includes(offer.status) ? "expired_unpaid" : "expired_unanswered";
-        await storage.updateDirectOffer(offer.id, { status: newStatus });
+        // Payment Pending means a Stripe Checkout session may be completing at
+        // this exact moment. Never mark it expired until the session is known
+        // to be open and has been closed; a completed payment is reconciled by
+        // the webhook (which also accepts a prior expired_unpaid state).
+        if (offer.status === "payment_pending" && offer.stripeSessionId) {
+          try {
+            const checkoutSession = await stripe.checkout.sessions.retrieve(offer.stripeSessionId);
+            if (checkoutSession.status === "complete" || checkoutSession.payment_status === "paid") {
+              console.warn(`[cron] Offer #${offer.id} checkout completed during expiry sweep; leaving it for payment reconciliation.`);
+              continue;
+            }
+            if (checkoutSession.status === "open") {
+              await stripe.checkout.sessions.expire(offer.stripeSessionId);
+            }
+          } catch (checkoutError: any) {
+            // A completed session can win the race after retrieve but before
+            // expire. Leave it pending rather than falsely expiring a payment.
+            console.warn(`[cron] Could not safely expire Checkout for offer #${offer.id}; retrying next sweep:`, checkoutError.message);
+            continue;
+          }
+        }
+        const expiredOffer = await storage.updateDirectOffer(offer.id, { status: newStatus });
+        await syncLinkedDirectOfferJob(expiredOffer!, "canceled");
         await storage.createNotification({
           userId: offer.workerUserId,
           title: "Offer Expired",
@@ -30684,7 +30837,7 @@ OUTPUT STYLE:
             ? "An accepted offer expired because payment was not completed in time."
             : "A job offer expired before a response was received.",
           type: "offer_expired",
-          jobId: null,
+          jobId: offer.jobId || null,
         });
         await storage.createNotification({
           userId: offer.hirerUserId,
@@ -30693,7 +30846,7 @@ OUTPUT STYLE:
             ? "Your accepted offer expired because payment was not completed within the 60-minute window."
             : "Your job offer expired without a response.",
           type: "offer_expired",
-          jobId: null,
+          jobId: offer.jobId || null,
         });
       }
 
@@ -30746,21 +30899,22 @@ OUTPUT STYLE:
               eventTime: now,
             });
 
-            await storage.updateDirectOffer(offer.id, { status: "resolved", resolvedAt: now });
+            const resolvedOffer = await storage.updateDirectOffer(offer.id, { status: "resolved", resolvedAt: now });
+            await syncLinkedDirectOfferJob(resolvedOffer!, "refunded");
 
             await storage.createNotification({
               userId: offer.hirerUserId,
               title: "Dispute Auto-Resolved",
               body: `Dispute on offer #${offer.id} was auto-resolved after 5 days. Full refund issued.`,
               type: "dispute",
-              jobId: null,
+              jobId: offer.jobId || null,
             });
             await storage.createNotification({
               userId: offer.workerUserId,
               title: "Dispute Auto-Resolved",
               body: `Dispute on offer #${offer.id} was auto-resolved after 5 days. Funds returned to hirer.`,
               type: "dispute",
-              jobId: null,
+              jobId: offer.jobId || null,
             });
           } else if (disputeAge < fourDaysAgo && !dispute.slaWarningSentAt) {
             await storage.createNotification({

@@ -94,6 +94,20 @@ describe("sanitizeJobForPublic", () => {
     expect(out.platformFee).toBeUndefined();
   });
 
+  it("keeps a pending provider-specific service request address hidden from its selected helper", () => {
+    const job = makeJob({
+      jobType: "service_request",
+      status: "draft",
+      location: "123 Exact Street, Springfield",
+      locationApprox: "Near 627••",
+    });
+    const out = sanitizeJobForPublic(job, HELPER_ID, false);
+
+    expect(out.location).toBe("Near 627••");
+    expect(out.lat).not.toBe(job.lat);
+    expect(out.lng).not.toBe(job.lng);
+  });
+
   it("posters see every poster-only field", () => {
     const out = sanitizeJobForPublic(makeJob(), POSTER_ID, false);
     expect(out.autoIncreaseEnabled).toBe(true);

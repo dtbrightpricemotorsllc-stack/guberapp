@@ -1681,6 +1681,10 @@ export type ReminderSent = typeof remindersSent.$inferSelect;
 export const directOffers = pgTable("direct_offers", {
   id: serial("id").primaryKey(),
   jobId: integer("job_id"),
+  // Set only when a hirer requests a published provider service. This keeps
+  // the request attached to its original public offering without changing the
+  // protected direct-offer lifecycle.
+  serviceOfferId: integer("service_offer_id").references(() => serviceOffers.id),
   hirerUserId: integer("hirer_user_id").notNull(),
   workerUserId: integer("worker_user_id").notNull(),
   initialOfferAmount: real("initial_offer_amount").notNull(),

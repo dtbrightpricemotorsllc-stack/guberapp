@@ -1903,6 +1903,15 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_service_offers_discovery ON service_offers(status, moderation_status, category, published_at DESC);
   `).catch(e => console.error("[migration] service_offers tables error:", e));
 
+  // Provider-specific service requests retain the source catalog offer on the
+  // existing direct-offer record. Existing installations need the additive
+  // migration because production does not run drizzle db:push on deploy.
+  await pool.query(`
+    ALTER TABLE direct_offers
+      ADD COLUMN IF NOT EXISTS service_offer_id INTEGER REFERENCES service_offers(id);
+    CREATE INDEX IF NOT EXISTS idx_direct_offers_service_offer ON direct_offers(service_offer_id);
+  `).catch(e => console.error("[migration] direct_offers service offer link error:", e));
+
   // Let JAC recognize provider-supply intent, while still staging only a
   // private draft through jac-actions until the user explicitly confirms.
   await pool.query(`
