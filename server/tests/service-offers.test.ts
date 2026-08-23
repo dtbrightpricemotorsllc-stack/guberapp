@@ -61,6 +61,7 @@ function makeOffer(overrides: Partial<OfferRow> = {}): OfferRow {
 }
 
 const offers = new Map<number, OfferRow>();
+const moderationAuditEntries: Array<{ userId: number; action: string; details: string; ipAddress: string }> = [];
 const userRoles = new Map<number, string>([
   [PROVIDER_ID, "buyer"],
   [CUSTOMER_ID, "buyer"],
@@ -77,6 +78,10 @@ function installQueryDouble() {
           (offer) => offer.status === "published" && offer.moderation_status === "approved",
         ),
       };
+    }
+
+    if (sql.includes("ORDER BY so.updated_at DESC LIMIT 300")) {
+      return { rows: [...offers.values()] };
     }
 
     if (sql.includes("SELECT role FROM users")) {
@@ -106,7 +111,15 @@ function installQueryDouble() {
       return { rows: [] };
     }
 
-    if (sql.startsWith("INSERT INTO audit_logs")) return { rows: [] };
+    if (sql.startsWith("INSERT INTO audit_logs")) {
+      moderationAuditEntries.push({
+        userId: Number(values[0]),
+        action: String(values[1]),
+        details: String(values[2]),
+        ipAddress: String(values[3]),
+      });
+      return { rows: [] };
+    }
     throw new Error(`Unexpected query in service-offers test: ${sql}`);
   });
 }
@@ -157,6 +170,7 @@ function buildApp() {
 describe("service-offer privacy, verification, and handoff contracts", () => {
   beforeEach(() => {
     offers.clear();
+    moderationAuditEntries.length = 0;
     queryMock.mockReset();
     installQueryDouble();
   });
@@ -318,6 +332,51 @@ describe("service-offer privacy, verification, and handoff contracts", () => {
 
     const discovery = await supertest(harness.app).get("/api/service-offers").expect(200);
     expect(discovery.body.map((item: OfferRow) => item.id)).not.toContain(offer.id);
+  });
+
+  it("hides paused and removed offers from discovery while retaining each decision in the admin queue", async () => {
+    const offer = makeOffer({ id: 15, title: "Moderated service" });
+    offers.set(offer.id, offer);
+    const harness = buildApp();
+    harness.as(ADMIN_ID);
+
+    const pause = await supertest(harness.app)
+      .patch(`/api/admin/service-offers/${offer.id}`)
+      .send({ status: "paused" })
+      .expect(200);
+    expect(pause.body).toMatchObject({ id: offer.id, status: "paused", moderationStatus: "approved" });
+
+    const pausedDiscovery = await supertest(harness.app).get("/api/service-offers").expect(200);
+    expect(pausedDiscovery.body.map((item: OfferRow) => item.id)).not.toContain(offer.id);
+
+    const pausedQueue = await supertest(harness.app).get("/api/admin/service-offers").expect(200);
+    expect(pausedQueue.body).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: offer.id, status: "paused", moderationStatus: "approved" }),
+    ]));
+
+    const remove = await supertest(harness.app)
+      .patch(`/api/admin/service-offers/${offer.id}`)
+      .send({ status: "removed" })
+      .expect(200);
+    expect(remove.body).toMatchObject({ id: offer.id, status: "removed", moderationStatus: "rejected" });
+
+    const removedDiscovery = await supertest(harness.app).get("/api/service-offers").expect(200);
+    expect(removedDiscovery.body.map((item: OfferRow) => item.id)).not.toContain(offer.id);
+
+    const removedQueue = await supertest(harness.app).get("/api/admin/service-offers").expect(200);
+    expect(removedQueue.body).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: offer.id, status: "removed", moderationStatus: "rejected" }),
+    ]));
+
+    expect(moderationAuditEntries).toHaveLength(2);
+    expect(moderationAuditEntries.map((entry) => ({
+      userId: entry.userId,
+      action: entry.action,
+      details: JSON.parse(entry.details),
+    }))).toEqual([
+      { userId: ADMIN_ID, action: "service_offer_moderated", details: { serviceOfferId: offer.id, status: "paused" } },
+      { userId: ADMIN_ID, action: "service_offer_moderated", details: { serviceOfferId: offer.id, status: "removed" } },
+    ]);
   });
 
   it("requires protected request details before starting a customer service request", async () => {
