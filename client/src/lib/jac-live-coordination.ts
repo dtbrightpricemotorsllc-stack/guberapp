@@ -16,6 +16,29 @@ export type SharedJacMessage = {
 
 const SHARED_CONVERSATION_KEY = "jac_shared_conversation_v1";
 const MAX_SHARED_MESSAGES = 40;
+const JAC_GREETING_KEYS = [
+  "jac_welcome_greeting_spoken_v2",
+  // Read the previous homepage guard so upgrading does not replay the greeting.
+  "jac_homepage_greeting_spoken_v1",
+];
+let greetingClaimedThisRuntime = false;
+
+export const JAC_WELCOME_GREETING =
+  "Hey, welcome to Team GUBER. What are you trying to make happen?";
+
+/** Claim the one-per-browser-session welcome across every JAC surface. */
+export function claimJacWelcomeGreeting(): boolean {
+  if (greetingClaimedThisRuntime) return false;
+  greetingClaimedThisRuntime = true;
+  if (typeof window === "undefined") return false;
+  try {
+    if (JAC_GREETING_KEYS.some((key) => window.sessionStorage.getItem(key) === "1")) return false;
+    JAC_GREETING_KEYS.forEach((key) => window.sessionStorage.setItem(key, "1"));
+  } catch {
+    // The runtime guard still prevents duplicate greetings when storage is unavailable.
+  }
+  return true;
+}
 
 export const JAC_QUICK_ACTIONS: JacQuickAction[] = [
   { id: "help", label: "I need help", message: "I need help", surfaces: ["homepage", "live", "assistant"] },

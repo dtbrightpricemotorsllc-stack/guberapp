@@ -13,7 +13,7 @@ import {
 import { useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
 import { ConversationProvider } from "@elevenlabs/react";
-import { JacConvaiSession, prewarmJacSession, type ConvaiPhase, type JacConvaiSessionHandle } from "@/components/jac/jac-convai-session";
+import { JacConvaiSession, type ConvaiPhase, type JacConvaiSessionHandle } from "@/components/jac/jac-convai-session";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { saveListingPrefill, clearListingPrefill } from "@/lib/jac-listing-prefill";
@@ -29,7 +29,9 @@ import { extractAndSaveMemory } from "@/lib/jac-memory";
 import { useJacContext, useJacOpportunities } from "@/lib/use-jac-context";
 import {
   appendSharedJacMessage,
+  claimJacWelcomeGreeting,
   getJacQuickActions,
+  JAC_WELCOME_GREETING,
   readSharedJacConversation,
 } from "@/lib/jac-live-coordination";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
@@ -82,8 +84,7 @@ interface Message {
   draftCard?: { draftId: string; title: string };
 }
 
-const DD_GREETING =
-  "To talk to me, tap the mic button! 🎤";
+const DD_GREETING = JAC_WELCOME_GREETING;
 const SESSION_KEY = "jac_v1_messages";
 const SEEN_KEY = "jac_v1_seen";
 const FAB_HINT_KEY = "jac_fab_hint_shown";
@@ -361,7 +362,6 @@ export function GUBERAssistant() {
 
   const briefingInjectedRef = useRef(false);
   const feedbackDraftRef = useRef<{ ready: boolean; category: string; description: string } | null>(null);
-  const greetingSpokenRef = useRef(false);
 
   // ── "jac:prefill" — quick-action chips pre-load a message ──
   useEffect(() => {
@@ -434,13 +434,6 @@ export function GUBERAssistant() {
     jacSpeak(text, { muted });
   }
 
-  // Only pre-warm for an authenticated, open assistant. The public homepage
-  // and anonymous visitors must never hit the authenticated voice endpoint.
-  useEffect(() => {
-    if (!user || !s.open) return;
-    prewarmJacSession("/api/jac/convai/session");
-  }, [s.open, user]);
-
   // Tear down the ConvAI session whenever JAC closes, the app is backgrounded,
   // or the tab goes hidden — never leave an open mic stream running unattended.
   useEffect(() => {
@@ -466,11 +459,10 @@ export function GUBERAssistant() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Wake word — "Hey JAC" opens JAC and starts the ConvAI voice session
+  // Wake word — "Hey JAC" opens JAC. Live voice still requires the mic button.
   useEffect(() => {
     function onWake() {
       if (!store.open) { markSeen(); patchStore({ open: true }); }
-      setTimeout(() => startConvai(), 400);
     }
     window.addEventListener("jac:wake", onWake);
     return () => window.removeEventListener("jac:wake", onWake);
@@ -488,13 +480,12 @@ export function GUBERAssistant() {
     setTimeout(() => { el.scrollTop = el.scrollHeight; }, 80);
   }, [messages, s.open]);
 
-  // Personalise greeting for returning users on first open.
-  // NOTE: We no longer auto-speak any greeting here — ElevenLabs ConvAI is the
-  // sole voice source and speaks its own configured first message when the session
-  // connects. Text is always shown in the chat regardless.
+  // Personalise the signed-in surface without replaying the generic greeting.
+  // The generic greeting is output-only and claimed across public/signed-in JAC.
   useEffect(() => {
+    if (messages.length !== 1) return;
+    if (claimJacWelcomeGreeting()) void jacSpeak(JAC_WELCOME_GREETING, { muted });
     if (!s.open) return;
-    if (messages.length !== 1) return; // already has a thread
 
     // ── Resume pending pre-login draft for newly logged-in users ──────────
     if (userRef.current) {
@@ -511,14 +502,14 @@ export function GUBERAssistant() {
           actions: [{ label: "Continue where I left off", message: "__resume__" }],
         };
         setMessages(prev => [...prev, resumeMsg]);
-        // No speak() — ConvAI will voice this once it connects
+        // The saved-draft message is text-only until the user explicitly starts voice.
         return;
       }
     }
 
     const returning = localStorage.getItem("jac_returning") === "1";
     if (!returning) {
-      // Greeting text is shown in chat; ConvAI voices it on connection
+      // Greeting text is shown in chat; audio was handled by the output-only path.
       return;
     }
     fetch("/api/jac/updates")
@@ -536,7 +527,7 @@ export function GUBERAssistant() {
       })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s.open]);
+  }, [s.open, muted]);
 
   // Reset briefing ref on close so the server-side daily gate is re-checked on next open
   useEffect(() => {

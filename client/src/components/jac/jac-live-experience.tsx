@@ -26,8 +26,10 @@ import { useGuestJacSession } from "@/hooks/use-guest-jac-session";
 import { jacSpeak, cancelAllJacAudio, setJacConvaiActive } from "@/lib/jac-tts";
 import {
   appendSharedJacMessage,
+  claimJacWelcomeGreeting,
   getJacQuickActions,
   isServiceDiscoveryIntent,
+  JAC_WELCOME_GREETING,
   readSharedJacConversation,
 } from "@/lib/jac-live-coordination";
 
@@ -57,8 +59,7 @@ interface Surface2State {
   data?: Record<string, any>;
 }
 
-const WELCOME_GREETING = "Hey, welcome to Team GUBER. What are you trying to make happen?";
-const GREETING_SESSION_KEY = "jac_homepage_greeting_spoken_v1";
+const WELCOME_GREETING = JAC_WELCOME_GREETING;
 
 export function getJacLiveSessionEndpoint(isAuthenticated: boolean): string {
   return isAuthenticated
@@ -469,10 +470,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   // be blocked; the visible text greeting is always retained.
   useEffect(() => {
     if (msgs.length !== 1 || msgs[0].id !== "jac-welcome") return;
-    try {
-      if (sessionStorage.getItem(GREETING_SESSION_KEY) === "1") return;
-      sessionStorage.setItem(GREETING_SESSION_KEY, "1");
-    } catch {}
+    if (!claimJacWelcomeGreeting()) return;
     void jacSpeak(WELCOME_GREETING);
   }, [msgs]);
 
