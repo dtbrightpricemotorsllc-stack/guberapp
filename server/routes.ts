@@ -58,7 +58,7 @@ import { detectDisallowedJobContent, detectOffPlatformPhrase, detectViLanguageHi
 import { generateJWT, verifyJWT } from "./jwt";
 import { signMobileCheckoutToken, verifyMobileCheckoutToken, isValidProduct } from "./mobile-checkout-token";
 import { verifyJacVoiceToken, signJacVoiceToken } from "./jac-voice-token";
-import { sanitizeAssistMessages, resolveVoiceToken, newCompletionId, writeOpenAiStream, buildNonStreamCompletion, checkConvaiRateLimit } from "./jac-convai";
+import { sanitizeAssistMessages, isReflectedAssistantTurn, resolveVoiceToken, newCompletionId, writeOpenAiStream, writeSuppressedOpenAiStream, buildNonStreamCompletion, buildSuppressedCompletion, checkConvaiRateLimit } from "./jac-convai";
 import { getJacSession, setJacSession, clearJacSession, summarizeSession } from "./jac-session";
 import { normalizeOnboardActions } from "./jac-onboard-actions";
 import { recordVoiceEvent } from "./jac-voice-telemetry";
@@ -19971,6 +19971,22 @@ CRITICAL — respond with JSON ONLY, no other text:
         ? "investor" : "homepage";
 
       const id = newCompletionId();
+
+      // A phone can feed JAC's speaker output back into the mic after the
+      // client receives the transcript callback. Do not invoke either JAC
+      // brain for that reflected turn; an empty completion keeps ElevenLabs'
+      // protocol happy without generating a second spoken response. A
+      // different newest user turn falls through and remains a valid
+      // interruption/barge-in.
+      if (isReflectedAssistantTurn(sanitized)) {
+        console.warn("[jac/convai/llm] suppressed reflected assistant turn");
+        if (stream) {
+          writeSuppressedOpenAiStream(res, { id, model });
+        } else {
+          res.json(buildSuppressedCompletion({ id, model }));
+        }
+        return;
+      }
 
       if (!user) {
         // ── Anonymous (homepage / investor): real OpenAI stream → ElevenLabs ──

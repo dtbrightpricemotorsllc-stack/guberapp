@@ -414,7 +414,6 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
     // and cleanup of THIS instance never touches another instance's token.
     const micLostTokenRef = useRef<MicLostToken | null>(null);
     const latestAssistantSpeechRef = useRef<{ text: string; at: number } | null>(null);
-    const speakingRef = useRef(false);
     const micConstraintLeaseRef = useRef(false);
 
     const releaseMicConstraintLease = () => {
@@ -496,11 +495,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         const text = message.trim();
         if (source === "user") {
           const recentSpeech = latestAssistantSpeechRef.current;
-          if (
-            speakingRef.current &&
-            recentSpeech &&
-            isJacEchoTranscript(text, recentSpeech.text, recentSpeech.at)
-          ) {
+          if (recentSpeech && isJacEchoTranscript(text, recentSpeech.text, recentSpeech.at)) {
             console.warn("[JAC ConvAI] Ignored echoed assistant audio presented as a user transcript.");
             return;
           }
@@ -513,8 +508,6 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
     });
 
     const connected = status === "connected";
-    useEffect(() => { speakingRef.current = isSpeaking; }, [isSpeaking]);
-
     // Report phase changes — never call setState during render, always via effect
     const prevPhaseRef = useRef<ConvaiPhase>("idle");
     useEffect(() => {

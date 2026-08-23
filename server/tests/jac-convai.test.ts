@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   sanitizeAssistMessages,
+  isReflectedAssistantTurn,
   prepareJacSpeech,
   JAC_SPEECH_FALLBACK,
   resolveVoiceToken,
@@ -8,7 +9,9 @@ import {
   sseLine,
   buildStreamChunk,
   buildNonStreamCompletion,
+  buildSuppressedCompletion,
   writeOpenAiStream,
+  writeSuppressedOpenAiStream,
   checkConvaiRateLimit,
   __resetConvaiRateLimit,
 } from "../jac-convai";
@@ -55,6 +58,26 @@ describe("jac-convai adapter helpers", () => {
     expect(out[out.length - 1].content).toBe("m29");
   });
 
+  it("suppresses an assistant turn reflected as the newest user turn", () => {
+    const spoken = "I can help you find a job nearby. What kind of work fits today?";
+    expect(isReflectedAssistantTurn([
+      { role: "assistant", content: spoken },
+      { role: "user", content: "i can help you find a job nearby what kind of work fits today" },
+    ])).toBe(true);
+  });
+
+  it("keeps a clearly different newest user interruption", () => {
+    expect(isReflectedAssistantTurn([
+      { role: "assistant", content: "I can help you find a job nearby." },
+      { role: "user", content: "Stop, help me post a job instead." },
+    ])).toBe(false);
+    expect(isReflectedAssistantTurn([
+      { role: "user", content: "hello" },
+      { role: "assistant", content: "Okay" },
+      { role: "user", content: "Okay" },
+    ])).toBe(false);
+  });
+
   it("resolveVoiceToken reads header, body field, extra_body, and OpenAI user", () => {
     expect(resolveVoiceToken({ headers: { "x-jac-voice-token": "aaa.bbb" }, body: {} } as any)).toBe("aaa.bbb");
     expect(resolveVoiceToken({ headers: {}, body: { jac_voice_token: "c.d" } } as any)).toBe("c.d");
@@ -99,6 +122,21 @@ describe("jac-convai adapter helpers", () => {
     );
     const contentFrame = JSON.parse(writes[1].slice(6).trim());
     expect(contentFrame.choices[0].delta.content).toBe(JAC_SPEECH_FALLBACK);
+  });
+
+  it("builds a silent completion for a reflected turn", () => {
+    const completion = buildSuppressedCompletion({ id: "x", model: "jac" });
+    expect(completion.choices[0].message.content).toBe("");
+    expect(completion.choices[0].finish_reason).toBe("stop");
+
+    const writes: string[] = [];
+    writeSuppressedOpenAiStream(
+      { setHeader: () => {}, write: (s) => { writes.push(s); }, end: () => {} },
+      { id: "x", model: "jac" },
+    );
+    const contentFrame = JSON.parse(writes[1].slice(6).trim());
+    expect(contentFrame.choices[0].delta.content).toBe("");
+    expect(writes[writes.length - 1]).toBe("data: [DONE]\n\n");
   });
 
   it("writeOpenAiStream emits valid SSE: role → content → stop → [DONE]", () => {

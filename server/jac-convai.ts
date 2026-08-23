@@ -76,6 +76,37 @@ export function sanitizeAssistMessages(messages: any[]): ConvaiMessage[] {
   return out;
 }
 
+const REFLECTED_TURN_WINDOW_CHARS = 16;
+
+function normalizeConvaiTurn(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Detect the phone replaying JAC's last spoken turn into the microphone.
+ * ElevenLabs sends the complete conversation to this adapter, so only an
+ * immediately repeated newest user turn is suppressed. A different newest
+ * user turn remains a valid barge-in.
+ */
+export function isReflectedAssistantTurn(messages: ConvaiMessage[]): boolean {
+  if (messages.length < 2) return false;
+  const user = messages[messages.length - 1];
+  const assistant = messages[messages.length - 2];
+  if (user.role !== "user" || assistant.role !== "assistant") return false;
+
+  const normalizedUser = normalizeConvaiTurn(user.content);
+  const normalizedAssistant = normalizeConvaiTurn(assistant.content);
+  if (
+    normalizedUser.length < REFLECTED_TURN_WINDOW_CHARS ||
+    normalizedAssistant.length < REFLECTED_TURN_WINDOW_CHARS
+  ) {
+    return false;
+  }
+  return normalizedUser === normalizedAssistant
+    || normalizedAssistant.includes(normalizedUser)
+    || normalizedUser.includes(normalizedAssistant);
+}
+
 /**
  * The per-conversation identity token may arrive as a header (preferred) or,
  * because some ElevenLabs config surfaces only allow body fields, inside the
@@ -166,6 +197,23 @@ export function buildNonStreamCompletion(input: { id: string; model: string; con
   };
 }
 
+/** OpenAI-compatible empty completion used to tell ElevenLabs not to speak. */
+export function buildSuppressedCompletion(input: { id: string; model: string; created?: number }) {
+  return {
+    id: input.id,
+    object: "chat.completion" as const,
+    created: input.created ?? Math.floor(Date.now() / 1000),
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant" as const, content: "" },
+        finish_reason: "stop" as const,
+      },
+    ],
+    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+  };
+}
+
 /** Minimal shape we need from a response object (real or mocked in tests). */
 export interface SseSink {
   setHeader(name: string, value: string): void;
@@ -189,6 +237,22 @@ export function writeOpenAiStream(res: SseSink, input: { id: string; model: stri
   res.write(sseLine(buildStreamChunk({ id, model, created, delta: { role: "assistant" } })));
   res.write(sseLine(buildStreamChunk({ id, model, created, delta: { content } })));
   res.write(sseLine(buildStreamChunk({ id, model, created, delta: {}, finishReason: "stop" })));
+  res.write("data: [DONE]\n\n");
+  res.end();
+}
+
+/** Emit a valid but silent completion for a reflected speaker turn. */
+export function writeSuppressedOpenAiStream(
+  res: SseSink,
+  input: { id: string; model: string },
+): void {
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  const created = Math.floor(Date.now() / 1000);
+  res.write(sseLine(buildStreamChunk({ id: input.id, model: input.model, created, delta: { role: "assistant" } })));
+  res.write(sseLine(buildStreamChunk({ id: input.id, model: input.model, created, delta: { content: "" } })));
+  res.write(sseLine(buildStreamChunk({ id: input.id, model: input.model, created, delta: {}, finishReason: "stop" })));
   res.write("data: [DONE]\n\n");
   res.end();
 }

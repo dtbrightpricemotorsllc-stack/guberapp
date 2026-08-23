@@ -292,6 +292,20 @@ describe("JacConvaiSession — WebSocket transport guarantee", () => {
     expect(onUserTranscript).not.toHaveBeenCalled();
   });
 
+  it("suppresses a reflected transcript even after the speaking callback ends", async () => {
+    convaiState.isSpeaking = false;
+    const onUserTranscript = vi.fn<(text: string) => void>();
+    const spoken = "I can help you find a job nearby. What kind of work fits today?";
+    await mountAndBoot({}, { onUserTranscript });
+
+    await act(async () => {
+      _capturedConvaiHandlers.onMessage?.({ source: "ai", message: spoken });
+      _capturedConvaiHandlers.onMessage?.({ source: "user", message: spoken });
+    });
+
+    expect(onUserTranscript).not.toHaveBeenCalled();
+  });
+
   it("still delivers a distinct user barge-in while JAC is speaking", async () => {
     convaiState.isSpeaking = true;
     const onUserTranscript = vi.fn<(text: string) => void>();
