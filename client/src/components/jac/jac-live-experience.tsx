@@ -16,7 +16,7 @@ import {
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import {
   Mic, MicOff, Send, Loader2, RefreshCw, ChevronDown,
-  Volume2, VolumeX, ArrowRight,
+  ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -374,7 +374,6 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   const [textLoading, setTextLoading] = useState(false);
   const [error, setError]       = useState<string | null>(null);
   const [ended, setEnded]       = useState(false);
-  const [needGesture, setNeedGesture] = useState(false);
   const [voiceStartAttempted, setVoiceStartAttempted] = useState(false);
   const [muted, setMutedLocal]  = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
@@ -411,7 +410,6 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   // ── Boot session ──────────────────────────────────────────────────────────
   const boot = useCallback(async () => {
     setVoiceStartAttempted(true);
-    setNeedGesture(false);
     setError(null);
     setEnded(false);
     // Live voice is the sole audio owner once explicitly requested.
@@ -427,7 +425,6 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       ]);
 
       if (micRes.status === "rejected") {
-        setNeedGesture(true);
         setError("Microphone unavailable. Allow mic access or use text chat.");
         return;
       }
@@ -451,11 +448,21 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       else                   params.agentId   = session.agentId;
 
       startSession(params as any);
-      setNeedGesture(false);
     } catch (err: any) {
       setError(err?.message || "Could not connect to JAC");
     }
   }, [sessionEndpoint, startSession]);
+
+  // JAC's homepage voice experience boots automatically on mount. The
+  // visible character and text chat remain usable if the browser has no mic
+  // (or blocks permission), and reconnect remains available inline.
+  useEffect(() => {
+    void boot();
+    return () => {
+      setJacConvaiActive(false);
+      try { endSession(); } catch {}
+    };
+  }, [boot, endSession]);
 
   // Best-effort output-only welcome. This deliberately does not unlock audio,
   // request a microphone, fetch a voice session, or start ConvAI. Autoplay may
@@ -544,7 +551,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     isSpeaking ? "JAC is speaking" :
     isListening ? "Listening…" :
     connected ? "Processing…" :
-    "Connecting…";
+    voiceStartAttempted ? "Connecting…" : "Ready";
 
   const isTerminal = ended || !!error;
 
@@ -620,10 +627,21 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
               >
                 <RefreshCw className="w-3 h-3" /> Reconnect voice
               </button>
-            ) : (
+            ) : voiceStartAttempted && !isTerminal ? (
               <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs" style={{ color: "hsl(0 0% 35%)" }}>
                 <Loader2 className="w-3 h-3 animate-spin" /> Connecting voice…
               </div>
+            ) : (
+              <button
+                onClick={() => void boot()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-display font-bold transition-all active:scale-95"
+                style={{
+                  background: "linear-gradient(135deg,hsl(270 100% 65%),hsl(152 100% 44%))",
+                  color: "black",
+                }}
+              >
+                <Mic className="w-3 h-3" /> Start voice
+              </button>
             )}
 
             {/* Transcript toggle */}
@@ -714,29 +732,11 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
         </div>
       </div>
 
-      {/* ── Tap-to-begin overlay (mic blocked) ───────────────────────────── */}
-      {needGesture && (
-        <div
-          className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl gap-3 z-10"
-          style={{ background: "hsl(222 47% 5% / 0.78)", backdropFilter: "blur(4px)" }}
-        >
-          <div className="text-3xl">🎙️</div>
-          <p className="text-sm font-display font-bold text-white">Enable microphone to talk to JAC</p>
-          <p className="text-xs text-white/40 text-center px-6">JAC listens and responds in real time. Allow mic access in your browser to begin.</p>
-          <button
-            onClick={() => { setNeedGesture(false); boot(); }}
-            className="px-5 py-2.5 rounded-xl text-sm font-display font-bold transition-all active:scale-95"
-            style={{ background: "linear-gradient(135deg,hsl(270 100% 65%),hsl(152 100% 44%))", color: "black" }}
-          >
-            Allow & Start
-          </button>
-          <button
-            onClick={() => setNeedGesture(false)}
-            className="text-xs text-white/40 hover:text-white/60 transition-colors"
-          >
-            Skip — use text only
-          </button>
-        </div>
+      {/* Mic/session failures stay inline so the character and text chat remain usable. */}
+      {voiceStartAttempted && error && (
+        <p className="mt-2 text-center text-xs" role="status" style={{ color: "hsl(0 85% 68%)" }}>
+          {error} Text chat is still available.
+        </p>
       )}
     </div>
   );

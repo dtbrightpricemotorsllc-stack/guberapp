@@ -434,11 +434,12 @@ export function GUBERAssistant() {
     jacSpeak(text, { muted });
   }
 
-  // Pre-warm the ConvAI session token on mount so it's ready when the sheet
-  // opens — eliminates the biggest startup latency (~500-1500 ms).
+  // Only pre-warm for an authenticated, open assistant. The public homepage
+  // and anonymous visitors must never hit the authenticated voice endpoint.
   useEffect(() => {
+    if (!user || !s.open) return;
     prewarmJacSession("/api/jac/convai/session");
-  }, []);
+  }, [s.open, user]);
 
   // Tear down the ConvAI session whenever JAC closes, the app is backgrounded,
   // or the tab goes hidden — never leave an open mic stream running unattended.
