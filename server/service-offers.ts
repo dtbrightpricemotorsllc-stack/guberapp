@@ -450,34 +450,44 @@ export function registerServiceOfferRoutes(app: Express, guards: RouteGuards) {
          return res.status(400).json({ message: "A verified credential is required before this Skilled / Pro service can be approved." });
        }
 
-       if (status === "published") {
-         await pool.query(
-           `UPDATE service_offers
-               SET status='published', moderation_status='approved', published_at=NOW(),
-                   paused_at=NULL, updated_at=NOW()
-             WHERE id=$1`,
-           [offer.id],
-         );
-       } else if (status === "paused") {
-         await pool.query(
-           `UPDATE service_offers
-               SET status='paused', paused_at=NOW(), updated_at=NOW()
-             WHERE id=$1`,
-           [offer.id],
-         );
-       } else {
-         await pool.query(
-           `UPDATE service_offers
-               SET status='removed', moderation_status='rejected', paused_at=COALESCE(paused_at, NOW()),
-                   updated_at=NOW()
-             WHERE id=$1`,
-           [offer.id],
-         );
-       }
-      await pool.query(
-        "INSERT INTO audit_logs (user_id, action, details, ip_address) VALUES ($1,$2,$3,$4)",
-        [req.session.userId, "service_offer_moderated", JSON.stringify({ serviceOfferId: offer.id, status }), req.ip],
-      );
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        if (status === "published") {
+          await client.query(
+            `UPDATE service_offers
+                 SET status='published', moderation_status='approved', published_at=NOW(),
+                     paused_at=NULL, updated_at=NOW()
+               WHERE id=$1`,
+            [offer.id],
+          );
+        } else if (status === "paused") {
+          await client.query(
+            `UPDATE service_offers
+                 SET status='paused', paused_at=NOW(), updated_at=NOW()
+               WHERE id=$1`,
+            [offer.id],
+          );
+        } else {
+          await client.query(
+            `UPDATE service_offers
+                 SET status='removed', moderation_status='rejected', paused_at=COALESCE(paused_at, NOW()),
+                     updated_at=NOW()
+               WHERE id=$1`,
+            [offer.id],
+          );
+        }
+        await client.query(
+          "INSERT INTO audit_logs (user_id, action, details, ip_address) VALUES ($1,$2,$3,$4)",
+          [req.session.userId, "service_offer_moderated", JSON.stringify({ serviceOfferId: offer.id, status }), req.ip],
+        );
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
       res.json(ownerOffer(await getOffer(offer.id)));
     } catch (error: any) {
       res.status(400).json({ message: error.message || "Unable to moderate service offer" });

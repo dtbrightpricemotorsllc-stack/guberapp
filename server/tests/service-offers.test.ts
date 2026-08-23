@@ -11,7 +11,10 @@ import session from "express-session";
 import supertest from "supertest";
 
 const queryMock = vi.hoisted(() => vi.fn());
-vi.mock("../db", () => ({ pool: { query: queryMock } }));
+const clientQueryMock = vi.hoisted(() => vi.fn());
+const connectMock = vi.hoisted(() => vi.fn());
+const releaseMock = vi.hoisted(() => vi.fn());
+vi.mock("../db", () => ({ pool: { query: queryMock, connect: connectMock } }));
 
 import { registerServiceOfferRoutes } from "../service-offers";
 
@@ -62,11 +65,40 @@ function makeOffer(overrides: Partial<OfferRow> = {}): OfferRow {
 
 const offers = new Map<number, OfferRow>();
 const moderationAuditEntries: Array<{ userId: number; action: string; details: string; ipAddress: string }> = [];
+let moderationAuditInsertShouldFail = false;
+let transactionOfferSnapshot: Map<number, OfferRow> | null = null;
 const userRoles = new Map<number, string>([
   [PROVIDER_ID, "buyer"],
   [CUSTOMER_ID, "buyer"],
   [ADMIN_ID, "admin"],
 ]);
+
+function updateOfferFromQuery(sql: string, values: unknown[]) {
+  const offerId = Number(values[values.length - 1]);
+  const offer = offers.get(offerId);
+  if (offer && sql.includes("moderation_status='pending'")) {
+    offer.status = "draft";
+    offer.moderation_status = "pending";
+  } else if (offer && sql.includes("moderation_status='approved'")) {
+    offer.status = "published";
+    offer.moderation_status = "approved";
+  } else if (offer && sql.includes("status='paused'")) {
+    offer.status = "paused";
+  } else if (offer && sql.includes("status='removed'")) {
+    offer.status = "removed";
+    offer.moderation_status = "rejected";
+  }
+}
+
+function recordAuditEntry(values: unknown[]) {
+  if (moderationAuditInsertShouldFail) throw new Error("audit write failed");
+  moderationAuditEntries.push({
+    userId: Number(values[0]),
+    action: String(values[1]),
+    details: String(values[2]),
+    ipAddress: String(values[3]),
+  });
+}
 
 function installQueryDouble() {
   queryMock.mockImplementation(async (text: string, values: unknown[] = []) => {
@@ -94,33 +126,45 @@ function installQueryDouble() {
     }
 
     if (sql.startsWith("UPDATE service_offers")) {
-      const offerId = Number(values[values.length - 1]);
-      const offer = offers.get(offerId);
-      if (offer && sql.includes("moderation_status='pending'")) {
-        offer.status = "draft";
-        offer.moderation_status = "pending";
-      } else if (offer && sql.includes("moderation_status='approved'")) {
-        offer.status = "published";
-        offer.moderation_status = "approved";
-      } else if (offer && sql.includes("status='paused'")) {
-        offer.status = "paused";
-      } else if (offer && sql.includes("status='removed'")) {
-        offer.status = "removed";
-        offer.moderation_status = "rejected";
-      }
+      updateOfferFromQuery(sql, values);
       return { rows: [] };
     }
 
     if (sql.startsWith("INSERT INTO audit_logs")) {
-      moderationAuditEntries.push({
-        userId: Number(values[0]),
-        action: String(values[1]),
-        details: String(values[2]),
-        ipAddress: String(values[3]),
-      });
+      recordAuditEntry(values);
       return { rows: [] };
     }
     throw new Error(`Unexpected query in service-offers test: ${sql}`);
+  });
+
+  clientQueryMock.mockImplementation(async (text: string, values: unknown[] = []) => {
+    const sql = String(text);
+
+    if (sql === "BEGIN") {
+      transactionOfferSnapshot = new Map(
+        [...offers.entries()].map(([id, offer]) => [id, { ...offer }]),
+      );
+      return { rows: [] };
+    }
+    if (sql === "COMMIT") {
+      transactionOfferSnapshot = null;
+      return { rows: [] };
+    }
+    if (sql === "ROLLBACK") {
+      offers.clear();
+      transactionOfferSnapshot?.forEach((offer, id) => offers.set(id, offer));
+      transactionOfferSnapshot = null;
+      return { rows: [] };
+    }
+    if (sql.startsWith("UPDATE service_offers")) {
+      updateOfferFromQuery(sql, values);
+      return { rows: [] };
+    }
+    if (sql.startsWith("INSERT INTO audit_logs")) {
+      recordAuditEntry(values);
+      return { rows: [] };
+    }
+    throw new Error(`Unexpected client query in service-offers test: ${sql}`);
   });
 }
 
@@ -171,7 +215,13 @@ describe("service-offer privacy, verification, and handoff contracts", () => {
   beforeEach(() => {
     offers.clear();
     moderationAuditEntries.length = 0;
+    moderationAuditInsertShouldFail = false;
+    transactionOfferSnapshot = null;
     queryMock.mockReset();
+    clientQueryMock.mockReset();
+    connectMock.mockReset();
+    releaseMock.mockReset();
+    connectMock.mockResolvedValue({ query: clientQueryMock, release: releaseMock });
     installQueryDouble();
   });
 
@@ -307,10 +357,10 @@ describe("service-offer privacy, verification, and handoff contracts", () => {
     harness.as(ADMIN_ID);
     const approval = await supertest(harness.app).patch(`/api/admin/service-offers/${offer.id}`).send({ status: "published" }).expect(200);
     expect(approval.body).toMatchObject({ status: "published", moderationStatus: "approved" });
-    expect(queryMock.mock.calls.some(([query, values]) =>
+    expect(clientQueryMock.mock.calls.some(([query, values]) =>
       String(query).includes("moderation_status='approved'") && Array.isArray(values) && values.includes(offer.id),
     )).toBe(true);
-    expect(queryMock.mock.calls.some(([query, values]) =>
+    expect(clientQueryMock.mock.calls.some(([query, values]) =>
       String(query).startsWith("INSERT INTO audit_logs") && Array.isArray(values) && values.includes("service_offer_moderated"),
     )).toBe(true);
 
@@ -326,12 +376,39 @@ describe("service-offer privacy, verification, and handoff contracts", () => {
 
     const removal = await supertest(harness.app).patch(`/api/admin/service-offers/${offer.id}`).send({ status: "removed" }).expect(200);
     expect(removal.body).toMatchObject({ status: "removed", moderationStatus: "rejected" });
-    expect(queryMock.mock.calls.some(([query, values]) =>
+    expect(clientQueryMock.mock.calls.some(([query, values]) =>
       String(query).startsWith("INSERT INTO audit_logs") && Array.isArray(values) && values.includes("service_offer_moderated"),
     )).toBe(true);
 
     const discovery = await supertest(harness.app).get("/api/service-offers").expect(200);
     expect(discovery.body.map((item: OfferRow) => item.id)).not.toContain(offer.id);
+  });
+
+  it("rolls back the moderation decision when its audit record cannot be written", async () => {
+    const offer = makeOffer({ id: 17, status: "published", moderation_status: "approved" });
+    offers.set(offer.id, offer);
+    const harness = buildApp();
+    harness.as(ADMIN_ID);
+    moderationAuditInsertShouldFail = true;
+
+    const response = await supertest(harness.app)
+      .patch(`/api/admin/service-offers/${offer.id}`)
+      .send({ status: "removed" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe("audit write failed");
+    expect(offers.get(offer.id)).toMatchObject({
+      status: "published",
+      moderation_status: "approved",
+    });
+    expect(moderationAuditEntries).toHaveLength(0);
+    expect(clientQueryMock.mock.calls.map(([query]) => String(query))).toEqual([
+      "BEGIN",
+      expect.stringContaining("UPDATE service_offers"),
+      expect.stringContaining("INSERT INTO audit_logs"),
+      "ROLLBACK",
+    ]);
+    expect(releaseMock).toHaveBeenCalledOnce();
   });
 
   it("hides paused and removed offers from discovery while retaining each decision in the admin queue", async () => {
