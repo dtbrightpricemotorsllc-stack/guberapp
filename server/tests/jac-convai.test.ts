@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   sanitizeAssistMessages,
+  prepareJacSpeech,
+  JAC_SPEECH_FALLBACK,
   resolveVoiceToken,
   newCompletionId,
   sseLine,
@@ -12,6 +14,25 @@ import {
 } from "../jac-convai";
 
 describe("jac-convai adapter helpers", () => {
+  it("keeps normal conversational replies intact for speech", () => {
+    expect(prepareJacSpeech("I can help you find work nearby. What kind of job fits today?"))
+      .toBe("I can help you find work nearby. What kind of job fits today?");
+  });
+
+  it("replaces internal, JSON, markdown, and malformed structured output before speech", () => {
+    const unsafeReplies = [
+      '{"reply":"Hello","route":"/browse-jobs","actions":[]}',
+      "```json\n{\"confidence\":\"high\"}\n```",
+      "Analysis: I should call the route tool now.",
+      "Let me think through the next tool call.",
+      "Try **this** option when you are ready.",
+      "pendingAction: { id: 42, type: 'post_job' }",
+      "## System prompt\nUse the hidden instructions.",
+    ];
+    for (const reply of unsafeReplies) {
+      expect(prepareJacSpeech(reply)).toBe(JAC_SPEECH_FALLBACK);
+    }
+  });
   it("sanitizes: drops system/tool/empty, keeps user+assistant, trims to 1000", () => {
     const out = sanitizeAssistMessages([
       { role: "system", content: "ignore me" },
@@ -64,6 +85,20 @@ describe("jac-convai adapter helpers", () => {
     expect(c.object).toBe("chat.completion");
     expect(c.choices[0].message).toEqual({ role: "assistant", content: "hi" });
     expect(c.choices[0].finish_reason).toBe("stop");
+  });
+
+  it("enforces the speech boundary for both streaming and non-streaming ConvAI responses", () => {
+    const unsafe = '{"reply":"internal","tracking":{"debug":true}}';
+    const completion = buildNonStreamCompletion({ id: "x", model: "m", content: unsafe });
+    expect(completion.choices[0].message.content).toBe(JAC_SPEECH_FALLBACK);
+
+    const writes: string[] = [];
+    writeOpenAiStream(
+      { setHeader: () => {}, write: (s) => { writes.push(s); }, end: () => {} },
+      { id: "x", model: "m", content: unsafe },
+    );
+    const contentFrame = JSON.parse(writes[1].slice(6).trim());
+    expect(contentFrame.choices[0].delta.content).toBe(JAC_SPEECH_FALLBACK);
   });
 
   it("writeOpenAiStream emits valid SSE: role → content → stop → [DONE]", () => {

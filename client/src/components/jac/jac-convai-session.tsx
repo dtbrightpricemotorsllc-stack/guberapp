@@ -21,6 +21,36 @@ import { useConversation } from "@elevenlabs/react";
 import { apiRequest } from "@/lib/queryClient";
 import { unlockAudioContext, setJacConvaiActive, cancelAllJacAudio } from "@/lib/jac-tts";
 
+const JAC_MIC_CONSTRAINTS: MediaTrackConstraints = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+};
+const ECHO_TRANSCRIPT_WINDOW_MS = 5_000;
+
+function normalizeTranscriptForEchoCheck(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Reject an echoed copy of JAC's own recent output without suppressing a different user barge-in. */
+export function isJacEchoTranscript(userText: string, assistantText: string | null, spokenAt: number, now = Date.now()): boolean {
+  if (!assistantText || now - spokenAt > ECHO_TRANSCRIPT_WINDOW_MS) return false;
+  const user = normalizeTranscriptForEchoCheck(userText);
+  const assistant = normalizeTranscriptForEchoCheck(assistantText);
+  if (user.length < 8 || assistant.length < 8) return false;
+  return user === assistant || (user.length >= 16 && (assistant.includes(user) || user.includes(assistant)));
+}
+
+let convaiMicConstraintLeases = 0;
+
+function acquireConvaiMicConstraints(): void {
+  convaiMicConstraintLeases++;
+}
+
+function releaseConvaiMicConstraints(): void {
+  convaiMicConstraintLeases = Math.max(0, convaiMicConstraintLeases - 1);
+}
+
 // ── RTCDataChannel monkey-patch — must run at IMPORT TIME before the SDK ──────
 //
 // The ElevenLabs SDK's _WebRTCConnection.onMessage crashes with:
@@ -86,9 +116,18 @@ if (typeof window !== "undefined") {
   if (navigator.mediaDevices) {
     const _origGUM = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     navigator.mediaDevices.getUserMedia = async function (constraints: MediaStreamConstraints) {
-      console.log("[JAC MIC DIAG] getUserMedia called — constraints:", JSON.stringify(constraints));
+      const requested = convaiMicConstraintLeases > 0 && constraints?.audio !== false
+        ? {
+            ...constraints,
+            audio: {
+              ...(typeof constraints.audio === "object" ? constraints.audio : {}),
+              ...JAC_MIC_CONSTRAINTS,
+            },
+          }
+        : constraints;
+      console.log("[JAC MIC DIAG] getUserMedia called — constraints:", JSON.stringify(requested));
       try {
-        const stream = await _origGUM(constraints);
+        const stream = await _origGUM(requested);
         const audioTracks = stream.getAudioTracks();
         console.log(`[JAC MIC DIAG] getUserMedia SUCCESS — ${audioTracks.length} audio track(s), ${stream.getVideoTracks().length} video track(s)`);
         audioTracks.forEach((t, i) => {
@@ -314,6 +353,10 @@ export interface JacConvaiSessionHandle {
   readonly isMuted: boolean;
 }
 
+interface MicLostToken {
+  cb: (() => void) | null;
+}
+
 interface Props {
   active: boolean;
   sessionEndpoint?: string;
@@ -370,6 +413,15 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
     // it in a ref means each render/effect closure always touches the same token,
     // and cleanup of THIS instance never touches another instance's token.
     const micLostTokenRef = useRef<MicLostToken | null>(null);
+    const latestAssistantSpeechRef = useRef<{ text: string; at: number } | null>(null);
+    const speakingRef = useRef(false);
+    const micConstraintLeaseRef = useRef(false);
+
+    const releaseMicConstraintLease = () => {
+      if (!micConstraintLeaseRef.current) return;
+      micConstraintLeaseRef.current = false;
+      releaseConvaiMicConstraints();
+    };
 
     const {
       startSession,
@@ -390,6 +442,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         sendVoiceTelemetry("connect", platformRef.current, undefined, voiceTokenRef.current);
       },
       onDisconnect: () => {
+        releaseMicConstraintLease();
         // Release audio ownership so text-mode TTS can resume if needed.
         console.warn(
           "[JAC ConvAI] onDisconnect — active=" + activeRef.current +
@@ -416,6 +469,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         }
       },
       onError: (msg: string) => {
+        releaseMicConstraintLease();
         // Log the full SDK error message so Samsung Browser / Android console
         // captures 401 auth failures, 429 rate limits, WebSocket close codes,
         // and any other status the SDK surfaces — rather than silently swapping
@@ -439,12 +493,27 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
       },
       onMessage: (({ source, message }: { source: "ai" | "user"; message: string }) => {
         if (!message?.trim()) return;
-        if (source === "user") cbRef.current.onUserTranscript(message.trim());
-        else cbRef.current.onJacResponse(message.trim());
+        const text = message.trim();
+        if (source === "user") {
+          const recentSpeech = latestAssistantSpeechRef.current;
+          if (
+            speakingRef.current &&
+            recentSpeech &&
+            isJacEchoTranscript(text, recentSpeech.text, recentSpeech.at)
+          ) {
+            console.warn("[JAC ConvAI] Ignored echoed assistant audio presented as a user transcript.");
+            return;
+          }
+          cbRef.current.onUserTranscript(text);
+        } else {
+          latestAssistantSpeechRef.current = { text, at: Date.now() };
+          cbRef.current.onJacResponse(text);
+        }
       }) as any,
     });
 
     const connected = status === "connected";
+    useEffect(() => { speakingRef.current = isSpeaking; }, [isSpeaking]);
 
     // Report phase changes — never call setState during render, always via effect
     const prevPhaseRef = useRef<ConvaiPhase>("idle");
@@ -529,7 +598,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
                });
 
           const [micResult, sessionResult] = await Promise.allSettled([
-            getUserMediaWithTimeout({ audio: true }),
+            getUserMediaWithTimeout({ audio: JAC_MIC_CONSTRAINTS }),
             sessionFetch,
           ]);
           if (cancelRef.current) return;
@@ -615,6 +684,10 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
 
           // AudioContext was already unlocked above — start session immediately.
           if (cancelRef.current) return;
+          if (!micConstraintLeaseRef.current) {
+            micConstraintLeaseRef.current = true;
+            acquireConvaiMicConstraints();
+          }
           console.log("[JAC ConvAI] startSession — transport=" + (session.signedUrl ? "websocket/signed" : "agentId/public"));
           startSession(params as any);
 
@@ -685,6 +758,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
 
       return () => {
         cancelRef.current = true;
+        releaseMicConstraintLease();
         clearConnectTimeout();
         // Disarm THIS instance's mic-lost token — does not affect any other
         // mounted instance's token (e.g. guber-assistant sheet still open).

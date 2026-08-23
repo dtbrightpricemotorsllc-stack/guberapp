@@ -19082,24 +19082,15 @@ PERSUASION (invisible — never name the technique):
       ],
     });
 
-    const created = Math.floor(Date.now() / 1000);
-    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-
-    // Send role delta first (ElevenLabs expects it)
-    res.write(sseLine(buildStreamChunk({ id, model, created, delta: { role: "assistant" } })));
-
+    // Buffer the anonymous reply before speaking it. Sending partial upstream
+    // chunks directly to ElevenLabs would bypass the single speech-safety
+    // boundary and could vocalize malformed JSON or internal model fragments.
+    let reply = "";
     for await (const chunk of stream) {
       const delta = chunk.choices?.[0]?.delta?.content;
-      if (delta) {
-        res.write(sseLine(buildStreamChunk({ id, model, created, delta: { content: delta } })));
-      }
+      if (delta) reply += delta;
     }
-
-    res.write(sseLine(buildStreamChunk({ id, model, created, delta: {}, finishReason: "stop" })));
-    res.write("data: [DONE]\n\n");
-    res.end();
+    writeOpenAiStream(res, { id, model, content: reply });
   }
 
   // JAC's single brain. Called by /api/ai/guber-assist (session-authed, web/native

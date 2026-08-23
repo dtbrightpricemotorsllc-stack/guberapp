@@ -21,6 +21,7 @@ import React from "react";
 
 const startSessionSpy = vi.hoisted(() => vi.fn());
 const endSessionSpy   = vi.hoisted(() => vi.fn());
+const convaiState = vi.hoisted(() => ({ isSpeaking: false }));
 
 // Captured by the useConversation mock so tests can fire onDisconnect manually
 // to verify it does NOT emit a second error after mic-lost teardown.
@@ -28,6 +29,7 @@ let _capturedConvaiHandlers: {
   onConnect?: () => void;
   onDisconnect?: () => void;
   onError?: (msg: string) => void;
+  onMessage?: (message: { source: "ai" | "user"; message: string }) => void;
 } = {};
 
 vi.mock("@elevenlabs/react", () => ({
@@ -37,7 +39,7 @@ vi.mock("@elevenlabs/react", () => ({
       startSession: startSessionSpy,
       endSession:   endSessionSpy,
       status:       "disconnected",
-      isSpeaking:   false,
+      isSpeaking:   convaiState.isSpeaking,
       isListening:  false,
       isMuted:      false,
       setMuted:     vi.fn(),
@@ -63,7 +65,7 @@ vi.mock("@/lib/jac-tts", () => ({
 
 // ── Import component AFTER all mocks are registered ──────────────────────────
 
-import { JacConvaiSession, _testOnlyFireMicLost } from "./jac-convai-session";
+import { JacConvaiSession, _testOnlyFireMicLost, isJacEchoTranscript } from "./jac-convai-session";
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
 
@@ -172,11 +174,28 @@ const noop = () => {};
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+describe("JacConvaiSession — echo reflection guard", () => {
+  it("recognizes JAC's recent spoken output when it reappears as a user transcript", () => {
+    const spokenAt = 10_000;
+    const spoken = "I can help you find a job nearby. What kind of work fits today?";
+    expect(isJacEchoTranscript(spoken, spoken, spokenAt, spokenAt + 500)).toBe(true);
+    expect(isJacEchoTranscript("I can help you find a job nearby", spoken, spokenAt, spokenAt + 500)).toBe(true);
+  });
+
+  it("keeps a distinct user barge-in and expires the short echo window", () => {
+    const spokenAt = 10_000;
+    const spoken = "I can help you find a job nearby. What kind of work fits today?";
+    expect(isJacEchoTranscript("Stop — I need help posting a job instead.", spoken, spokenAt, spokenAt + 500)).toBe(false);
+    expect(isJacEchoTranscript(spoken, spoken, spokenAt, spokenAt + 6_000)).toBe(false);
+  });
+});
+
 describe("JacConvaiSession — WebSocket transport guarantee", () => {
   beforeEach(() => {
     startSessionSpy.mockClear();
     endSessionSpy.mockClear();
     mockApiRequest.mockReset();
+    convaiState.isSpeaking = false;
     installGetUserMedia();
     installAudioStubs();
   });
@@ -185,7 +204,10 @@ describe("JacConvaiSession — WebSocket transport guarantee", () => {
     cleanup();
   });
 
-  async function mountAndBoot(sessionOverrides: Record<string, any> = {}) {
+  async function mountAndBoot(
+    sessionOverrides: Record<string, any> = {},
+    callbacks: { onUserTranscript?: (text: string) => void; onJacResponse?: (text: string) => void } = {},
+  ) {
     mockApiRequest.mockResolvedValue(makeSessionResponse(sessionOverrides));
 
     await act(async () => {
@@ -194,8 +216,8 @@ describe("JacConvaiSession — WebSocket transport guarantee", () => {
           active={true}
           sessionEndpoint="/api/jac/convai/session"
           onPhaseChange={noop}
-          onUserTranscript={noop}
-          onJacResponse={noop}
+          onUserTranscript={callbacks.onUserTranscript ?? noop}
+          onJacResponse={callbacks.onJacResponse ?? noop}
           onError={noop}
         />,
       );
@@ -215,6 +237,47 @@ describe("JacConvaiSession — WebSocket transport guarantee", () => {
     expect(params.agentId).toBeUndefined();
     expect(params.connectionType).toBeUndefined();
     expect(params.connectionDelay).toBeUndefined();
+  });
+
+  it("requests echo cancellation, noise suppression, and automatic gain control for live voice", async () => {
+    await mountAndBoot();
+    const getUserMedia = navigator.mediaDevices.getUserMedia as unknown as Mock;
+    expect(getUserMedia).toHaveBeenCalledWith({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+  });
+
+  it("never delivers JAC's active spoken output as a new user transcript", async () => {
+    convaiState.isSpeaking = true;
+    const onUserTranscript = vi.fn<(text: string) => void>();
+    const onJacResponse = vi.fn<(text: string) => void>();
+    const spoken = "I can help you find a job nearby. What kind of work fits today?";
+    await mountAndBoot({}, { onUserTranscript, onJacResponse });
+
+    await act(async () => {
+      _capturedConvaiHandlers.onMessage?.({ source: "ai", message: spoken });
+      _capturedConvaiHandlers.onMessage?.({ source: "user", message: spoken });
+    });
+
+    expect(onJacResponse).toHaveBeenCalledWith(spoken);
+    expect(onUserTranscript).not.toHaveBeenCalled();
+  });
+
+  it("still delivers a distinct user barge-in while JAC is speaking", async () => {
+    convaiState.isSpeaking = true;
+    const onUserTranscript = vi.fn<(text: string) => void>();
+    await mountAndBoot({}, { onUserTranscript });
+
+    await act(async () => {
+      _capturedConvaiHandlers.onMessage?.({ source: "ai", message: "I can help you find a job nearby." });
+      _capturedConvaiHandlers.onMessage?.({ source: "user", message: "Stop — I need help posting a job instead." });
+    });
+
+    expect(onUserTranscript).toHaveBeenCalledWith("Stop — I need help posting a job instead.");
   });
 
   it("passes agentId (not signedUrl) on the public-agent fallback path", async () => {

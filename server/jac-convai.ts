@@ -19,6 +19,44 @@ export interface ConvaiMessage {
 }
 
 const ALLOWED_ROLES = new Set(["user", "assistant"]);
+export const JAC_SPEECH_FALLBACK = "I’m here with you. What would you like to do next?";
+
+const SPEECH_METADATA_PATTERN =
+  /\b(?:route|actions?|options?|tracking|confidence|pending[_\s-]?action|guest[_\s-]?draft|feedback[_\s-]?draft|proposed[_\s-]?action|tool[_\s-]?(?:call|result|routing)|system[_\s-]?(?:prompt|message|instruction)|debug|trace|stack|internal(?:\s+(?:note|thought|reasoning|analysis|instruction))?|analysis|reasoning|assistant\s+to)\b\s*[:=]/i;
+const SPEECH_TECHNICAL_PATTERN =
+  /```|`[^`]+`|\*\*|__|!\?*\[[^\]]*\]\([^)]*\)|\[[^\]]+\]\([^)]*\)|(?:^|\n)\s{0,3}(?:#{1,6}\s|[-*+]\s+|\d+[.)]\s)|\b(?:console\.(?:log|warn|error)|json\.parse|function\s*\(|undefined|null)\b/i;
+const STRUCTURED_REPLY_PATTERN =
+  /^\s*[\[{]|[\]}]\s*$|["'](?:reply|route|actions?|tracking|confidence|pendingAction|guestDraft)["']\s*:/i;
+const SPEECH_THINKING_OR_TOOL_PATTERN =
+  /\b(?:let me think|i(?:'m| am)? thinking|i should|my plan is|i need to (?:call|use|route|run)|i(?:'ll| will) (?:call|use|route|run) (?:the\s+)?(?:\w+\s+)?tool|(?:calling|using|running)\s+(?:the\s+)?(?:\w+\s+)?tool|system prompt|hidden instruction)\b/i;
+const MAX_SPOKEN_REPLY_LENGTH = 900;
+
+/**
+ * The authoritative boundary for every piece of text sent to ElevenLabs as JAC
+ * speech. UI/action metadata intentionally stays outside this function: it may
+ * exist in a structured assistant response, but it is never safe to vocalize.
+ */
+export function prepareJacSpeech(candidate: unknown): string {
+  if (typeof candidate !== "string") return JAC_SPEECH_FALLBACK;
+
+  const text = candidate
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (
+    text.length < 2 ||
+    text.length > MAX_SPOKEN_REPLY_LENGTH ||
+    SPEECH_METADATA_PATTERN.test(text) ||
+    SPEECH_TECHNICAL_PATTERN.test(text) ||
+    SPEECH_THINKING_OR_TOOL_PATTERN.test(text) ||
+    STRUCTURED_REPLY_PATTERN.test(text)
+  ) {
+    return JAC_SPEECH_FALLBACK;
+  }
+
+  return text;
+}
 
 /**
  * Same sanitation rules as /api/ai/guber-assist: keep only user/assistant
@@ -111,6 +149,7 @@ export function buildStreamChunk(input: StreamChunkInput) {
 }
 
 export function buildNonStreamCompletion(input: { id: string; model: string; content: string; created?: number }) {
+  const content = prepareJacSpeech(input.content);
   return {
     id: input.id,
     object: "chat.completion" as const,
@@ -119,7 +158,7 @@ export function buildNonStreamCompletion(input: { id: string; model: string; con
     choices: [
       {
         index: 0,
-        message: { role: "assistant" as const, content: input.content },
+        message: { role: "assistant" as const, content },
         finish_reason: "stop" as const,
       },
     ],
@@ -146,8 +185,9 @@ export function writeOpenAiStream(res: SseSink, input: { id: string; model: stri
   res.setHeader("Connection", "keep-alive");
   const created = Math.floor(Date.now() / 1000);
   const { id, model } = input;
+  const content = prepareJacSpeech(input.content);
   res.write(sseLine(buildStreamChunk({ id, model, created, delta: { role: "assistant" } })));
-  res.write(sseLine(buildStreamChunk({ id, model, created, delta: { content: input.content } })));
+  res.write(sseLine(buildStreamChunk({ id, model, created, delta: { content } })));
   res.write(sseLine(buildStreamChunk({ id, model, created, delta: {}, finishReason: "stop" })));
   res.write("data: [DONE]\n\n");
   res.end();
