@@ -39,10 +39,19 @@ export function normalizeOnboardActions(
   // Detect the special action BEFORE any truncation so a model reply with
   // four ordinary actions + show_signup does not silently drop the offer.
   const modelWantsSignup = list.some((a: any) => a?.action === "show_signup");
-  const ordinary = list.filter((a: any) => a?.label && a?.message);
+  const isSignupAction = (action: any) =>
+    action?.action === "show_signup" ||
+    action?.message === "__goto_signup__" ||
+    action?.message === "__goto_login__";
+  // A model may emit a normal-looking signup button even when its special
+  // show_signup action is absent. Keep conversion gated by the deterministic
+  // signup moment in either representation.
+  const ordinary = list.filter((a: any) =>
+    a?.label && a?.message && (opts.signupMoment || !isSignupAction(a))
+  );
 
   const eligible = opts.isGuest && opts.isDoorSurface && !opts.alreadyOffered;
-  const offer = eligible && (modelWantsSignup || opts.signupMoment);
+  const offer = eligible && opts.signupMoment && (modelWantsSignup || opts.signupMoment);
 
   if (offer) {
     // Reserve the 4th slot for show_signup; keep at most 3 ordinary actions.

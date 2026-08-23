@@ -61,6 +61,7 @@ import { verifyJacVoiceToken, signJacVoiceToken } from "./jac-voice-token";
 import { sanitizeAssistMessages, isReflectedAssistantTurn, resolveVoiceToken, newCompletionId, writeOpenAiStream, writeSuppressedOpenAiStream, buildNonStreamCompletion, buildSuppressedCompletion, checkConvaiRateLimit } from "./jac-convai";
 import { getJacSession, setJacSession, clearJacSession, summarizeSession } from "./jac-session";
 import { normalizeOnboardActions } from "./jac-onboard-actions";
+import { gateJacRouteForConversation, hasGuestGoalSignal, JAC_GUEST_HANDOFF_POLICY, JAC_MAIN_APP_CONCIERGE_POLICY } from "./jac-team-guber-concierge";
 import { recordVoiceEvent } from "./jac-voice-telemetry";
 import { DAY1_OG_PROMOTION_ENDS_AT, DAY1_OG_PROMOTION_END_LABEL, canCreateDay1OgCheckout, day1OgPromotionEndsAt, isDay1OgPromotionActive } from "@shared/day1og-promotion";
 import { evaluatePayoutMultiFactor } from "./payout-guard";
@@ -17870,7 +17871,7 @@ ${sources.map((s, i) => `[${i + 1}] (${s.category}) ${s.title}: ${s.answer}`).jo
       // ── Investor-mode prompt (used when mode === "investor") ──────────────
       const investorPrompt = JAC_INVESTOR_PROMPT;
 
-      const onboardPrompt = `You are JAC (pronounced "Jack") — the AI Job Assistance Coordinator for Team GUBER.
+      const onboardPrompt = `You are JAC (pronounced "Jack") — Team GUBER's concierge, resource navigator, and opportunity guide.
 
 You are the intelligent front door to GUBER. Your purpose is bigger than finding jobs.
 
@@ -17884,6 +17885,10 @@ Your internal mindset, always:
 "What does this person have? What do they need? What can we turn into action?"
 
 JAC's mental model: USER SHARES THEIR SITUATION → JAC LISTENS AND UNDERSTANDS → JAC IDENTIFIES WHAT THEY HAVE AND WHAT THEY NEED → JAC BUILDS A REALISTIC EXECUTION ROUTE → TEAM GUBER HELPS EXECUTE IT.
+
+${JAC_MAIN_APP_CONCIERGE_POLICY}
+
+${JAC_GUEST_HANDOFF_POLICY}
 
 GUBER stands for Global Unlimited Business & Employment Resources. GUBER is a US-only platform. What GUBER offers: workers earn on local jobs, hirers post jobs and hire verified workers, Marketplace (cars + items), Verify & Inspect (See For Me), Load Board (transport/hauling), Credits/Missions, Cash Drops (community events — NOT jobs), Online Treasure Hunts (promotional challenges — NOT employment), GUBER Studio (AI content, including GUVATAR AI avatars), Day-1 OG founding membership, D.D. Business Launch (business formation guidance).
 
@@ -18660,13 +18665,22 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
       try {
         const j = JSON.parse(raw);
         if (typeof j.reply === "string" && j.reply.trim()) {
-          const guestDraftRaw = (!onboardUserId && j.guestDraft && typeof j.guestDraft === "object" && typeof j.guestDraft.type === "string")
+          const guestDraftCandidate = (!onboardUserId && j.guestDraft && typeof j.guestDraft === "object" && typeof j.guestDraft.type === "string")
             ? { type: j.guestDraft.type, cta: j.guestDraft.cta || "Sign up free to keep your draft →", data: j.guestDraft.data || {} }
+            : null;
+          // A guest draft is a conversion moment only after a concrete goal
+          // has actually been stated in the conversation. This blocks an
+          // over-eager model from saving/pitching on a vague greeting.
+          const guestDraftRaw = guestDraftCandidate && hasGuestGoalSignal(sanitized)
+            ? guestDraftCandidate
             : null;
           parsed = {
             reply: j.reply.trim(),
             confidence: ["high", "medium", "low"].includes(j.confidence) ? j.confidence : "medium",
-            route: typeof j.route === "string" && j.route.trim() ? j.route.trim() : null,
+            route: gateJacRouteForConversation(
+              typeof j.route === "string" && j.route.trim() ? j.route.trim() : null,
+              sanitized,
+            ),
             actions: j.actions, // normalized below (show_signup slot reservation + caps)
             options: Array.isArray(j.options) ? j.options.filter((a: any) => a?.label && a?.message).slice(0, 11) : [],
             tracking: j.tracking && typeof j.tracking === "object" ? j.tracking : {},
@@ -18682,7 +18696,7 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
           // In-scene signup card (door surface only): normalize actions with a
           // reserved show_signup slot, deterministic trigger, and a
           // once-per-guest-session guard. See server/jac-onboard-actions.ts.
-          const _guestSignupMoment = !onboardUserId && (
+          const _guestSignupMoment = !onboardUserId && hasGuestGoalSignal(sanitized) && (
             !!guestDraftRaw ||
             (parsed.confidence === "high" && typeof parsed.route === "string" && parsed.route.startsWith("/signup"))
           );
@@ -18880,7 +18894,11 @@ VOICE RULES (CRITICAL — non-negotiable):
 - For greetings ("hey", "hi", "hello", "ok", "how are you"): respond naturally and briefly — don't reset to the opening question.
 - Lead with the actual answer or observation immediately. End with at most one follow-up question.
 - Never dead-end — always move the conversation forward.
-- NAME: Always write your name as "Jack" in spoken responses — never "JAC" (all caps is read as letters J-A-C by text-to-speech).${userCtx}`;
+      - NAME: Always write your name as "Jack" in spoken responses — never "JAC" (all caps is read as letters J-A-C by text-to-speech).
+
+${JAC_MAIN_APP_CONCIERGE_POLICY}
+
+${JAC_GUEST_HANDOFF_POLICY}${userCtx}`;
 
       const systemContent = VOICE_SYSTEM + multiSourceSection;
 
@@ -19019,11 +19037,15 @@ VOICE RULES (non-negotiable — enforce every reply):
     if (mode === "investor") {
       baseSystemPrompt = JAC_INVESTOR_PROMPT + VOICE_RULES;
     } else {
-      baseSystemPrompt = `You are Jack — the voice of Team GUBER. Speak with ${firstName ? firstName : "the visitor"} like a sharp, diagnostic friend who figures out what they have, what they need, and what realistic options exist.${firstName ? ` Address them as ${firstName} once at the start, then naturally.` : ""}
+      baseSystemPrompt = `You are Jack — Team GUBER's concierge, resource navigator, and opportunity guide. Speak with ${firstName ? firstName : "the visitor"} like a sharp, diagnostic friend who figures out what they have, what they need, and what realistic options exist.${firstName ? ` Address them as ${firstName} once at the start, then naturally.` : ""}
 
 Core philosophy: "TEAM GUBER — Your go-to for what you go through."
 
 Your internal mindset: "What does this person have? What do they need? What can we turn into action?"
+
+${JAC_MAIN_APP_CONCIERGE_POLICY}
+
+${JAC_GUEST_HANDOFF_POLICY}
 
 WHAT GUBER IS — know this cold:
 GUBER (Global Unlimited Business & Employment Resources) is a US-only AI super app that turns one person into a team. It combines: local jobs & tasks (post a job or earn by doing), Marketplace (cars, vehicles, items for sale or wanted), Verify & Inspect (send a trusted local to document, inspect, or report on anything remotely), Load Board (long-haul freight transport), GUBER Studio (AI content tools, GUVATAR AI avatars, promo videos), Credits & Missions (earn credits via community challenges; $1 = 1,000 credits; cash out at 25,000+), Cash Drops (real-money community events tied to a location), Activations (businesses sponsor community events: QR hunts, store visit missions, giveaways). Community identity: Team GUBER. Tagline: "Your go-to for what you go through."
@@ -19168,7 +19190,7 @@ PERSUASION (invisible — never name the technique):
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       });
 
-      const systemPrompt = `You are the GUBER Assistant — a friendly, concise AI support bot built directly into the GUBER app.
+      const systemPrompt = `You are JAC — Team GUBER's concierge, resource navigator, and opportunity guide inside the GUBER app.
 
 CRITICAL CONTEXT: The person you are talking to is ALREADY logged into the GUBER app. They have an account. NEVER tell them to "download the app", "sign up", "create an account", "log in", or "open the app" — they are already inside it. Treat them as an active member navigating the platform right now.
 
@@ -19186,7 +19208,9 @@ ABOUT THIS USER:
 KEY PLATFORM KNOWLEDGE:
 
 **What GUBER Is**
-GUBER stands for Global Unlimited Business & Employment Resources. Slogan: "Create Value In Yourself." GUBER is a US-based on-demand labor marketplace where workers ("helpers") browse jobs, apply, complete work, and get paid. Individuals and businesses post jobs. All payments flow through GUBER's secure wallet system.
+GUBER stands for Global Unlimited Business & Employment Resources. "Create Value In Yourself." is a secondary slogan. GUBER turns one person into a team: it connects real needs with people, skills, tools, transportation, services, assets, and opportunities. Jobs are one door, not the default front door.
+
+${JAC_MAIN_APP_CONCIERGE_POLICY}
 
 **Cash Drops**
 Cash Drops are bonus reward events GUBER releases to the community. They appear on the map and in-app. Members race to claim them by tapping first. Day-1 OG members get priority notifications and first access.
@@ -19472,7 +19496,10 @@ CRITICAL — respond with JSON ONLY, no other text:
           parsed = {
             reply: j.reply.trim(),
             confidence: ["high", "medium", "low"].includes(j.confidence) ? j.confidence : "medium",
-            route: typeof j.route === "string" && j.route.trim() ? j.route.trim() : null,
+            route: gateJacRouteForConversation(
+              typeof j.route === "string" && j.route.trim() ? j.route.trim() : null,
+              sanitized,
+            ),
             actions: Array.isArray(j.actions) ? (j.actions as any[]).filter((a) => a?.label && a?.message).slice(0, 3) : [],
             options: Array.isArray(j.options) ? (j.options as any[]).filter((a) => a?.label && a?.message).slice(0, 5) : [],
             feedbackDraft: (j.feedbackDraft?.ready === true && typeof j.feedbackDraft?.category === "string")

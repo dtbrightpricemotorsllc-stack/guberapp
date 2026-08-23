@@ -13,18 +13,18 @@ const four = [
   { label: "D", message: "d" },
 ];
 
-// 1. Model returns 4 ordinary actions + show_signup → signup survives, 3 ordinary kept
+// 1. A model cannot force an early signup card before a qualifying moment.
 {
   const { actions, offeredSignup } = normalizeOnboardActions([...four, { action: "show_signup" }], base);
-  assert.equal(offeredSignup, true);
+  assert.equal(offeredSignup, false);
   assert.equal(actions.length, 4);
-  assert.deepEqual(actions[3], { action: "show_signup" });
-  assert.deepEqual(actions.slice(0, 3).map(a => a.label), ["A", "B", "C"]);
+  assert.equal(actions.some(a => a.action === "show_signup"), false);
 }
 
-// 2. Deterministic signup moment (guestDraft / high-confidence /signup route) with no model action
+// 2. Once a goal is understood and the server marks a qualifying moment,
+// signup survives the cap and reserves a slot.
 {
-  const { actions, offeredSignup } = normalizeOnboardActions(four, { ...base, signupMoment: true });
+  const { actions, offeredSignup } = normalizeOnboardActions([...four, { action: "show_signup" }], { ...base, signupMoment: true });
   assert.equal(offeredSignup, true);
   assert.deepEqual(actions[3], { action: "show_signup" });
 }
@@ -59,14 +59,16 @@ const four = [
   assert.equal(offeredSignup, false);
 }
 
-// 6. No trigger → plain 4-cap filtering, malformed entries dropped
+// 6. A premature normal signup/login button is removed too; useful ordinary
+// actions remain available.
 {
   const { actions, offeredSignup } = normalizeOnboardActions(
-    [...four, { label: "E", message: "e" }, { bogus: true }],
+    [{ label: "Sign up", message: "__goto_signup__" }, ...four, { label: "E", message: "e" }, { bogus: true }],
     base
   );
   assert.equal(offeredSignup, false);
   assert.equal(actions.length, 4);
+  assert.equal(actions.some(a => a.message === "__goto_signup__"), false);
 }
 
 console.log("jac-onboard-actions: all 6 tests passed");
