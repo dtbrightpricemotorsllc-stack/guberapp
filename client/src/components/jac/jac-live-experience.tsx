@@ -339,9 +339,20 @@ function WaveformBars({ active, color }: { active: boolean; color: string }) {
 // ── Inner component (uses useConversation — must be inside ConversationProvider) ─
 function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: string; isAuthenticated: boolean }) {
   const { startSession, endSession, status, isSpeaking, isListening, isMuted, setMuted } = useConversation({
-    onConnect:    () => { setError(null); setEnded(false); },
-    onDisconnect: () => { setEnded(true); },
-    onError:      (msg: string) => { setError(msg || "Connection failed"); },
+    onConnect:    () => {
+      setJacConvaiActive(true);
+      cancelAllJacAudio();
+      setError(null);
+      setEnded(false);
+    },
+    onDisconnect: () => {
+      setJacConvaiActive(false);
+      setEnded(true);
+    },
+    onError:      (msg: string) => {
+      setJacConvaiActive(false);
+      setError(msg || "Connection failed");
+    },
     onMessage:    (({ source, message }: { source: "ai" | "user"; message: string }) => {
       if (!message?.trim()) return;
       const text = message.trim();
@@ -364,9 +375,9 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   const [error, setError]       = useState<string | null>(null);
   const [ended, setEnded]       = useState(false);
   const [needGesture, setNeedGesture] = useState(false);
+  const [voiceStartAttempted, setVoiceStartAttempted] = useState(false);
   const [muted, setMutedLocal]  = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
-  const bootedRef               = useRef(false);
   const transcriptEndRef        = useRef<HTMLDivElement>(null);
   const inputRef                = useRef<HTMLInputElement>(null);
   const textId                  = useId();
@@ -399,8 +410,12 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
 
   // ── Boot session ──────────────────────────────────────────────────────────
   const boot = useCallback(async () => {
+    setVoiceStartAttempted(true);
+    setNeedGesture(false);
     setError(null);
     setEnded(false);
+    // Live voice is the sole audio owner once explicitly requested.
+    cancelAllJacAudio();
     try {
       const [micRes, sesRes] = await Promise.allSettled([
         navigator.mediaDevices.getUserMedia({ audio: true }),
@@ -413,6 +428,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
 
       if (micRes.status === "rejected") {
         setNeedGesture(true);
+        setError("Microphone unavailable. Allow mic access or use text chat.");
         return;
       }
       micRes.value.getTracks().forEach(t => t.stop());
@@ -441,12 +457,17 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     }
   }, [sessionEndpoint, startSession]);
 
-  // Auto-boot on mount
+  // Best-effort output-only welcome. This deliberately does not unlock audio,
+  // request a microphone, fetch a voice session, or start ConvAI. Autoplay may
+  // be blocked; the visible text greeting is always retained.
   useEffect(() => {
-    if (bootedRef.current) return;
-    bootedRef.current = true;
-    boot();
-  }, [boot]);
+    if (msgs.length !== 1 || msgs[0].id !== "jac-welcome") return;
+    try {
+      if (sessionStorage.getItem(GREETING_SESSION_KEY) === "1") return;
+      sessionStorage.setItem(GREETING_SESSION_KEY, "1");
+    } catch {}
+    void jacSpeak(WELCOME_GREETING);
+  }, [msgs]);
 
   // ── Text-mode send ────────────────────────────────────────────────────────
   const sendText = useCallback(async (text: string) => {
@@ -504,9 +525,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     try { endSession(); } catch {}
     setEnded(false);
     setError(null);
-    bootedRef.current = false;
     setTimeout(() => {
-      bootedRef.current = true;
       boot();
     }, 400);
   }, [endSession, boot]);
