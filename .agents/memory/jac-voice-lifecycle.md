@@ -17,20 +17,21 @@ then calling `jacSpeak(GREETING_TTS)` → user heard greeting for seemingly no r
 **Fix**: Removed the document-level auto-start-on-gesture effect entirely. It remains
 important that text input and ordinary page gestures never trigger voice.
 
-### 2a. Public live homepage intentionally auto-boots voice
-The dedicated public live JAC experience is the exception: its product behavior is
-to automatically attempt the voice session when that component mounts, rather than
-wait for an explicit mic tap. If microphone access is unavailable, it must leave
-JAC visible, keep text chat usable, and show the failure inline rather than
-covering the character with a blocking overlay.
+### 2a. Public and signed-in JAC use permission-safe automatic live start
+The public live homepage and signed-in main-app assistant may automatically start
+their live sessions on entry, but only after confirming that microphone permission
+is already granted and an audio-input device exists. All other states keep JAC
+visible in text mode and deliver the one-time welcome through output-only TTS,
+without prompting for permission or showing a blocking overlay.
 
-**Why:** The desired first impression is that JAC immediately comes alive on the
-homepage. Removing that automatic attempt made the experience feel less welcoming.
+**Why:** The desired first impression is that JAC comes alive automatically for
+ready devices, but unavailable or blocked microphones must never make the product
+feel broken.
 
-**How to apply:** Preserve automatic boot only on the public live homepage. Keep
-document-level gesture listeners removed, and retain explicit mic control for
-legacy and signed-in assistant surfaces unless their product behavior is separately
-changed.
+**How to apply:** Keep document-level gesture listeners removed. Share the generic
+greeting claim across every JAC surface; make automatic live-start claims per
+surface to prevent remount loops while allowing the signed-in app to establish its
+own session after the public page. Starting live voice must cancel pending TTS.
 
 ### 3. handleConvaiError replayed the greeting via TTS
 Any voice failure called `jacSpeak(GREETING_TTS)` — the greeting text spoken aloud.

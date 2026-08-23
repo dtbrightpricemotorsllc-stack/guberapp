@@ -22,7 +22,7 @@ const JAC_GREETING_KEYS = [
   "jac_homepage_greeting_spoken_v1",
 ];
 let greetingClaimedThisRuntime = false;
-let autoVoiceClaimedThisRuntime = false;
+const autoVoiceClaimedThisRuntime = new Set<"public" | "assistant">();
 
 export const JAC_WELCOME_GREETING =
   "Hey, welcome to Team GUBER. What are you trying to make happen?";
@@ -55,17 +55,18 @@ export async function isJacMicrophoneReady(): Promise<boolean> {
   }
 }
 
-/** Claim one automatic live-start attempt across public and signed-in JAC. */
-export function claimJacAutomaticVoiceStart(): boolean {
-  if (autoVoiceClaimedThisRuntime) return false;
+/** Claim one automatic live-start attempt per surface for this browser session. */
+export function claimJacAutomaticVoiceStart(surface: "public" | "assistant"): boolean {
+  if (autoVoiceClaimedThisRuntime.has(surface)) return false;
   if (typeof window === "undefined") return false;
+  const key = `jac_auto_voice_started_${surface}_v1`;
   try {
-    if (window.sessionStorage.getItem("jac_auto_voice_started_v1") === "1") return false;
-    window.sessionStorage.setItem("jac_auto_voice_started_v1", "1");
+    if (window.sessionStorage.getItem(key) === "1") return false;
+    window.sessionStorage.setItem(key, "1");
   } catch {
     // The runtime guard still prevents loops during this page lifetime.
   }
-  autoVoiceClaimedThisRuntime = true;
+  autoVoiceClaimedThisRuntime.add(surface);
   return true;
 }
 

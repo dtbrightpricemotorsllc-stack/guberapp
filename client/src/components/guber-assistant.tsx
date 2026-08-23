@@ -436,13 +436,9 @@ export function GUBERAssistant() {
     jacSpeak(text, { muted });
   }
 
-  // Tear down the ConvAI session whenever JAC closes, the app is backgrounded,
-  // or the tab goes hidden — never leave an open mic stream running unattended.
-  useEffect(() => {
-    if (!s.open) stopConvai();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s.open]);
-
+  // Tear down the ConvAI session when the app is backgrounded or hidden.
+  // Closing the sheet itself is handled in onOpenChange; this intentionally
+  // does not stop a permission-safe automatic session while the sheet is closed.
   useEffect(() => {
     function onVisibility() {
       if (document.visibilityState === "hidden") stopConvai();
@@ -470,13 +466,19 @@ export function GUBERAssistant() {
     return () => window.removeEventListener("jac:wake", onWake);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-start only when permission is already granted and a real input exists.
-  // Permission prompts, blocked devices, and missing microphones stay in text mode.
+  // Choose one welcome owner on main-app entry. A granted microphone starts the
+  // existing live session; every other state gets only output TTS. Neither path
+  // prompts for mic permission or prewarms an authenticated session.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      if (!await isJacMicrophoneReady() || cancelled || !claimJacAutomaticVoiceStart()) return;
-      startConvai();
+      if (await isJacMicrophoneReady() && !cancelled && claimJacAutomaticVoiceStart("assistant")) {
+        startConvai();
+        return;
+      }
+      if (!cancelled && messages.length === 1 && claimJacWelcomeGreeting()) {
+        void jacSpeak(JAC_WELCOME_GREETING, { muted });
+      }
     })();
     return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -493,11 +495,10 @@ export function GUBERAssistant() {
     setTimeout(() => { el.scrollTop = el.scrollHeight; }, 80);
   }, [messages, s.open]);
 
-  // Personalise the signed-in surface without replaying the generic greeting.
-  // The generic greeting is output-only and claimed across public/signed-in JAC.
+  // Personalise the signed-in surface without replaying the already-claimed
+  // generic greeting.
   useEffect(() => {
     if (messages.length !== 1) return;
-    if (claimJacWelcomeGreeting()) void jacSpeak(JAC_WELCOME_GREETING, { muted });
     if (!s.open) return;
 
     // ── Resume pending pre-login draft for newly logged-in users ──────────
@@ -913,6 +914,21 @@ export function GUBERAssistant() {
 
   return (
     <>
+    {/* Keep the live controller mounted independently of the visual sheet so a
+        previously-granted microphone can auto-start from the main app entry. */}
+    {convaiActive && (
+      <ConversationProvider>
+        <JacConvaiSession
+          key={convaiKey}
+          ref={convaiSessionRef}
+          active={convaiActive}
+          onPhaseChange={handleConvaiPhaseChange}
+          onUserTranscript={handleConvaiUserTranscript}
+          onJacResponse={handleConvaiJacResponse}
+          onError={handleConvaiError}
+        />
+      </ConversationProvider>
+    )}
     <Sheet
       open={s.open}
       onOpenChange={(v) => {
@@ -935,20 +951,6 @@ export function GUBERAssistant() {
         style={{ background: "hsl(222 47% 5%)", borderTop: "1px solid hsl(270 100% 65% / 0.2)" }}
         hideCloseButton
       >
-        {/* ConversationProvider + session only mount when voice is active */}
-        {convaiActive && (
-          <ConversationProvider>
-            <JacConvaiSession
-              key={convaiKey}
-              ref={convaiSessionRef}
-              active={convaiActive}
-              onPhaseChange={handleConvaiPhaseChange}
-              onUserTranscript={handleConvaiUserTranscript}
-              onJacResponse={handleConvaiJacResponse}
-              onError={handleConvaiError}
-            />
-          </ConversationProvider>
-        )}
         {/* ── Header ── */}
         <SheetHeader className="px-5 pt-4 pb-3 flex-shrink-0 border-b border-white/[0.05]">
           <div className="flex items-center justify-between">

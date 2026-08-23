@@ -3,6 +3,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   appendSharedJacMessage,
+  claimJacAutomaticVoiceStart,
+  claimJacWelcomeGreeting,
   getJacQuickActions,
   isServiceDiscoveryIntent,
   readSharedJacConversation,
@@ -43,5 +45,17 @@ describe("JAC live coordination", () => {
     expect(anonymousEndpoint).toBe("/api/jac/convai/investor-session");
     expect(authenticatedEndpoint).toBe("/api/jac/convai/session");
     expect(authenticatedEndpoint).not.toBe(anonymousEndpoint);
+  });
+
+  it("shares one generic greeting across JAC surfaces for the browser session", () => {
+    expect(claimJacWelcomeGreeting()).toBe(true);
+    expect(claimJacWelcomeGreeting()).toBe(false);
+  });
+
+  it("allows one automatic live start per surface without retry loops", () => {
+    expect(claimJacAutomaticVoiceStart("public")).toBe(true);
+    expect(claimJacAutomaticVoiceStart("public")).toBe(false);
+    expect(claimJacAutomaticVoiceStart("assistant")).toBe(true);
+    expect(claimJacAutomaticVoiceStart("assistant")).toBe(false);
   });
 });

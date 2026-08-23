@@ -456,29 +456,24 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     }
   }, [sessionEndpoint, startSession]);
 
-  // JAC's homepage voice experience boots automatically on mount. The
-  // visible character and text chat remain usable if the browser has no mic
-  // (or blocks permission), and reconnect remains available inline.
+  // Choose one welcome owner on entry: a ready live session when permission
+  // was already granted, otherwise the output-only greeting. No permission
+  // prompt is made here; manual voice remains available in the fallback state.
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
-      if (await isJacMicrophoneReady() && claimJacAutomaticVoiceStart()) {
+      if (await isJacMicrophoneReady() && !cancelled && claimJacAutomaticVoiceStart("public")) {
         await boot();
+        return;
       }
+      if (!cancelled && claimJacWelcomeGreeting()) void jacSpeak(WELCOME_GREETING);
     })();
     return () => {
+      cancelled = true;
       setJacConvaiActive(false);
       try { endSession(); } catch {}
     };
   }, [boot, endSession]);
-
-  // Best-effort output-only welcome. This deliberately does not unlock audio,
-  // request a microphone, fetch a voice session, or start ConvAI. Autoplay may
-  // be blocked; the visible text greeting is always retained.
-  useEffect(() => {
-    if (msgs.length !== 1 || msgs[0].id !== "jac-welcome") return;
-    if (!claimJacWelcomeGreeting()) return;
-    void jacSpeak(WELCOME_GREETING);
-  }, [msgs]);
 
   // ── Text-mode send ────────────────────────────────────────────────────────
   const sendText = useCallback(async (text: string) => {
