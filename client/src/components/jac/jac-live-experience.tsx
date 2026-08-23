@@ -26,9 +26,11 @@ import { useGuestJacSession } from "@/hooks/use-guest-jac-session";
 import { jacSpeak, cancelAllJacAudio, setJacConvaiActive } from "@/lib/jac-tts";
 import {
   appendSharedJacMessage,
+  claimJacAutomaticVoiceStart,
   claimJacWelcomeGreeting,
   getJacQuickActions,
   isServiceDiscoveryIntent,
+  isJacMicrophoneReady,
   JAC_WELCOME_GREETING,
   readSharedJacConversation,
 } from "@/lib/jac-live-coordination";
@@ -458,7 +460,11 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   // visible character and text chat remain usable if the browser has no mic
   // (or blocks permission), and reconnect remains available inline.
   useEffect(() => {
-    void boot();
+    void (async () => {
+      if (await isJacMicrophoneReady() && claimJacAutomaticVoiceStart()) {
+        await boot();
+      }
+    })();
     return () => {
       setJacConvaiActive(false);
       try { endSession(); } catch {}

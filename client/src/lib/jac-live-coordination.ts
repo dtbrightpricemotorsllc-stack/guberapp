@@ -22,6 +22,7 @@ const JAC_GREETING_KEYS = [
   "jac_homepage_greeting_spoken_v1",
 ];
 let greetingClaimedThisRuntime = false;
+let autoVoiceClaimedThisRuntime = false;
 
 export const JAC_WELCOME_GREETING =
   "Hey, welcome to Team GUBER. What are you trying to make happen?";
@@ -37,6 +38,34 @@ export function claimJacWelcomeGreeting(): boolean {
   } catch {
     // The runtime guard still prevents duplicate greetings when storage is unavailable.
   }
+  return true;
+}
+
+/** Check voice readiness without prompting for permission or opening the mic. */
+export async function isJacMicrophoneReady(): Promise<boolean> {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) return false;
+  if (!navigator.permissions?.query) return false;
+  try {
+    const permission = await navigator.permissions.query({ name: "microphone" as PermissionName });
+    if (permission.state !== "granted") return false;
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.some((device) => device.kind === "audioinput");
+  } catch {
+    return false;
+  }
+}
+
+/** Claim one automatic live-start attempt across public and signed-in JAC. */
+export function claimJacAutomaticVoiceStart(): boolean {
+  if (autoVoiceClaimedThisRuntime) return false;
+  if (typeof window === "undefined") return false;
+  try {
+    if (window.sessionStorage.getItem("jac_auto_voice_started_v1") === "1") return false;
+    window.sessionStorage.setItem("jac_auto_voice_started_v1", "1");
+  } catch {
+    // The runtime guard still prevents loops during this page lifetime.
+  }
+  autoVoiceClaimedThisRuntime = true;
   return true;
 }
 

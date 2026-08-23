@@ -29,8 +29,10 @@ import { extractAndSaveMemory } from "@/lib/jac-memory";
 import { useJacContext, useJacOpportunities } from "@/lib/use-jac-context";
 import {
   appendSharedJacMessage,
+  claimJacAutomaticVoiceStart,
   claimJacWelcomeGreeting,
   getJacQuickActions,
+  isJacMicrophoneReady,
   JAC_WELCOME_GREETING,
   readSharedJacConversation,
 } from "@/lib/jac-live-coordination";
@@ -466,6 +468,17 @@ export function GUBERAssistant() {
     }
     window.addEventListener("jac:wake", onWake);
     return () => window.removeEventListener("jac:wake", onWake);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-start only when permission is already granted and a real input exists.
+  // Permission prompts, blocked devices, and missing microphones stay in text mode.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (!await isJacMicrophoneReady() || cancelled || !claimJacAutomaticVoiceStart()) return;
+      startConvai();
+    })();
+    return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
