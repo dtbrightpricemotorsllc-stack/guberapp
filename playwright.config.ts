@@ -37,6 +37,9 @@ export default defineConfig({
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
+        // Let browser tests exercise the already-approved microphone path
+        // without depending on a physical input device in CI.
+        "--use-fake-device-for-media-stream",
       ],
     },
   },
