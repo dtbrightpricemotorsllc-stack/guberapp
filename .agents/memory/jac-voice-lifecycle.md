@@ -29,9 +29,10 @@ ready devices, but unavailable or blocked microphones must never make the produc
 feel broken.
 
 **How to apply:** Keep document-level gesture listeners removed. Share the generic
-greeting claim across every JAC surface; make automatic live-start claims per
-surface to prevent remount loops while allowing the signed-in app to establish its
-own session after the public page. Starting live voice must cancel pending TTS.
+greeting claim across every JAC surface, but scope automatic live-start claims to
+one mounted voice-session lifecycle. An auth-triggered provider remount therefore
+gets one fresh automatic start without creating a retry loop. Starting live voice
+must cancel pending TTS.
 
 ### 3. handleConvaiError replayed the greeting via TTS
 Any voice failure called `jacSpeak(GREETING_TTS)` — the greeting text spoken aloud.
@@ -75,3 +76,17 @@ The public homepage initially renders before the authenticated user finishes hyd
 **Why:** A one-time boot guard otherwise leaves signed-in visitors in the anonymous voice session, without account context.
 
 **How to apply:** Preserve transcript continuity separately from the voice connection so the endpoint change can safely remount only the session layer.
+
+## Public/auth voice identity
+
+Ordinary anonymous homepage sessions use the canonical app-mode JAC identity, not
+the investor identity; signing in replaces that anonymous connection with the
+authenticated app-mode connection while retaining the same configured ConvAI agent.
+
+**Why:** Sending ordinary visitors through investor mode makes the assistant sound
+and behave differently immediately after sign-in, even though they are continuing
+the same JAC journey.
+
+**How to apply:** Keep investor mode exclusive to actual investor experiences.
+The anonymous homepage and authenticated application should both identify as
+canonical app-mode JAC; only the authenticated connection adds account context.

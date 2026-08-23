@@ -19609,6 +19609,90 @@ CRITICAL — respond with JSON ONLY, no other text:
     }
   });
 
+  // ── JAC voice session mint — PUBLIC homepage variant (no auth) ─────────────
+  // The public homepage uses the same canonical JAC personality as the signed-in
+  // app. Investor-specific identity and prompting stay isolated to the route above.
+  app.post("/api/jac/convai/public-session", async (_req: Request, res: Response) => {
+    try {
+      const agentId = process.env.ELEVENLABS_CONVAI_AGENT_ID;
+      const apiKey  = process.env.ELEVENLABS_API_KEY;
+      if (!agentId || !apiKey) return res.status(503).json({ message: "voice agent not configured" });
+
+      const cid = "public_" + randomBytes(8).toString("hex");
+      const voiceToken = signJacVoiceToken({
+        userId: null,
+        role: "anon",
+        platform: "web",
+        cid,
+        firstName: "there",
+        jacMode: "app",
+      });
+
+      const now = Date.now();
+      const agentKnownPublic = _jacSignedUrlPublicUntil > now;
+      let signedUrl: string | null = null;
+      if (!agentKnownPublic) {
+        try {
+          const signedRes = await fetch(
+            `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
+            { headers: { "xi-api-key": apiKey }, signal: AbortSignal.timeout(4000) },
+          );
+          if (signedRes.ok) {
+            const signedJson: any = await signedRes.json().catch(() => ({}));
+            signedUrl = signedJson?.signed_url ?? null;
+            _jacSignedUrlPublicUntil = 0;
+            _jacAgentLastKnownPrivate = true;
+            console.log("[jac/convai/public-session] signed-url OK → private-agent mode (signed)");
+          } else {
+            _jacSignedUrlPublicUntil = now + JAC_SIGNED_URL_PUBLIC_TTL_MS;
+            console.log(`[jac/convai/public-session] signed-url ${signedRes.status} → public-agent mode (cached ${JAC_SIGNED_URL_PUBLIC_TTL_MS / 60000}min)`);
+            if (_jacAgentLastKnownPrivate) {
+              recordSystemIssue({
+                module: "voice",
+                route: "/api/jac/convai/public-session",
+                platform: "server",
+                errorMessage: `JAC voice agent unexpectedly entered public-agent mode (HTTP ${signedRes.status}). Agent was previously confirmed private. Check ElevenLabs dashboard agent privacy setting.`,
+                attemptedAction: "mint_public_convai_session",
+                blocked: false,
+                source: "health_probe",
+                severityFloor: "high",
+                suggestedFix: "Open the ElevenLabs dashboard, locate the GUBER JAC agent, and confirm its Privacy setting is set to Private.",
+              }).catch((e: any) => console.error("[jac/convai/public-session] failed to record voice-auth issue:", e?.message));
+            }
+          }
+        } catch (fetchErr: any) {
+          _jacSignedUrlPublicUntil = now + JAC_SIGNED_URL_PUBLIC_TTL_MS;
+          console.warn(`[jac/convai/public-session] signed-url fetch error: ${fetchErr?.message} → public-agent fallback`);
+          if (_jacAgentLastKnownPrivate) {
+            recordSystemIssue({
+              module: "voice",
+              route: "/api/jac/convai/public-session",
+              platform: "server",
+              errorMessage: `JAC voice signed-URL fetch failed (${fetchErr?.message ?? "unknown error"}) after agent was previously confirmed private. Voice falling back to unauthenticated public-agent mode.`,
+              attemptedAction: "mint_public_convai_session",
+              blocked: false,
+              source: "health_probe",
+              severityFloor: "high",
+              suggestedFix: "Check ElevenLabs API key validity and network connectivity to api.elevenlabs.io.",
+            }).catch((e: any) => console.error("[jac/convai/public-session] failed to record voice-auth issue:", e?.message));
+          }
+        }
+      }
+
+      console.log(`[jac/convai/public-session] cid=${cid} mode=app signedUrl=${signedUrl ? "yes" : "no"}`);
+      return res.json({
+        agentId,
+        ...(signedUrl ? { signedUrl } : {}),
+        voiceToken,
+        dynamicVariableName: "secret__jac_voice_token",
+        userContext: { firstName: "there", role: "anon", platform: "web", jac_mode: "app", userId: "anon" },
+      });
+    } catch (err: any) {
+      console.error("[jac/convai/public-session]", err?.message);
+      return res.status(500).json({ message: "session error" });
+    }
+  });
+
   // ── JAC voice telemetry beacon ────────────────────────────────────────────
   // Fire-and-forget POST from the client reporting connection outcomes (connect,
   // timeout, error, disconnect). No auth required. Rate-limited to 20 req/min
@@ -19706,7 +19790,11 @@ CRITICAL — respond with JSON ONLY, no other text:
       const platform: "web" | "ios" | "android" =
         platformRaw === "ios" ? "ios" : platformRaw === "android" ? "android" : "web";
       const role: "admin" | "user" = user.role === "admin" ? "admin" : "user";
-      const voiceToken = signJacVoiceToken({ userId: user.id, role, platform });
+      const convaiMode = req.body?.mode === "investor" ? "investor"
+        : req.body?.mode === "admin" ? "admin"
+        : req.body?.mode === "business_demo" ? "business_demo"
+        : "app";
+      const voiceToken = signJacVoiceToken({ userId: user.id, role, platform, jacMode: convaiMode });
 
       // Masked agent ID for safe logging (first 8 + last 4 chars)
       const maskedAgent = agentId.length > 12
@@ -19782,11 +19870,6 @@ CRITICAL — respond with JSON ONLY, no other text:
 
       const ms = Date.now() - t0;
       console.log(`[jac/convai/session] ready in ${ms}ms — mode=${signedUrl ? "signed" : "public"}`);
-
-      const convaiMode = req.body?.mode === "investor" ? "investor"
-        : req.body?.mode === "admin" ? "admin"
-        : req.body?.mode === "business_demo" ? "business_demo"
-        : "app";
 
       return res.json({
         agentId,

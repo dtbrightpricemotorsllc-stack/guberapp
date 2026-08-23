@@ -29,8 +29,8 @@ import { extractAndSaveMemory } from "@/lib/jac-memory";
 import { useJacContext, useJacOpportunities } from "@/lib/use-jac-context";
 import {
   appendSharedJacMessage,
-  claimJacAutomaticVoiceStart,
   claimJacWelcomeGreeting,
+  createJacAutomaticVoiceStartClaim,
   getJacQuickActions,
   isJacMicrophoneReady,
   JAC_WELCOME_GREETING,
@@ -387,6 +387,10 @@ export function GUBERAssistant() {
   const convaiActiveRef = useRef(false);
   const convaiSessionRef = useRef<JacConvaiSessionHandle | null>(null);
   const [convaiKey, setConvaiKey] = useState(0);
+  const automaticStartClaimRef = useRef<(() => boolean) | null>(null);
+  if (!automaticStartClaimRef.current) {
+    automaticStartClaimRef.current = createJacAutomaticVoiceStartClaim();
+  }
   useEffect(() => { convaiActiveRef.current = convaiActive; }, [convaiActive]);
 
   // Mic guidance — pulse animation + "Tap to talk" label until first mic use
@@ -472,7 +476,11 @@ export function GUBERAssistant() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      if (await isJacMicrophoneReady() && !cancelled && claimJacAutomaticVoiceStart("assistant")) {
+      if (
+        await isJacMicrophoneReady()
+        && !cancelled
+        && automaticStartClaimRef.current?.()
+      ) {
         startConvai();
         return;
       }

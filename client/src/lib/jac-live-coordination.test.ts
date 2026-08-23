@@ -3,8 +3,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   appendSharedJacMessage,
-  claimJacAutomaticVoiceStart,
   claimJacWelcomeGreeting,
+  createJacAutomaticVoiceStartClaim,
   getJacQuickActions,
   isServiceDiscoveryIntent,
   readSharedJacConversation,
@@ -38,11 +38,11 @@ describe("JAC live coordination", () => {
     ]);
   });
 
-  it("switches from the anonymous voice endpoint when authentication hydrates", () => {
+  it("switches from the canonical anonymous homepage endpoint when authentication hydrates", () => {
     const anonymousEndpoint = getJacLiveSessionEndpoint(false);
     const authenticatedEndpoint = getJacLiveSessionEndpoint(true);
 
-    expect(anonymousEndpoint).toBe("/api/jac/convai/investor-session");
+    expect(anonymousEndpoint).toBe("/api/jac/convai/public-session");
     expect(authenticatedEndpoint).toBe("/api/jac/convai/session");
     expect(authenticatedEndpoint).not.toBe(anonymousEndpoint);
   });
@@ -52,10 +52,17 @@ describe("JAC live coordination", () => {
     expect(claimJacWelcomeGreeting()).toBe(false);
   });
 
-  it("allows one automatic live start per surface without retry loops", () => {
-    expect(claimJacAutomaticVoiceStart("public")).toBe(true);
-    expect(claimJacAutomaticVoiceStart("public")).toBe(false);
-    expect(claimJacAutomaticVoiceStart("assistant")).toBe(true);
-    expect(claimJacAutomaticVoiceStart("assistant")).toBe(false);
+  it("allows one automatic live start per mounted JAC lifecycle", () => {
+    const firstMount = createJacAutomaticVoiceStartClaim();
+    expect(firstMount()).toBe(true);
+    expect(firstMount()).toBe(false);
+  });
+
+  it("allows a new JAC mount to autoboot after a sign-in return", () => {
+    const firstMount = createJacAutomaticVoiceStartClaim();
+    const returnedMount = createJacAutomaticVoiceStartClaim();
+
+    expect(firstMount()).toBe(true);
+    expect(returnedMount()).toBe(true);
   });
 });

@@ -26,8 +26,8 @@ import { useGuestJacSession } from "@/hooks/use-guest-jac-session";
 import { jacSpeak, cancelAllJacAudio, setJacConvaiActive } from "@/lib/jac-tts";
 import {
   appendSharedJacMessage,
-  claimJacAutomaticVoiceStart,
   claimJacWelcomeGreeting,
+  createJacAutomaticVoiceStartClaim,
   getJacQuickActions,
   isServiceDiscoveryIntent,
   isJacMicrophoneReady,
@@ -66,7 +66,7 @@ const WELCOME_GREETING = JAC_WELCOME_GREETING;
 export function getJacLiveSessionEndpoint(isAuthenticated: boolean): string {
   return isAuthenticated
     ? "/api/jac/convai/session"
-    : "/api/jac/convai/investor-session";
+    : "/api/jac/convai/public-session";
 }
 
 // ── Session storage persistence ──────────────────────────────────────────────
@@ -384,6 +384,10 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   const inputRef                = useRef<HTMLInputElement>(null);
   const textId                  = useId();
   const { guestSessionId }      = useGuestJacSession();
+  const automaticStartClaimRef = useRef<(() => boolean) | null>(null);
+  if (!automaticStartClaimRef.current) {
+    automaticStartClaimRef.current = createJacAutomaticVoiceStartClaim();
+  }
 
   // Persist messages
   useEffect(() => { saveMsgs(msgs); }, [msgs]);
@@ -444,7 +448,9 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       };
       if (session.userContext?.firstName) dynVars["user_first_name"] = session.userContext.firstName;
       if (session.userContext?.role)      dynVars["user_role"]        = session.userContext.role;
-      dynVars["jac_mode"] = "homepage";
+      if (session.userContext?.platform)  dynVars["user_platform"]    = session.userContext.platform;
+      if (session.userContext?.jac_mode)  dynVars["jac_mode"]         = session.userContext.jac_mode;
+      if (session.userContext?.userId != null) dynVars["user_id"]     = String(session.userContext.userId);
 
       const params: Record<string, any> = { dynamicVariables: dynVars };
       if (session.signedUrl) params.signedUrl = session.signedUrl;
@@ -462,7 +468,11 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      if (await isJacMicrophoneReady() && !cancelled && claimJacAutomaticVoiceStart("public")) {
+      if (
+        await isJacMicrophoneReady()
+        && !cancelled
+        && automaticStartClaimRef.current?.()
+      ) {
         await boot();
         return;
       }

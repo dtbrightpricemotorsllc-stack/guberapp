@@ -8,12 +8,13 @@ beforeAll(() => {
 
 describe("jac-voice-token", () => {
   it("round-trips an authenticated user token", () => {
-    const tok = signJacVoiceToken({ userId: 42, role: "user", platform: "web" });
+    const tok = signJacVoiceToken({ userId: 42, role: "user", platform: "web", jacMode: "app" });
     const p = verifyJacVoiceToken(tok);
     expect(p).not.toBeNull();
     expect(p!.userId).toBe(42);
     expect(p!.role).toBe("user");
     expect(p!.platform).toBe("web");
+    expect(p!.jacMode).toBe("app");
     expect(p!.ver).toBe(1);
     expect(typeof p!.cid).toBe("string");
   });

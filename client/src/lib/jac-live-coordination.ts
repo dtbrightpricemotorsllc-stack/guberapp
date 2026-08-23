@@ -22,7 +22,6 @@ const JAC_GREETING_KEYS = [
   "jac_homepage_greeting_spoken_v1",
 ];
 let greetingClaimedThisRuntime = false;
-const autoVoiceClaimedThisRuntime = new Set<"public" | "assistant">();
 
 export const JAC_WELCOME_GREETING =
   "Hey, welcome to Team GUBER. What are you trying to make happen?";
@@ -55,19 +54,21 @@ export async function isJacMicrophoneReady(): Promise<boolean> {
   }
 }
 
-/** Claim one automatic live-start attempt per surface for this browser session. */
-export function claimJacAutomaticVoiceStart(surface: "public" | "assistant"): boolean {
-  if (autoVoiceClaimedThisRuntime.has(surface)) return false;
-  if (typeof window === "undefined") return false;
-  const key = `jac_auto_voice_started_${surface}_v1`;
-  try {
-    if (window.sessionStorage.getItem(key) === "1") return false;
-    window.sessionStorage.setItem(key, "1");
-  } catch {
-    // The runtime guard still prevents loops during this page lifetime.
-  }
-  autoVoiceClaimedThisRuntime.add(surface);
-  return true;
+/**
+ * Create a duplicate-start guard for one mounted JAC session.
+ *
+ * This deliberately stays out of browser storage: returning from sign-in or an
+ * auth-driven provider remount is a fresh JAC entry and must be allowed to
+ * establish its current voice session again. The generic greeting has its own,
+ * separate browser-session guard above.
+ */
+export function createJacAutomaticVoiceStartClaim(): () => boolean {
+  let claimed = false;
+  return () => {
+    if (claimed) return false;
+    claimed = true;
+    return true;
+  };
 }
 
 export const JAC_QUICK_ACTIONS: JacQuickAction[] = [
