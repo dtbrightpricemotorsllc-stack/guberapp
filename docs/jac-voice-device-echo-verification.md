@@ -64,3 +64,38 @@ server-side duplicate-turn suppression, not a client-only transcript filter.
 
 The automated test uses a fake microphone and Chromium/jsdom. It is not a
 substitute for the physical-device rows above.
+
+## Verification record
+
+**Attempted:** 2026-08-23
+**Result:** Physical-device acceptance is blocked in this environment. No
+physical iOS or Android device is attached, and the container does not provide
+`adb` or Xcode's `xcrun` device tooling. No device-level result is claimed.
+
+The four required runtime rows remain pending for both public and signed-in
+JAC:
+
+- iOS Safari — not run
+- iOS WKWebView/TestFlight — not run
+- Android Chrome — not run
+- Android WebView/installed app — not run
+
+The available automated evidence is:
+
+- `npx vitest run client/src/components/jac/jac-convai-session.test.tsx` —
+  **21 passed**
+- The suite covers requested browser echo-cancellation constraints, hidden
+  reflected assistant speech, distinct barge-in delivery, short utterances,
+  and expiry of the reflection window.
+
+The standalone WebSocket transport validator was also attempted, but it
+currently reports two stale expectations for `connectionType: "websocket"` and
+`connectionDelay: 0`; those options are intentionally absent from the current
+session startup path while Task 843 is in progress. Its result is not used as
+device-level evidence.
+
+When physical devices are available, replace the pending entries above with
+the observed result for both auth states, and repeat with speaker output,
+Bluetooth where available, and background/foreground return. A pass must
+confirm both that no reflected speech appears as a user transcript or causes a
+second reply and that a distinct interruption receives exactly one response.
