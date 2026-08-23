@@ -5,7 +5,7 @@
  *   Surface 1 (left / top)   — JAC character + conversation controls
  *   Surface 2 (right / bottom) — context-driven action area
  *
- * Voice: ElevenLabs ConvAI, auto-starts on first user gesture.
+ * Voice: ElevenLabs ConvAI, starts only from the explicit mic control.
  * Text:  /api/jac/onboard with full conversation history.
  * Both modes share the same message history and Surface 2 state.
  */
@@ -23,6 +23,7 @@ import { useAuth } from "@/lib/auth-context";
 import { JacCharacterRenderer, type JacState } from "@/components/jac/jac-character-renderer";
 import { Link } from "wouter";
 import { useGuestJacSession } from "@/hooks/use-guest-jac-session";
+import { jacSpeak, cancelAllJacAudio, setJacConvaiActive } from "@/lib/jac-tts";
 import {
   appendSharedJacMessage,
   getJacQuickActions,
@@ -56,14 +57,14 @@ interface Surface2State {
   data?: Record<string, any>;
 }
 
+const WELCOME_GREETING = "Hey, welcome to Team GUBER. What are you trying to make happen?";
+const GREETING_SESSION_KEY = "jac_homepage_greeting_spoken_v1";
+
 export function getJacLiveSessionEndpoint(isAuthenticated: boolean): string {
   return isAuthenticated
     ? "/api/jac/convai/session"
     : "/api/jac/convai/investor-session";
 }
-
-// ── One-per-session greeting guard ───────────────────────────────────────────
-let _greetingFired = false;
 
 // ── Session storage persistence ──────────────────────────────────────────────
 const SESSION_KEY = "jac_live_msgs_v1";
@@ -78,7 +79,9 @@ function loadMsgs(): Msg[] {
       }));
     }
     const raw = sessionStorage.getItem(SESSION_KEY);
-    if (!raw) return [];
+    if (!raw) {
+      return [{ id: "jac-welcome", role: "assistant", text: WELCOME_GREETING, surface: "welcome" }];
+    }
     return JSON.parse(raw) as Msg[];
   } catch { return []; }
 }
