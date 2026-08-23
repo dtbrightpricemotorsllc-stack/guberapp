@@ -419,7 +419,7 @@ function Router() {
       <Route path="/admin/local-businesses" component={() => <AdminRoute component={AdminLocalBusinesses} />} />
       <Route path="/admin/service-offers" component={() => <AdminRoute component={AdminServiceOffers} />} />
       <Route path="/og-advantage" component={() => <Suspense fallback={<PageLoader />}><OgAdvantage /></Suspense>} />
-       <Route path="/services" component={() => <ProtectedRoute component={BrowseServices} />} />
+       <Route path="/services" component={() => <Suspense fallback={<PageLoader />}><BrowseServices /></Suspense>} />
        <Route path="/offer-service" component={() => <ProtectedRoute component={OfferService} />} />
       <Route path="/community-tasks" component={() => { window.location.replace("/browse-jobs"); return null; }} />
       <Route path="/growth/leaderboard" component={GrowthLeaderboard} />

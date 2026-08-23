@@ -51,3 +51,10 @@ can make connect-vs-mute decisions without relying on its own liveMode state alo
 
 ## Mic diagnosis wait time
 Reduced from 600ms to 150ms — faster mic validation before ElevenLabs session starts.
+
+## Authentication hydration changes voice identity
+The public homepage initially renders before the authenticated user finishes hydrating. If its ConvAI endpoint changes from the anonymous endpoint to the authenticated one, key the voice wrapper by endpoint (or explicitly end and recreate it).
+
+**Why:** A one-time boot guard otherwise leaves signed-in visitors in the anonymous voice session, without account context.
+
+**How to apply:** Preserve transcript continuity separately from the voice connection so the endpoint change can safely remount only the session layer.

@@ -8,7 +8,32 @@ import { ConversationProvider } from "@elevenlabs/react";
 import { JacConvaiSession, prewarmJacSession, type JacConvaiSessionHandle, type ConvaiPhase } from "@/components/jac/jac-convai-session";
 import { useJacDraftCardPoll } from "@/hooks/use-jac-draft-card-poll";
 import { useGuestJacSession } from "@/hooks/use-guest-jac-session";
-type ConversationState = "idle" | "listening" | "recording" | "processing" | "speaking";
+import {
+  appendSharedJacMessage,
+  getJacQuickActions,
+  readSharedJacConversation,
+} from "@/lib/jac-live-coordination";
+type ConversationState = ConvaiPhase;
+
+const LIVE_PHASE_LABEL: Record<ConversationState, string> = {
+  idle: "ready",
+  connecting: "connecting…",
+  listening: "listening",
+  thinking: "thinking…",
+  speaking: "speaking",
+  muted: "muted",
+  error: "connection error",
+};
+
+const LIVE_PHASE_COLOR: Record<ConversationState, string> = {
+  idle: "hsl(270 100% 65%)",
+  connecting: "hsl(270 100% 65%)",
+  listening: "hsl(152 100% 55%)",
+  thinking: "hsl(270 100% 78%)",
+  speaking: "hsl(152 100% 55%)",
+  muted: "hsl(0 0% 55%)",
+  error: "hsl(0 85% 60%)",
+};
 import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
@@ -96,19 +121,7 @@ export function clearJacPrefill() {
   try { localStorage.removeItem("jac_job_prefill"); } catch {}
 }
 
-const OPENING_OPTIONS = [
-  { label: "I need help",           message: "I need help" },
-  { label: "I need work",           message: "I need work" },
-  { label: "I need money today",    message: "I need money today" },
-  { label: "I want to sell something", message: "I want to sell something" },
-  { label: "I need transport",      message: "I need transport" },
-  { label: "I own a business",      message: "I own a business" },
-  { label: "I provide services",    message: "I provide services" },
-  { label: "I create content",      message: "I create content" },
-  { label: "I'm retired",           message: "I'm retired" },
-  { label: "I'm just exploring",    message: "I'm just exploring" },
-  { label: "I'm not sure yet",      message: "I'm not sure yet" },
-];
+const OPENING_OPTIONS = getJacQuickActions("homepage");
 
 const GREETING: JacMsg = {
   role: "assistant",
@@ -210,14 +223,12 @@ function GuberContextCard({ msg }: { msg: string }) {
   if (ctx === "jobs") return (
     <div style={{ ...cardBase, background: "hsl(152 60% 4%)", border: "1px solid hsl(152 100% 44% / 0.22)" }}>
       <div style={{ padding: "6px 12px", background: "hsl(152 60% 6%)", borderBottom: "1px solid hsl(152 100% 44% / 0.12)" }}>
-        <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.2em", color: "hsl(152 100% 55%)" }}>JOBS NEAR YOU</span>
+        <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.2em", color: "hsl(152 100% 55%)" }}>LIVE OPPORTUNITIES</span>
       </div>
-      {[{ t: "General Labor", r: "$18/hr", s: "TODAY" }, { t: "Delivery Driver", r: "$22/hr", s: "NOW" }, { t: "Landscaping", r: "$20/hr", s: "HIRING" }].map(j => (
-        <div key={j.t} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 12px", borderBottom: "1px solid hsl(222 47% 11%)" }}>
-          <div><p style={{ fontSize: 11, fontWeight: 600, color: "white", margin: 0 }}>{j.t}</p><p style={{ fontSize: 10, color: "hsl(152 100% 55%)", margin: 0 }}>{j.r}</p></div>
-          <span style={{ fontSize: 8, fontWeight: 900, padding: "2px 6px", borderRadius: 4, background: "hsl(152 100% 44% / 0.15)", color: "hsl(152 100% 60%)" }}>{j.s}</span>
-        </div>
-      ))}
+      <div style={{ padding: "12px" }}>
+        <p style={{ fontSize: 11, color: "rgba(255,255,255,0.68)", lineHeight: 1.45, margin: "0 0 9px" }}>Browse current job posts when you are ready. JAC will not present sample jobs as live work.</p>
+        <Link href="/browse-jobs" style={{ fontSize: 10, fontWeight: 800, color: "hsl(152 100% 55%)", textDecoration: "none" }}>Browse live jobs →</Link>
+      </div>
     </div>
   );
 
@@ -278,14 +289,7 @@ function GuberContextCard({ msg }: { msg: string }) {
       <p style={{ fontSize: 20, margin: "0 0 6px" }}>🌐</p>
       <p style={{ fontSize: 11, fontWeight: 900, color: "hsl(270 100% 72%)", margin: "0 0 4px" }}>GUBER</p>
       <p style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", lineHeight: 1.5, margin: "0 0 10px" }}>Global Unlimited Business & Employment Resources</p>
-      <div style={{ display: "flex", justifyContent: "center", gap: 16 }}>
-        {[{ l: "Jobs", v: "2.4K" }, { l: "Members", v: "41+" }, { l: "States", v: "7" }].map(s => (
-          <div key={s.l} style={{ textAlign: "center" }}>
-            <p style={{ fontSize: 13, fontWeight: 900, color: "white", margin: 0 }}>{s.v}</p>
-            <p style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", margin: 0 }}>{s.l}</p>
-          </div>
-        ))}
-      </div>
+      <p style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", margin: 0, lineHeight: 1.45 }}>Tell JAC what you need, then she can guide you to the appropriate live GUBER path.</p>
     </div>
   );
 }
@@ -317,7 +321,15 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
   const isIAB = typeof navigator !== "undefined" &&
     /FBAN|FBAV|FB_IAB|FBIOS|FB4A|Instagram|Messenger|TikTok|LinkedInApp/i.test(navigator.userAgent);
 
-  const [messages, setMessages] = useState<JacMsg[]>([GREETING]);
+  const [messages, setMessages] = useState<JacMsg[]>(() => {
+    const shared = readSharedJacConversation();
+    if (!shared.length) return [GREETING];
+    return shared.map((message, index) => ({
+      role: message.role,
+      content: message.content,
+      buttons: message.role === "assistant" && index === shared.length - 1 ? OPENING_OPTIONS : undefined,
+    }));
+  });
   const [showOpenInBrowser, setShowOpenInBrowser] = useState(false);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
@@ -360,19 +372,8 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
   const isSpeakingRef = useRef(false);
 
   const handleConvaiPhaseChange = useCallback((phase: ConvaiPhase) => {
-    // "error" is never emitted by the phase-derivation effect in JacConvaiSession;
-    // errors arrive via onError → handleConvaiError instead.  Skip this branch
-    // so a stale or future "error" phase doesn't silently kill the session.
-    if (phase === "speaking") {
-      isSpeakingRef.current = true;
-      setLiveState("speaking");
-    } else {
-      isSpeakingRef.current = false;
-      if (phase === "listening") setLiveState("recording");
-      else if (phase === "muted") setLiveState("listening");
-      else if (phase === "connecting") setLiveState("listening"); // show "listening" not "connecting" while warming up
-      else setLiveState("listening");
-    }
+    isSpeakingRef.current = phase === "speaking";
+    setLiveState(phase);
   }, []);
 
   const handleConvaiUserTranscript = useCallback((text: string) => {
@@ -386,6 +387,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
     if (/^[.…\s]+$/.test(trimmed)) return;
     // 4. Skip punctuation-only strings (no letters or digits — not a real utterance).
     if (!/[a-zA-Z0-9]/.test(trimmed)) return;
+    appendSharedJacMessage({ role: "user", content: trimmed, source: "homepage" });
     setMessages(prev => [...prev, { role: "user" as const, content: trimmed }]);
   }, []);
 
@@ -393,6 +395,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
     // Strip internal voice/emotion tags e.g. [happy], [excited] before displaying.
     const sanitized = text.replace(/\[[^\]]*\]/g, "").trim();
     if (!sanitized) return; // nothing left after stripping — discard silently
+    appendSharedJacMessage({ role: "assistant", content: sanitized, source: "homepage" });
     setMessages(prev => {
       // Replace the initial static greeting with the first ConvAI transcript
       // so only one greeting bubble is ever shown (ConvAI's own words).
@@ -662,6 +665,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
     }
 
     const userMsg: JacMsg = { role: "user", content: trimmed };
+    appendSharedJacMessage({ role: "user", content: trimmed, source: "homepage" });
     const next = [...messages, userMsg];
     setMessages(next);
     setInput("");
@@ -720,6 +724,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
       };
 
       const final = [...next, aMsg];
+      appendSharedJacMessage({ role: "assistant", content: aMsg.content, source: "homepage" });
       setMessages(final);
       if (!muted) speak(aMsg.content);
       try { localStorage.setItem("jac_returning", "1"); } catch {}
@@ -1063,8 +1068,8 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
               <div className="flex items-center gap-2 px-3 h-7 rounded-full" style={{ background: "hsl(222 47% 4%)", border: "1px solid hsl(270 100% 65% / 0.12)" }}>
                 {liveMode ? (
                   <>
-                    <span className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ background: liveState === "speaking" ? "hsl(152 100% 55%)" : liveState === "recording" ? "hsl(0 85% 60%)" : "hsl(270 100% 65%)" }} />
-                    <span className="text-[9px] font-display tracking-wider text-white/55">JAC · {liveState === "speaking" ? "speaking" : liveState === "recording" ? "listening" : "connecting…"}</span>
+                    <span className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ background: LIVE_PHASE_COLOR[liveState] }} />
+                    <span className="text-[9px] font-display tracking-wider text-white/55">JAC · {LIVE_PHASE_LABEL[liveState]}</span>
                   </>
                 ) : (
                   <>
@@ -1249,7 +1254,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
                       style={{
                         background: liveMode
                           ? liveState === "speaking"  ? "linear-gradient(135deg, hsl(152 90% 40%), hsl(152 70% 30%))"
-                            : liveState === "recording" ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
+                            : liveState === "listening" ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
                             : "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))"
                           : "linear-gradient(135deg, hsl(270 70% 22%), hsl(152 60% 14%))",
                         color: "white",
@@ -1271,7 +1276,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
                         />
                       )}
                       {liveMode
-                        ? liveState === "recording" ? <Mic className="w-4 h-4 relative" />
+                        ? liveState === "listening" ? <Mic className="w-4 h-4 relative" />
                           : liveState === "speaking"  ? <Volume2 className="w-4 h-4 relative" />
                           : <Loader2 className="w-4 h-4 animate-spin relative" />
                         : <Mic className="w-4 h-4 relative" />}

@@ -22,6 +22,13 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { JacCharacterRenderer, type JacState } from "@/components/jac/jac-character-renderer";
 import { Link } from "wouter";
+import { useGuestJacSession } from "@/hooks/use-guest-jac-session";
+import {
+  appendSharedJacMessage,
+  getJacQuickActions,
+  isServiceDiscoveryIntent,
+  readSharedJacConversation,
+} from "@/lib/jac-live-coordination";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Msg {
@@ -40,12 +47,19 @@ type Surface2Kind =
   | "studio"
   | "cash"
   | "marketplace"
+  | "services"
   | "signup"
   | "draft";
 
 interface Surface2State {
   kind: Surface2Kind;
   data?: Record<string, any>;
+}
+
+export function getJacLiveSessionEndpoint(isAuthenticated: boolean): string {
+  return isAuthenticated
+    ? "/api/jac/convai/session"
+    : "/api/jac/convai/investor-session";
 }
 
 // ── One-per-session greeting guard ───────────────────────────────────────────
@@ -55,6 +69,14 @@ let _greetingFired = false;
 const SESSION_KEY = "jac_live_msgs_v1";
 function loadMsgs(): Msg[] {
   try {
+    const shared = readSharedJacConversation();
+    if (shared.length) {
+      return shared.map((message) => ({
+        id: message.id,
+        role: message.role,
+        text: message.content,
+      }));
+    }
     const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) return [];
     return JSON.parse(raw) as Msg[];
@@ -69,7 +91,8 @@ function uid() { return Math.random().toString(36).slice(2); }
 // ── Surface-2 inference from assistant text ──────────────────────────────────
 function inferSurface(text: string): Surface2Kind {
   const t = text.toLowerCase();
-  if (t.includes("sign up") || t.includes("account") || t.includes("register")) return "signup";
+  if (t.includes("sign up") || t.includes("create an account")) return "signup";
+  if (isServiceDiscoveryIntent(t)) return "services";
   if (t.includes("studio") || t.includes("video") || t.includes("music") || t.includes("content")) return "studio";
   if (t.includes("cash drop") || t.includes("drop") && t.includes("earn")) return "cash";
   if (t.includes("verify") || t.includes("inspect") || t.includes("see for me")) return "vi";
@@ -81,8 +104,6 @@ function inferSurface(text: string): Surface2Kind {
 
 // ── Surface 2 content renderer ───────────────────────────────────────────────
 function Surface2({ surface, onChipClick }: { surface: Surface2State; onChipClick: (msg: string) => void }) {
-  const { user } = useAuth();
-
   if (surface.kind === "welcome") {
     return (
       <div className="flex flex-col gap-4 h-full justify-center px-2">
@@ -96,21 +117,10 @@ function Surface2({ surface, onChipClick }: { surface: Surface2State; onChipClic
           <p className="text-sm text-white/40 mb-5">Tell JAC and she'll guide you.</p>
         </div>
         <div className="flex flex-wrap gap-2 justify-center">
-          {[
-            { label: "I need money today",     msg: "I need money today" },
-            { label: "I need work",            msg: "I need work" },
-            { label: "I need someone hired",   msg: "I need to hire someone" },
-            { label: "Transport a vehicle",    msg: "I need a vehicle transported" },
-            { label: "Have something verified",msg: "I need something verified before I buy it" },
-            { label: "Sell something",         msg: "I want to sell something" },
-            { label: "I own a business",       msg: "I own a business" },
-            { label: "I have a truck",         msg: "I have a truck and want loads" },
-            { label: "I create content",       msg: "I create content" },
-            { label: "Just exploring",         msg: "I'm just exploring" },
-          ].map(({ label, msg }) => (
+          {getJacQuickActions("live", 10).map(({ id, label, message }) => (
             <button
-              key={label}
-              onClick={() => onChipClick(msg)}
+              key={id}
+              onClick={() => onChipClick(message)}
               className="px-3 py-2 rounded-full text-xs font-display font-semibold transition-all active:scale-95 hover:border-purple-500/40"
               style={{
                 background: "hsl(222 47% 10%)",
@@ -122,18 +132,6 @@ function Surface2({ surface, onChipClick }: { surface: Surface2State; onChipClic
             </button>
           ))}
         </div>
-        {!user && (
-          <div className="mt-4 text-center">
-            <p className="text-[11px] text-white/30 mb-2">Ready to take action?</p>
-            <Link
-              href="/get-started"
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-display font-bold transition-all active:scale-95"
-              style={{ background: "linear-gradient(135deg,hsl(270 100% 65%),hsl(152 100% 44%))", color: "black" }}
-            >
-              Create free account <ArrowRight className="w-3 h-3" />
-            </Link>
-          </div>
-        )}
       </div>
     );
   }
@@ -145,25 +143,11 @@ function Surface2({ surface, onChipClick }: { surface: Surface2State; onChipClic
           <span className="text-[10px] font-display font-black tracking-[0.2em]" style={{ color: "hsl(152 100% 55%)" }}>JOBS NEAR YOU</span>
           <Link href="/browse-jobs" className="text-[10px] text-white/40 hover:text-white/70 transition-colors">View all →</Link>
         </div>
-        {[
-          { title: "General Labor",    rate: "$18–22/hr", tag: "TODAY",  href: "/browse-jobs" },
-          { title: "Delivery Driver",  rate: "$20–25/hr", tag: "NOW",    href: "/browse-jobs" },
-          { title: "Landscaping",      rate: "$20/hr",    tag: "HIRING", href: "/browse-jobs" },
-          { title: "Moving Help",      rate: "$22/hr",    tag: "OPEN",   href: "/browse-jobs" },
-        ].map(j => (
-          <Link
-            key={j.title}
-            href={j.href}
-            className="flex items-center justify-between p-3 rounded-xl transition-all hover:border-green-500/30"
-            style={{ background: "hsl(152 60% 4%)", border: "1px solid hsl(152 100% 44% / 0.15)" }}
-          >
-            <div>
-              <p className="text-sm font-semibold text-white">{j.title}</p>
-              <p className="text-xs mt-0.5" style={{ color: "hsl(152 100% 55%)" }}>{j.rate}</p>
-            </div>
-            <span className="text-[9px] font-black px-2 py-1 rounded" style={{ background: "hsl(152 100% 44% / 0.15)", color: "hsl(152 100% 65%)" }}>{j.tag}</span>
-          </Link>
-        ))}
+        <div className="rounded-xl p-4" style={{ background: "hsl(152 60% 4%)", border: "1px solid hsl(152 100% 44% / 0.15)" }}>
+          <p className="text-sm font-semibold text-white">Browse current opportunities</p>
+          <p className="text-xs mt-1 text-white/50">See live job posts in your area. JAC will not show sample jobs as if they are active.</p>
+          <Link href="/browse-jobs" className="inline-flex mt-3 text-xs font-display font-bold" style={{ color: "hsl(152 100% 55%)" }}>Browse live jobs <ArrowRight className="w-3 h-3 ml-1" /></Link>
+        </div>
         <button
           onClick={() => onChipClick("I want to post a job")}
           className="mt-1 w-full py-2.5 rounded-xl text-xs font-display font-bold transition-all active:scale-95"
@@ -199,6 +183,26 @@ function Surface2({ surface, onChipClick }: { surface: Surface2State; onChipClic
           </div>
         </div>
         <Link href="/load-board" className="text-center text-xs text-white/40 hover:text-white/60 transition-colors">Browse all loads →</Link>
+      </div>
+    );
+  }
+
+  if (surface.kind === "services") {
+    return (
+      <div className="flex flex-col gap-3 h-full">
+        <span className="text-[10px] font-display font-black tracking-[0.2em]" style={{ color: "hsl(152 100% 55%)" }}>SERVICES OFFERED</span>
+        <div className="rounded-xl p-4" style={{ background: "hsl(152 60% 4%)", border: "1px solid hsl(152 100% 44% / 0.15)" }}>
+          <p className="text-sm font-semibold text-white">Find a verified provider</p>
+          <p className="text-xs mt-1.5 text-white/50">Browse only published, approved services. Availability and exact details stay protected until the request flow needs them.</p>
+          <Link href="/services" className="inline-flex items-center gap-1 mt-3 text-xs font-display font-bold" style={{ color: "hsl(152 100% 55%)" }}>
+            Browse services <ArrowRight className="w-3 h-3" />
+          </Link>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {["I need cleaning help", "I need lawn care", "I need a skilled repair"].map((message) => (
+            <button key={message} onClick={() => onChipClick(message)} className="px-3 py-2 rounded-full text-xs text-white/70" style={{ background: "hsl(222 47% 10%)", border: "1px solid hsl(222 47% 20%)" }}>{message.replace("I need ", "")}</button>
+          ))}
+        </div>
       </div>
     );
   }
@@ -330,7 +334,7 @@ function WaveformBars({ active, color }: { active: boolean; color: string }) {
 }
 
 // ── Inner component (uses useConversation — must be inside ConversationProvider) ─
-function JacLiveInner({ sessionEndpoint }: { sessionEndpoint: string }) {
+function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: string; isAuthenticated: boolean }) {
   const { startSession, endSession, status, isSpeaking, isListening, isMuted, setMuted } = useConversation({
     onConnect:    () => { setError(null); setEnded(false); },
     onDisconnect: () => { setEnded(true); },
@@ -363,6 +367,7 @@ function JacLiveInner({ sessionEndpoint }: { sessionEndpoint: string }) {
   const transcriptEndRef        = useRef<HTMLDivElement>(null);
   const inputRef                = useRef<HTMLInputElement>(null);
   const textId                  = useId();
+  const { guestSessionId }      = useGuestJacSession();
 
   // Persist messages
   useEffect(() => { saveMsgs(msgs); }, [msgs]);
@@ -373,6 +378,7 @@ function JacLiveInner({ sessionEndpoint }: { sessionEndpoint: string }) {
   }, [msgs]);
 
   function addMsg(m: Msg) {
+    appendSharedJacMessage({ id: m.id, role: m.role, content: m.text, source: "live" });
     setMsgs(prev => {
       const updated = [...prev, m];
       saveMsgs(updated);
@@ -383,11 +389,10 @@ function JacLiveInner({ sessionEndpoint }: { sessionEndpoint: string }) {
   // ── Map ConvAI → JacState ─────────────────────────────────────────────────
   const connected = status === "connected";
   let jacState: JacState = "idle";
-  if (error || ended)   jacState = "idle";
-  else if (!connected)  jacState = "idle";
-  else if (isSpeaking)  jacState = "speaking";
-  else if (isListening) jacState = "listening";
-  else                  jacState = "thinking";
+  if (error || ended || !connected || muted) jacState = "idle";
+  else if (isSpeaking)                    jacState = "speaking";
+  else if (isListening)                   jacState = "listening";
+  else                                    jacState = "thinking";
 
   // ── Boot session ──────────────────────────────────────────────────────────
   const boot = useCallback(async () => {
@@ -453,7 +458,11 @@ function JacLiveInner({ sessionEndpoint }: { sessionEndpoint: string }) {
       const res = await fetch("/api/jac/onboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history, mode: "homepage" }),
+        body: JSON.stringify({
+          messages: history,
+          mode: "homepage",
+          ...(isAuthenticated ? {} : { guest_session_id: guestSessionId }),
+        }),
       });
       if (!res.ok) throw new Error(`${res.status}`);
       const data = await res.json();
@@ -474,9 +483,10 @@ function JacLiveInner({ sessionEndpoint }: { sessionEndpoint: string }) {
     } finally {
       setTextLoading(false);
     }
-  }, [msgs, textLoading]);
+  }, [guestSessionId, isAuthenticated, msgs, textLoading]);
 
   const handleChipClick = useCallback((msg: string) => {
+    if (isServiceDiscoveryIntent(msg)) setSurface({ kind: "services" });
     sendText(msg);
   }, [sendText]);
 
@@ -508,11 +518,11 @@ function JacLiveInner({ sessionEndpoint }: { sessionEndpoint: string }) {
   const phaseLabel =
     error      ? "Connection error" :
     ended      ? "Ended" :
-    !connected ? "Connecting…"      :
-    muted      ? "Muted"            :
-    isSpeaking ? "JAC is speaking"  :
-    isListening? "Listening…"       :
-               "Processing…";
+    muted      ? "Muted" :
+    isSpeaking ? "JAC is speaking" :
+    isListening ? "Listening…" :
+    connected ? "Processing…" :
+    "Connecting…";
 
   const isTerminal = ended || !!error;
 
@@ -520,7 +530,7 @@ function JacLiveInner({ sessionEndpoint }: { sessionEndpoint: string }) {
     <div
       className="relative w-full"
       style={{
-        minHeight: "min(90vh, 700px)",
+        minHeight: "min(82vh, 620px)",
         display: "flex",
         flexDirection: "column",
       }}
@@ -535,7 +545,7 @@ function JacLiveInner({ sessionEndpoint }: { sessionEndpoint: string }) {
             <JacCharacterRenderer
               state={jacState}
               heightPx={typeof window !== "undefined" && window.innerWidth < 1024
-                ? Math.min(280, window.innerHeight * 0.38)
+                ? Math.min(230, window.innerHeight * 0.32)
                 : 380}
             />
           </div>
@@ -671,7 +681,7 @@ function JacLiveInner({ sessionEndpoint }: { sessionEndpoint: string }) {
 
         {/* ── Surface 2 — Action / Results ─────────────────────────────────── */}
         <div
-          className="flex-1 min-h-[200px] lg:min-h-0 rounded-2xl p-4 lg:p-5 overflow-y-auto"
+          className="flex-1 min-h-[180px] lg:min-h-0 rounded-2xl p-4 lg:p-5 overflow-y-auto"
           style={{
             background: "linear-gradient(160deg, hsl(222 47% 7%), hsl(270 60% 5%))",
             border: "1px solid hsl(270 100% 65% / 0.12)",
@@ -713,18 +723,18 @@ function JacLiveInner({ sessionEndpoint }: { sessionEndpoint: string }) {
 // ── Public export ─────────────────────────────────────────────────────────────
 export function JacLiveExperience() {
   const { user } = useAuth();
-  const [key, setKey] = useState(0);
 
-  // Authenticated users get the full session with account context
-  const sessionEndpoint = user
-    ? "/api/jac/convai/session"
-    : "/api/jac/convai/investor-session";
+  // Authentication hydrates after the initial public render. The endpoint is
+  // part of the voice-session identity, so a change must recreate the ConvAI
+  // wrapper; recent transcript remains available through shared storage.
+  const sessionEndpoint = getJacLiveSessionEndpoint(!!user);
 
   return (
-    <ConversationProvider key={key}>
+    <ConversationProvider key={sessionEndpoint}>
       <JacLiveInner
-        key={`${key}-${sessionEndpoint}`}
+        key={sessionEndpoint}
         sessionEndpoint={sessionEndpoint}
+        isAuthenticated={!!user}
       />
     </ConversationProvider>
   );

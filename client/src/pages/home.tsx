@@ -288,25 +288,15 @@ function GateModal({ onClose }: { onClose: () => void }) {
 // ── Hero Slideshow ────────────────────────────────────────────────────────────
 function HeroSlideshow({ onSlideChange }: { onSlideChange: (slide: typeof SLIDES[number]) => void }) {
   const [current, setCurrent] = useState(0);
-  const [paused,  setPaused]  = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     onSlideChange(SLIDES[current]);
   }, [current]);
 
-  useEffect(() => {
-    if (paused) return;
-    timerRef.current = setInterval(() => setCurrent((c) => (c + 1) % SLIDES.length), 4500);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [paused]);
-
   return (
     <section
       className="relative z-10 overflow-hidden w-full"
       style={{ height: "clamp(200px, 40vw, 500px)" }}
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
       data-testid="section-hero-slideshow"
     >
       {/* Slides — image only, no overlay */}

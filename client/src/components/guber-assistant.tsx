@@ -27,6 +27,11 @@ import {
 } from "@/lib/jac-session";
 import { extractAndSaveMemory } from "@/lib/jac-memory";
 import { useJacContext, useJacOpportunities } from "@/lib/use-jac-context";
+import {
+  appendSharedJacMessage,
+  getJacQuickActions,
+  readSharedJacConversation,
+} from "@/lib/jac-live-coordination";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
 const DD_PATTERNS = [
@@ -124,20 +129,14 @@ const CONVAI_PHASE_LABEL: Record<ConvaiPhase, string> = {
   error:      "Connection failed",
 };
 
-const INITIAL_CHIPS = [
-  "I need $500 by Friday",
-  "Find work nearby",
-  "Hire help",
-  "Promote My Business",
-  "Cash Drops",
-  "Day-1 OG",
-  "See For Me",
-  "Transport / Load Board",
-  "Start a listing",
-];
+const INITIAL_CHIPS = getJacQuickActions("assistant", 9);
 
 function loadMessages(): Message[] {
   try {
+    const shared = readSharedJacConversation();
+    if (shared.length) {
+      return shared.map((message) => ({ role: message.role, content: message.content }));
+    }
     const stored = sessionStorage.getItem(SESSION_KEY);
     if (stored) {
       const parsed = JSON.parse(stored) as Message[];
@@ -585,6 +584,7 @@ export function GUBERAssistant() {
           ...(Array.isArray(data.options) ? data.options : []),
         ].filter((a: any) => a?.label && a?.message).slice(0, 5),
       };
+      appendSharedJacMessage({ role: "assistant", content: msg.content, source: "assistant" });
       setMessages((prev) => [...prev, msg]);
       const timing = voiceTimingRef.current;
       if (timing) {
@@ -829,6 +829,7 @@ export function GUBERAssistant() {
     const trimmed = text.trim();
     if (!trimmed || anyPending) return;
     lastUserInputRef.current = trimmed;
+    appendSharedJacMessage({ role: "user", content: trimmed, source: "assistant" });
     const newMsgs: Message[] = [...messages, { role: "user", content: trimmed }];
     setMessages(newMsgs);
     setInput("");
@@ -881,9 +882,11 @@ export function GUBERAssistant() {
     if (phase === "error") setConvaiActive(false);
   }, []);
   const handleConvaiUserTranscript = useCallback((text: string) => {
+    appendSharedJacMessage({ role: "user", content: text, source: "assistant" });
     setMessages(prev => [...prev, { role: "user" as const, content: text }]);
   }, []);
   const handleConvaiJacResponse = useCallback((text: string) => {
+    appendSharedJacMessage({ role: "assistant", content: text, source: "assistant" });
     setMessages(prev => {
       // Replace the initial static greeting with the first ConvAI transcript
       // so only one greeting bubble is ever shown (ConvAI's own words).
@@ -1341,8 +1344,8 @@ export function GUBERAssistant() {
             <div className="flex flex-wrap gap-2 pt-1" data-testid="dd-initial-chips">
               {INITIAL_CHIPS.map((chip) => (
                 <button
-                  key={chip}
-                  onClick={() => handleChip(chip)}
+                  key={chip.id}
+                  onClick={() => handleChip(chip.message)}
                   className="rounded-2xl px-3.5 py-2 text-xs font-display font-semibold transition-all active:scale-95"
                   style={{
                     background: isOnlyGreeting
@@ -1351,9 +1354,9 @@ export function GUBERAssistant() {
                     border: "1px solid hsl(270 100% 65% / 0.25)",
                     color: "rgba(255,255,255,0.85)",
                   }}
-                  data-testid={`chip-dd-${chip.toLowerCase().replace(/\s+/g, "-")}`}
+                  data-testid={`chip-dd-${chip.id}`}
                 >
-                  {chip}
+                  {chip.label}
                 </button>
               ))}
             </div>

@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 import { BriefcaseBusiness, CheckCircle2, Clock3, List, Map, MapPin, Search, ShieldCheck, Sparkles } from "lucide-react";
 
 type ServiceOffer = {
@@ -52,6 +53,7 @@ function priceText(offer: ServiceOffer) {
 export default function BrowseServices() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [availableOnly, setAvailableOnly] = useState(false);
@@ -89,6 +91,10 @@ export default function BrowseServices() {
   });
 
   const beginRequest = (offer: ServiceOffer) => {
+    if (!user) {
+      navigate("/login?returnTo=%2Fservices");
+      return;
+    }
     setSelectedOffer(offer);
     setRequestForm({
       scope: "",
