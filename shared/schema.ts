@@ -565,7 +565,7 @@ export const serviceOffers = pgTable("service_offers", {
   lng: real("lng"),
   availableNow: boolean("available_now").default(false),
   status: text("status").notNull().default("draft"), // draft | published | paused | archived | removed
-  moderationStatus: text("moderation_status").notNull().default("approved"), // approved | pending | rejected
+  moderationStatus: text("moderation_status").notNull().default("pending"), // approved | pending | rejected
   publishedAt: timestamp("published_at"),
   pausedAt: timestamp("paused_at"),
   archivedAt: timestamp("archived_at"),

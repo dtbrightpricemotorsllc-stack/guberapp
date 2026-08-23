@@ -217,8 +217,8 @@ export function registerServiceOfferRoutes(app: Express, guards: RouteGuards) {
       const result = await pool.query(
         `INSERT INTO service_offers
           (provider_user_id, title, description, category, service_type, service_class, capabilities, equipment,
-           pricing_type, starting_price, hourly_rate, service_radius, zip, lat, lng, available_now)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+            pricing_type, starting_price, hourly_rate, service_radius, zip, lat, lng, available_now, status, moderation_status)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'draft','pending')
          RETURNING id`,
         [req.session.userId, title, description, category, serviceType, serviceClass, safeTags(req.body.capabilities),
           safeTags(req.body.equipment), pricingType, startingPrice, hourlyRate, serviceRadius,
@@ -250,8 +250,12 @@ export function registerServiceOfferRoutes(app: Express, guards: RouteGuards) {
       await pool.query(
         `UPDATE service_offers
             SET title=$1, description=$2, service_type=$3, capabilities=$4, equipment=$5,
-                pricing_type=$6, starting_price=$7, hourly_rate=$8, service_radius=$9,
-                available_now=$10, updated_at=NOW()
+                 pricing_type=$6, starting_price=$7, hourly_rate=$8, service_radius=$9,
+                 available_now=$10,
+                 status=CASE WHEN status='published' THEN 'draft' ELSE status END,
+                 moderation_status=CASE WHEN status='published' THEN 'pending' ELSE moderation_status END,
+                 published_at=CASE WHEN status='published' THEN NULL ELSE published_at END,
+                 updated_at=NOW()
           WHERE id=$11`,
         [title, description, serviceType,
           req.body.capabilities === undefined ? offer.capabilities : safeTags(req.body.capabilities),
@@ -274,20 +278,23 @@ export function registerServiceOfferRoutes(app: Express, guards: RouteGuards) {
       const offer = await getOffer(Number(req.params.id));
       if (!offer) return res.status(404).json({ message: "Service offer not found" });
       if (offer.provider_user_id !== req.session.userId) return res.status(403).json({ message: "Only the provider can publish this service." });
+       if (["removed", "archived"].includes(offer.status)) {
+         return res.status(400).json({ message: "This service offer can no longer be submitted for publication." });
+       }
       if (!offer.id_verified) return res.status(403).json({ message: "Verify your identity before publishing a service offer." });
       if (offer.service_class === "skilled_pro" && !offer.credential_verified) {
         return res.status(403).json({ message: "A verified credential is required before publishing Skilled/Pro services." });
       }
       await pool.query(
         `UPDATE service_offers
-            SET status='published', moderation_status='approved', published_at=COALESCE(published_at, NOW()),
-                paused_at=NULL, updated_at=NOW()
+             SET status='draft', moderation_status='pending', published_at=NULL,
+                 paused_at=NULL, updated_at=NOW()
           WHERE id=$1`,
         [offer.id],
       );
       await pool.query(
         "INSERT INTO audit_logs (user_id, action, details, ip_address) VALUES ($1,$2,$3,$4)",
-        [req.session.userId, "service_offer_published", JSON.stringify({ serviceOfferId: offer.id }), req.ip],
+         [req.session.userId, "service_offer_submitted_for_moderation", JSON.stringify({ serviceOfferId: offer.id }), req.ip],
       );
       res.json(ownerOffer(await getOffer(offer.id)));
     } catch (error: any) {
@@ -432,11 +439,41 @@ export function registerServiceOfferRoutes(app: Express, guards: RouteGuards) {
 
   app.patch("/api/admin/service-offers/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const status = req.body.status;
-      if (!["published", "paused", "removed"].includes(status)) return res.status(400).json({ message: "Invalid moderation status." });
+       const status = req.body.status;
+       if (!["published", "paused", "removed"].includes(status)) return res.status(400).json({ message: "Invalid moderation status." });
       const offer = await getOffer(Number(req.params.id));
       if (!offer) return res.status(404).json({ message: "Service offer not found" });
-      await pool.query("UPDATE service_offers SET status=$1, updated_at=NOW() WHERE id=$2", [status, offer.id]);
+       if (status === "published" && !offer.id_verified) {
+         return res.status(400).json({ message: "The provider must verify their identity before this service can be approved." });
+       }
+       if (status === "published" && offer.service_class === "skilled_pro" && !offer.credential_verified) {
+         return res.status(400).json({ message: "A verified credential is required before this Skilled / Pro service can be approved." });
+       }
+
+       if (status === "published") {
+         await pool.query(
+           `UPDATE service_offers
+               SET status='published', moderation_status='approved', published_at=NOW(),
+                   paused_at=NULL, updated_at=NOW()
+             WHERE id=$1`,
+           [offer.id],
+         );
+       } else if (status === "paused") {
+         await pool.query(
+           `UPDATE service_offers
+               SET status='paused', paused_at=NOW(), updated_at=NOW()
+             WHERE id=$1`,
+           [offer.id],
+         );
+       } else {
+         await pool.query(
+           `UPDATE service_offers
+               SET status='removed', moderation_status='rejected', paused_at=COALESCE(paused_at, NOW()),
+                   updated_at=NOW()
+             WHERE id=$1`,
+           [offer.id],
+         );
+       }
       await pool.query(
         "INSERT INTO audit_logs (user_id, action, details, ip_address) VALUES ($1,$2,$3,$4)",
         [req.session.userId, "service_offer_moderated", JSON.stringify({ serviceOfferId: offer.id, status }), req.ip],

@@ -45,7 +45,7 @@ export default function OfferService() {
     })).json() as Promise<ManagedOffer>,
     onSuccess: (offer) => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-offers/mine"] });
-      toast({ title: "Draft saved", description: "Review it below, then publish when you’re ready." });
+       toast({ title: "Draft saved", description: "Review it below, then submit it for admin review when you’re ready." });
       setTitle(""); setServiceType(""); setDescription(""); setCapabilities(""); setEquipment(""); setPrice("");
       void offer;
     },
@@ -71,7 +71,7 @@ export default function OfferService() {
     <GuberLayout showBack backHref="/dashboard">
       <main className="max-w-2xl mx-auto px-4 py-6 pb-28" data-testid="page-offer-service">
         <div className="flex items-start justify-between gap-3 mb-5">
-          <div><p className="text-[10px] font-display font-black tracking-[0.25em] text-primary uppercase">Work side</p><h1 className="text-2xl font-display font-black tracking-tight">Offer a service</h1><p className="text-sm text-muted-foreground mt-1">Create a reusable service profile. Jobs, payment, messages, and proof stay in the existing protected GUBER flow.</p></div>
+        <div><p className="text-[10px] font-display font-black tracking-[0.25em] text-primary uppercase">Work side</p><h1 className="text-2xl font-display font-black tracking-tight">Offer a service</h1><p className="text-sm text-muted-foreground mt-1">Create a reusable service profile. Jobs, payment, messages, and proof stay in the existing protected GUBER flow. Published offers are reviewed by GUBER first.</p></div>
           <Link href="/services"><Button variant="outline" className="rounded-xl text-xs">Browse services</Button></Link>
         </div>
 
@@ -106,10 +106,11 @@ export default function OfferService() {
             <Card key={offer.id} className="p-4 border-border">
               <div className="flex justify-between gap-3"><div><div className="flex gap-1.5 mb-1"><Badge variant="outline">{offer.status}</Badge>{offer.serviceClass === "skilled_pro" && <Badge className="bg-amber-500/15 text-amber-600 border-amber-500/30" variant="outline">Skilled / Pro</Badge>}</div><h3 className="font-display font-bold">{offer.title}</h3><p className="text-xs text-muted-foreground">{offer.serviceType || offer.category}</p></div></div>
               <div className="flex flex-wrap gap-2 mt-4">
-                {(offer.status === "draft" || offer.status === "paused") && <Button size="sm" className="rounded-lg text-xs" disabled={!canPublish || statusMutation.isPending} onClick={() => statusMutation.mutate({ id: offer.id, action: "publish" })}><CirclePlay className="w-3.5 h-3.5 mr-1" /> Publish</Button>}
+                {(offer.status === "draft" || offer.status === "paused") && <Button size="sm" className="rounded-lg text-xs" disabled={!canPublish || statusMutation.isPending} onClick={() => statusMutation.mutate({ id: offer.id, action: "publish" })}><CirclePlay className="w-3.5 h-3.5 mr-1" /> Submit for review</Button>}
                 {offer.status === "published" && <Button size="sm" variant="outline" className="rounded-lg text-xs" disabled={statusMutation.isPending} onClick={() => statusMutation.mutate({ id: offer.id, action: "paused" })}><CirclePause className="w-3.5 h-3.5 mr-1" /> Pause</Button>}
                 {offer.status !== "archived" && <Button size="sm" variant="ghost" className="rounded-lg text-xs text-muted-foreground" disabled={statusMutation.isPending} onClick={() => statusMutation.mutate({ id: offer.id, action: "archived" })}><Archive className="w-3.5 h-3.5 mr-1" /> Archive</Button>}
-                {offer.status === "draft" && canPublish && <span className="text-[11px] text-emerald-600 self-center"><ShieldCheck className="inline w-3.5 h-3.5 mr-1" />Ready to publish</span>}
+                {offer.status === "draft" && offer.moderationStatus === "pending" && <span className="text-[11px] text-amber-600 self-center"><ShieldAlert className="inline w-3.5 h-3.5 mr-1" />Awaiting admin review</span>}
+                {offer.status === "draft" && offer.moderationStatus !== "pending" && canPublish && <span className="text-[11px] text-emerald-600 self-center"><ShieldCheck className="inline w-3.5 h-3.5 mr-1" />Ready to submit</span>}
               </div>
             </Card>
           ))}</div>}

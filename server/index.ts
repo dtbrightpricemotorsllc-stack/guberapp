@@ -1892,7 +1892,7 @@ app.use((req, res, next) => {
       lng                REAL,
       available_now      BOOLEAN DEFAULT FALSE,
       status             TEXT NOT NULL DEFAULT 'draft',
-      moderation_status  TEXT NOT NULL DEFAULT 'approved',
+      moderation_status  TEXT NOT NULL DEFAULT 'pending',
       published_at       TIMESTAMP,
       paused_at          TIMESTAMP,
       archived_at        TIMESTAMP,
@@ -1902,6 +1902,14 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_service_offers_provider ON service_offers(provider_user_id, status);
     CREATE INDEX IF NOT EXISTS idx_service_offers_discovery ON service_offers(status, moderation_status, category, published_at DESC);
   `).catch(e => console.error("[migration] service_offers tables error:", e));
+
+  // Existing installations retain the original column default after CREATE
+  // TABLE IF NOT EXISTS. New provider offers must start private until a
+  // moderator explicitly approves their public copy.
+  await pool.query(`
+    ALTER TABLE service_offers
+      ALTER COLUMN moderation_status SET DEFAULT 'pending';
+  `).catch(e => console.error("[migration] service_offers moderation default error:", e));
 
   // Provider-specific service requests retain the source catalog offer on the
   // existing direct-offer record. Existing installations need the additive

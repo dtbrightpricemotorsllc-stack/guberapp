@@ -19,6 +19,7 @@ type OfferRow = Record<string, any>;
 
 const PROVIDER_ID = 101;
 const CUSTOMER_ID = 202;
+const ADMIN_ID = 303;
 
 function makeOffer(overrides: Partial<OfferRow> = {}): OfferRow {
   return {
@@ -63,6 +64,7 @@ const offers = new Map<number, OfferRow>();
 const userRoles = new Map<number, string>([
   [PROVIDER_ID, "buyer"],
   [CUSTOMER_ID, "buyer"],
+  [ADMIN_ID, "admin"],
 ]);
 
 function installQueryDouble() {
@@ -89,9 +91,17 @@ function installQueryDouble() {
     if (sql.startsWith("UPDATE service_offers")) {
       const offerId = Number(values[values.length - 1]);
       const offer = offers.get(offerId);
-      if (offer && sql.includes("status='published'")) {
+      if (offer && sql.includes("moderation_status='pending'")) {
+        offer.status = "draft";
+        offer.moderation_status = "pending";
+      } else if (offer && sql.includes("moderation_status='approved'")) {
         offer.status = "published";
         offer.moderation_status = "approved";
+      } else if (offer && sql.includes("status='paused'")) {
+        offer.status = "paused";
+      } else if (offer && sql.includes("status='removed'")) {
+        offer.status = "removed";
+        offer.moderation_status = "rejected";
       }
       return { rows: [] };
     }
@@ -235,7 +245,7 @@ describe("service-offer privacy, verification, and handoff contracts", () => {
     expect(queryMock.mock.calls.some(([query]) => String(query).startsWith("UPDATE service_offers"))).toBe(false);
   });
 
-  it("publishes a Skilled / Pro offer only when identity and credentials are verified", async () => {
+  it("submits a verified Skilled / Pro offer for moderation without making it public", async () => {
     const offer = makeOffer({
       id: 12,
       category: "Skilled Labor",
@@ -251,20 +261,75 @@ describe("service-offer privacy, verification, and handoff contracts", () => {
     const res = await supertest(harness.app).post(`/api/service-offers/${offer.id}/publish`);
 
     expect(res.status).toBe(200);
-    expect(res.body.status).toBe("published");
+    expect(res.body.status).toBe("draft");
+    expect(res.body.moderationStatus).toBe("pending");
     expect(queryMock.mock.calls.some(([query]) => String(query).startsWith("UPDATE service_offers"))).toBe(true);
+    expect(queryMock.mock.calls.some(([query, values]) =>
+      String(query).startsWith("INSERT INTO audit_logs") && Array.isArray(values) && values.includes("service_offer_submitted_for_moderation"),
+    )).toBe(true);
   });
 
-  it("hands a customer request to the protected job flow without payment side effects", async () => {
+  it("does not let an admin approve an offer from an unverified provider", async () => {
+    const offer = makeOffer({ id: 16, status: "draft", moderation_status: "pending", id_verified: false });
+    offers.set(offer.id, offer);
+    const harness = buildApp();
+    harness.as(ADMIN_ID);
+
+    const response = await supertest(harness.app).patch(`/api/admin/service-offers/${offer.id}`).send({ status: "published" }).expect(400);
+    expect(response.body.message).toMatch(/verify their identity/i);
+    expect(offer).toMatchObject({ status: "draft", moderation_status: "pending" });
+  });
+
+  it("lets only an admin approve a pending offer and makes it publicly discoverable", async () => {
+    const offer = makeOffer({ id: 13, status: "draft", moderation_status: "pending" });
+    offers.set(offer.id, offer);
+    const harness = buildApp();
+
+    harness.as(CUSTOMER_ID);
+    await supertest(harness.app).patch(`/api/admin/service-offers/${offer.id}`).send({ status: "published" }).expect(403);
+    expect(offer.status).toBe("draft");
+    expect(offer.moderation_status).toBe("pending");
+
+    harness.as(ADMIN_ID);
+    const approval = await supertest(harness.app).patch(`/api/admin/service-offers/${offer.id}`).send({ status: "published" }).expect(200);
+    expect(approval.body).toMatchObject({ status: "published", moderationStatus: "approved" });
+    expect(queryMock.mock.calls.some(([query, values]) =>
+      String(query).includes("moderation_status='approved'") && Array.isArray(values) && values.includes(offer.id),
+    )).toBe(true);
+    expect(queryMock.mock.calls.some(([query, values]) =>
+      String(query).startsWith("INSERT INTO audit_logs") && Array.isArray(values) && values.includes("service_offer_moderated"),
+    )).toBe(true);
+
+    const discovery = await supertest(harness.app).get("/api/service-offers").expect(200);
+    expect(discovery.body.map((item: OfferRow) => item.id)).toContain(offer.id);
+  });
+
+  it("keeps a pending offer private when an admin removes it and records the decision", async () => {
+    const offer = makeOffer({ id: 14, status: "draft", moderation_status: "pending" });
+    offers.set(offer.id, offer);
+    const harness = buildApp();
+    harness.as(ADMIN_ID);
+
+    const removal = await supertest(harness.app).patch(`/api/admin/service-offers/${offer.id}`).send({ status: "removed" }).expect(200);
+    expect(removal.body).toMatchObject({ status: "removed", moderationStatus: "rejected" });
+    expect(queryMock.mock.calls.some(([query, values]) =>
+      String(query).startsWith("INSERT INTO audit_logs") && Array.isArray(values) && values.includes("service_offer_moderated"),
+    )).toBe(true);
+
+    const discovery = await supertest(harness.app).get("/api/service-offers").expect(200);
+    expect(discovery.body.map((item: OfferRow) => item.id)).not.toContain(offer.id);
+  });
+
+  it("requires protected request details before starting a customer service request", async () => {
     const offer = makeOffer({ id: 20, provider_user_id: PROVIDER_ID });
     offers.set(offer.id, offer);
     const harness = buildApp();
     harness.as(CUSTOMER_ID);
 
-    const res = await supertest(harness.app).post(`/api/service-offers/${offer.id}/hire`);
+    const res = await supertest(harness.app).post(`/api/service-offers/${offer.id}/hire`).send({});
 
-    expect(res.status).toBe(200);
-    expect(res.body.handoffUrl).toBe("/post-job?category=General+Labor&service=Assembly&providerOfferId=20");
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/scope is required/i);
     expect(queryMock).toHaveBeenCalledTimes(1);
     expect(String(queryMock.mock.calls[0][0])).toMatch(/^SELECT so\.\*/);
     expect(queryMock.mock.calls.some(([query]) => /\b(INSERT|UPDATE|DELETE)\b/i.test(String(query)))).toBe(false);
