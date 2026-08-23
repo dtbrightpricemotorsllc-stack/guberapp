@@ -188,6 +188,31 @@ describe("JacConvaiSession — echo reflection guard", () => {
     expect(isJacEchoTranscript("Stop — I need help posting a job instead.", spoken, spokenAt, spokenAt + 500)).toBe(false);
     expect(isJacEchoTranscript(spoken, spoken, spokenAt, spokenAt + 6_000)).toBe(false);
   });
+
+  it("handles device STT punctuation/case changes without swallowing a real interruption", () => {
+    const spokenAt = 10_000;
+    expect(
+      isJacEchoTranscript(
+        "I CAN help you find a job nearby. What kind of work fits today",
+        "I can help you find a job nearby — what kind of work fits today?",
+        spokenAt,
+        spokenAt + 1_000,
+      ),
+    ).toBe(true);
+    expect(
+      isJacEchoTranscript(
+        "No, help me post a job instead",
+        "I can help you find a job nearby. What kind of work fits today?",
+        spokenAt,
+        spokenAt + 1_000,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not classify short acknowledgements as echoes", () => {
+    const spokenAt = 10_000;
+    expect(isJacEchoTranscript("Okay", "Okay", spokenAt, spokenAt + 500)).toBe(false);
+  });
 });
 
 describe("JacConvaiSession — WebSocket transport guarantee", () => {
