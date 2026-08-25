@@ -2246,29 +2246,6 @@ app.use((req, res, next) => {
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
 
-  // Use once() so the handler auto-removes after firing.  The retry loop
-  // re-registers it each attempt, which prevents the "serving on port N"
-  // × 17 problem caused by multiple pending setTimeout callbacks all
-  // succeeding when the port finally frees up.
-  function attachPortErrorHandler() {
-    httpServer.once("error", (err: any) => {
-      if (err.code === "EADDRINUSE") {
-        console.error(`Port ${port} in use, retrying in 1s...`);
-        setTimeout(() => {
-          httpServer.close(() => {
-            attachPortErrorHandler();
-            httpServer.listen({ port, host: "0.0.0.0" }, () => {
-              log(`serving on port ${port}`);
-            });
-          });
-        }, 1000);
-      } else {
-        throw err;
-      }
-    });
-  }
-  attachPortErrorHandler();
-
   // ── Business Leads table ─────────────────────────────────────────────────────
   // Pre-account lead funnel — separate from business_accounts.
   // Phone is stored but never returned by public APIs.

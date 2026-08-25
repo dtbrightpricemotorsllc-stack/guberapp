@@ -30,21 +30,6 @@ author = "agent"
 task = "workflow.run"
 args = "Start application"
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "statebleed"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "smoke-promo-render"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "android-permissions-guard"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "promo-preview-roundtrip"
 
 [[workflows.workflow]]
 name = "Start application"
