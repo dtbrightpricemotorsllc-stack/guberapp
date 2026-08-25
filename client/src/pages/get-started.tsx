@@ -28,7 +28,7 @@ const QUICK_OPTIONS = [
 
 const JAC_GREETING: OnboardingMessage = {
   role: "assistant",
-  content: "Welcome to Team GUBER. I'm JAC — tell me what you need, what you can do, or what you have available. I'll help you find your next move.",
+  content: "Welcome to Team Guber. What brings you here?",
 };
 
 export default function GetStarted() {
@@ -54,7 +54,7 @@ export default function GetStarted() {
   }, [messages, typing]);
 
   useEffect(() => {
-    setTimeout(() => speak(JAC_GREETING.content.replace(/GUBER/g, "Goober").replace(/Guber/g, "Goober")), 600);
+    setTimeout(() => speak(JAC_GREETING.content), 600);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

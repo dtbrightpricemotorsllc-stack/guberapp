@@ -7,6 +7,7 @@ import {
   createJacAutomaticVoiceStartClaim,
   getJacQuickActions,
   isServiceDiscoveryIntent,
+  JAC_WELCOME_GREETING,
   readSharedJacConversation,
 } from "./jac-live-coordination";
 import { getJacLiveSessionEndpoint } from "@/components/jac/jac-live-experience";
@@ -48,6 +49,7 @@ describe("JAC live coordination", () => {
   });
 
   it("shares one generic greeting across JAC surfaces for the browser session", () => {
+    expect(JAC_WELCOME_GREETING).toBe("Welcome to Team Guber. What brings you here?");
     expect(claimJacWelcomeGreeting()).toBe(true);
     expect(claimJacWelcomeGreeting()).toBe(false);
   });

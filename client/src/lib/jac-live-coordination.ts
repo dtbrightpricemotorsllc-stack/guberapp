@@ -24,7 +24,7 @@ const JAC_GREETING_KEYS = [
 let greetingClaimedThisRuntime = false;
 
 export const JAC_WELCOME_GREETING =
-  "Hey, welcome to Team GUBER. What are you trying to make happen?";
+  "Welcome to Team Guber. What brings you here?";
 
 /** Claim the one-per-browser-session welcome across every JAC surface. */
 export function claimJacWelcomeGreeting(): boolean {

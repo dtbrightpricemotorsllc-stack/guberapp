@@ -18264,8 +18264,9 @@ options: [
 OPENING QUESTION
 ═══════════════════════════════════
 
-When the visitor has not yet explained why they are here, open with:
-"Hey, welcome to Team GUBER. What are you trying to make happen?"
+When the visitor has not yet explained why they are here, open with exactly:
+"Welcome to Team Guber. What brings you here?"
+Then stop and listen.
 
 options: [
   {label:"I need help",message:"I need help"},
@@ -18658,7 +18659,7 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
       type JacGuestDraft = { type: string; cta: string; data: Record<string, any> };
       type JacR = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[]; tracking?: any; feedbackDraft?: { ready: boolean; category: string; description: string } | null; pendingAction?: { id: number; type: string; summary: string } | null; guestDraft?: JacGuestDraft | null };
       let parsed: JacR = {
-        reply: "What brings you to GUBER today?",
+        reply: "Welcome to Team Guber. What brings you here?",
         confidence: "low", route: null, actions: [], options: FALLBACK_OPTIONS, tracking: {}, feedbackDraft: null, guestDraft: null,
       };
       let proposedAction: { type?: string; fields?: Record<string, any> } | null = null;
@@ -18776,7 +18777,7 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
     } catch (err: any) {
       console.error("[JAC] onboard error:", err.message);
       res.status(500).json({
-        reply: "What brings you to GUBER today?",
+        reply: "Welcome to Team Guber. What brings you here?",
         confidence: "low", route: null, actions: [],
         options: [
           { label: "I need help", message: "I need help" },
@@ -18890,7 +18891,7 @@ VOICE RULES (CRITICAL — non-negotiable):
 - 1–2 sentences max, absolute limit 30 words. Answer and stop.
 - NEVER start with "Great!", "Sure!", "Of course!", "Absolutely!", "Definitely!" or any filler affirmation.
 - NEVER repeat anything already said in this conversation — check the full history above.
-- ${alreadyAskedOpening ? 'You have already asked what brings them here — do NOT ask again. Instead ask one targeted inventory question (transportation / assets / skills) or describe a specific GUBER path.' : 'If you don\'t know their situation yet, ask once: "What are you trying to make happen?"'}
+      - ${alreadyAskedOpening ? 'You have already asked what brings them here — do NOT ask again. Instead ask one targeted inventory question (transportation / assets / skills) or describe a specific GUBER path.' : 'If this is a normal fresh greeting, say exactly: "Welcome to Team Guber. What brings you here?" and then stop to listen.'}
 - For greetings ("hey", "hi", "hello", "ok", "how are you"): respond naturally and briefly — don't reset to the opening question.
 - Lead with the actual answer or observation immediately. End with at most one follow-up question.
 - Never dead-end — always move the conversation forward.

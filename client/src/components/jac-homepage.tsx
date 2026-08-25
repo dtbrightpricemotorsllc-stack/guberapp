@@ -125,7 +125,7 @@ const OPENING_OPTIONS = getJacQuickActions("homepage");
 
 const GREETING: JacMsg = {
   role: "assistant",
-  content: "Hey, welcome to Team GUBER. What are you trying to make happen?",
+  content: "Welcome to Team Guber. What brings you here?",
   buttons: OPENING_OPTIONS,
 };
 
@@ -706,7 +706,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
 
       const aMsg: JacMsg = {
         role: "assistant",
-        content: data.reply || "What brings you to GUBER today?",
+        content: data.reply || "Welcome to Team Guber. What brings you here?",
         signupRoute: typeof data.route === "string" && data.route ? data.route : undefined,
         buttons: [
           ...(Array.isArray(data.actions) ? data.actions : []),
@@ -736,7 +736,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
     } catch {
       setMessages(prev => [...prev, {
         role: "assistant",
-        content: "Something went sideways — I'm JAC, still here. What brings you to GUBER today?",
+        content: "Welcome to Team Guber. What brings you here?",
         buttons: OPENING_OPTIONS,
       }]);
     } finally {

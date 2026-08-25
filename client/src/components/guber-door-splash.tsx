@@ -43,8 +43,7 @@ const GREETING_AT    = 1700;
 const BUTTONS_AT     = 2200;
 const DOOR_SLIDE_MS  = DOORS_END_AT - DOORS_START_AT;
 
-const GREETING_TEXT =
-  "I'm JAC. What's on your mind? Let's get the vision you see behind your eyes in front of your eyes.";
+const GREETING_TEXT = "Welcome to Team Guber. What brings you here?";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type DoorPhase = "closed" | "unlocking" | "opening" | "open" | "exiting";
