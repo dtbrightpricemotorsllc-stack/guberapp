@@ -40,6 +40,14 @@ describe("Team GUBER concierge policy", () => {
     ])).toBe("/services");
   });
 
+  it("preserves browse filter context on a valid provider route", () => {
+    const route = "/services?q=plumber&category=Skilled%20Labor&availableNow=true";
+
+    expect(gateJacRouteForConversation(route, [
+      { role: "user", content: "Show me a plumber I can hire directly right now." },
+    ])).toBe(route);
+  });
+
   it("routes to offer-service only on a real provider-offering signal, not a hiring one", () => {
     expect(gateJacRouteForConversation("/offer-service", [
       { role: "user", content: "I want to offer my cleaning service and get hired directly." },

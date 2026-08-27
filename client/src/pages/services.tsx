@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
+import { parseServiceBrowseFilters, SERVICE_BROWSE_CATEGORIES } from "@/lib/services-filter-handoff";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { BriefcaseBusiness, CheckCircle2, Clock3, List, Map, MapPin, Search, ShieldCheck, Sparkles } from "lucide-react";
@@ -42,7 +43,7 @@ type ServiceRequestForm = {
   estimatedMinutes: string;
 };
 
-const categories = ["All", "On-Demand Help", "General Labor", "Skilled Labor", "Verify & Inspect"];
+const categories = SERVICE_BROWSE_CATEGORIES;
 
 function priceText(offer: ServiceOffer) {
   if (offer.pricingType === "hourly" && offer.hourlyRate != null) return `$${offer.hourlyRate}/hr`;
@@ -59,14 +60,13 @@ export default function BrowseServices() {
   const [category, setCategory] = useState("All");
 
   // ── JAC handoff: a routed "browse a provider" conversation can carry a
-  // search term / category so the person lands on the right filter, not a
-  // blank list. Read once on mount.
+  // search term, category, and urgency so the person lands on the right
+  // filters, not a blank list. Read once on mount.
   useEffect(() => {
-    const params = new URLSearchParams(urlSearch);
-    const q = params.get("q");
-    const cat = params.get("category");
-    if (q) setSearch(q);
-    if (cat && categories.includes(cat)) setCategory(cat);
+    const filters = parseServiceBrowseFilters(urlSearch);
+    if (filters.search) setSearch(filters.search);
+    if (filters.category) setCategory(filters.category);
+    setAvailableOnly(filters.availableOnly);
   }, []);
   const [availableOnly, setAvailableOnly] = useState(false);
   const [view, setView] = useState<"list" | "map">("list");

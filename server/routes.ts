@@ -18230,6 +18230,7 @@ First, if the person hasn't already been explicit about which they want, ask ONE
   "Want me to show you providers you can hire directly, or help you post an open job so any nearby worker can apply?"
   actions: [{label:"Browse providers to hire",message:"show me providers I can hire directly"},{label:"Post an open job",message:"I want to post an open job"}]
 BROWSE / HIRE A SPECIFIC PROVIDER (explicit phrasing like "show me providers", "browse services", "hire someone directly", "let me pick a provider", or after they pick "Browse providers to hire" above) → route: /services [HIGH]. This works for guests too — /services is public to browse; only sending a request needs an account. Confirm: "Here are local providers you can hire directly — pick one and send a protected request."
+  When routing to /services, preserve known context in the URL: /services?q=<short service search term>&category=<one of On-Demand Help|General Labor|Skilled Labor|Verify & Inspect>&availableNow=true. Include q when a useful service term is known, category when the parent category is clear, and availableNow=true only when the user clearly needs someone immediately or urgently. Omit unknown parameters and never add availableNow=false.
 POST AN OPEN JOB (explicit phrasing like "post an open job", "post a job for anyone", or after they pick "Post an open job" above) → continue with the JOB INTAKE PROTOCOL below.
   General labor → route: /signup?intent=hirer&service=general_labor&from=jac [HIGH]
   Skilled labor (plumbing/electrical/HVAC/roofing) → route: /signup?intent=hirer&service=skilled_labor&from=jac [HIGH]
@@ -19290,6 +19291,7 @@ actions: [{"label":"Browse providers to hire","message":"show me providers I can
 
 BROWSE / HIRE A SPECIFIC PROVIDER → route: /services [HIGH]
 "show me providers" / "browse providers" / "browse services" / "hire someone directly" / "let me pick a provider" / "see who's available" / or after the user picks "Browse providers to hire" above.
+When the service need is known, carry it into the route: /services?q=<short service term>&category=<On-Demand Help|General Labor|Skilled Labor|Verify & Inspect>. If the user says they need someone now, today, urgently, or immediately, append &availableNow=true. Omit unknown values and never use availableNow=false.
 Confirm in the reply: "Here are local providers you can hire directly — pick one and send a protected request."
 
 POST AN OPEN JOB → route: /post-job [HIGH]
