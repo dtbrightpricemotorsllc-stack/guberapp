@@ -11,6 +11,7 @@ import { TRUST_ADJUSTMENTS } from "./pricing";
 import { getDemoUserIds } from "./demo-guard";
 import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-reward";
 import { evaluatePayoutMultiFactor } from "./payout-guard";
+import { settleStandardDestinationCharge } from "./job-payment-settlement";
 import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_CONNECT_SECRET_KEY!, { apiVersion: "2025-01-27.acacia" as any });
@@ -191,6 +192,8 @@ async function autoConfirmReviewTimerJobs(): Promise<number> {
     stripePaymentIntentId: jobs.stripePaymentIntentId,
     workerGrossShare: jobs.workerGrossShare,
     payoutStatus: jobs.payoutStatus,
+    paymentRail: jobs.paymentRail,
+    platformFeeRate: jobs.platformFeeRate,
     // Fields read by the multi-factor payout guardrail:
     helperConfirmed: jobs.helperConfirmed,
     lat: jobs.lat,
@@ -218,14 +221,11 @@ async function autoConfirmReviewTimerJobs(): Promise<number> {
       continue;
     }
 
-    // Capture the PaymentIntent — releases 80% to worker, GUBER keeps 20% application fee
-    // Idempotency: skip if authorization was already captured or has expired
+    // Standard destination charges are finalized through the same durable
+    // settlement layer as dual confirmation; cron is only a retry/auto-review
+    // trigger, never a second payment rail.
     const piId = job.stripePaymentIntentId;
-    const jobPayoutStatus = job.payoutStatus;
-    // canonicalWorkerShare: prefer workerGrossShare (set at checkout from 80% of total), fall back to helperPayout
     const canonicalWorkerShare = job.workerGrossShare || job.helperPayout || 0;
-    let captureSucceeded = false;
-    let captureExpired = false;
 
     // ── Anti-fraud payout guardrail ────────────────────────────────────────
     // Auto-confirm releases on the review-timer (NOT on GPS). Still enforce the
@@ -248,82 +248,100 @@ async function autoConfirmReviewTimerJobs(): Promise<number> {
       continue;
     }
 
-    const update: any = {
-      status: "completed_paid",
-      confirmedAt: now,
-      payoutStatus: "payout_eligible",
-      internalPayoutStatus: "approved",
-    };
-
-    await db.update(jobs).set(update).where(eq(jobs.id, job.id));
-
-    if (piId && jobPayoutStatus !== "paid_out" && jobPayoutStatus !== "capture_expired") {
-      try {
-        const captured = await stripe.paymentIntents.capture(piId);
-        const capturedAmount = (captured.amount_received || captured.amount || 0) / 100;
-        // chargedAt set here — marks when funds actually settled (not at authorization)
-        await db.update(jobs).set({ payoutStatus: "paid_out", internalPayoutStatus: "released", payoutAmount: canonicalWorkerShare, chargedAt: new Date() }).where(eq(jobs.id, job.id));
+    let captureSucceeded = false;
+    let captureExpired = false;
+    const settlement = (piId && (!job.paymentRail || job.paymentRail === "destination_charge"))
+      ? await settleStandardDestinationCharge(job.id, stripe)
+      : { status: "not_standard_destination_charge" as const };
+    captureSucceeded = settlement.status === "captured" || settlement.status === "already_captured";
+    captureExpired = settlement.status === "capture_expired";
+    if (settlement.status === "captured") {
+      await awardReferralRewardForJob(job.id, settlement.grossCharge);
+    }
+    if (settlement.status === "not_standard_destination_charge") {
+      // Existing non-destination-charge jobs retain their legacy capture path.
+      // It intentionally has no worker transfer: transfers are handled by the
+      // legacy wallet payout flow, not by this auto-review timer.
+      if (!piId) {
+        await db.update(jobs).set({
+          status: "completed_paid",
+          confirmedAt: now,
+          payoutStatus: "payout_eligible",
+          internalPayoutStatus: "approved",
+        }).where(eq(jobs.id, job.id));
         captureSucceeded = true;
-        console.log(`[GUBER][capture] cron jobId=${job.id} paymentIntentId=${piId} captured=success amount=$${capturedAmount}`);
+      } else if (job.payoutStatus === "paid_out" || job.payoutStatus === "capture_expired") {
+        captureSucceeded = job.payoutStatus === "paid_out";
+        captureExpired = job.payoutStatus === "capture_expired";
+      } else {
+        try {
+          const captured = await stripe.paymentIntents.capture(piId, {}, {
+            idempotencyKey: `guber-legacy-job-${job.id}-capture-v1`,
+          });
+          const capturedAmount = (captured.amount_received || captured.amount || 0) / 100;
+          await db.update(jobs).set({
+            status: "completed_paid",
+            confirmedAt: now,
+            payoutStatus: "paid_out",
+            internalPayoutStatus: "released",
+            payoutAmount: canonicalWorkerShare,
+            chargedAt: new Date(),
+          }).where(eq(jobs.id, job.id));
+          await awardReferralRewardForJob(job.id, capturedAmount);
+          const platformFee = job.platformFeeRate ? capturedAmount * job.platformFeeRate : capturedAmount - canonicalWorkerShare;
+          await storage.createMoneyLedgerEntry({
+            jobId: job.id, userIdOwner: job.postedById, userIdCounterparty: job.assignedHelperId,
+            ledgerType: "job_payment_captured", amount: -capturedAmount, sourceSystem: "stripe",
+            sourceReferenceId: piId, stripeObjectType: "payment_intent", stripeObjectId: piId,
+            description: `Auto-confirm payment captured for job #${job.id}: ${job.title}`,
+          });
+          await storage.createMoneyLedgerEntry({
+            jobId: job.id, userIdOwner: job.assignedHelperId, userIdCounterparty: job.postedById,
+            ledgerType: "job_earning", amount: canonicalWorkerShare, sourceSystem: "stripe",
+            sourceReferenceId: piId, stripeObjectType: "payment_intent", stripeObjectId: piId,
+            description: `Auto-confirm earning for job #${job.id}: ${job.title}`,
+          });
+          await storage.createMoneyLedgerEntry({
+            jobId: job.id, userIdOwner: null, ledgerType: "platform_fee", amount: platformFee,
+            sourceSystem: "stripe", sourceReferenceId: piId, stripeObjectType: "payment_intent",
+            stripeObjectId: piId, description: `Platform fee for job #${job.id}: ${job.title}`,
+          });
+          captureSucceeded = true;
+        } catch (error: any) {
+          captureExpired = error?.code === "charge_expired_for_capture";
+          if (captureExpired) {
+            await db.update(jobs).set({ payoutStatus: "capture_expired", internalPayoutStatus: "on_hold" }).where(eq(jobs.id, job.id));
+          } else {
+            console.error(`[GUBER][capture] legacy cron jobId=${job.id} paymentIntentId=${piId} error: ${error?.message}`);
+          }
+        }
+      }
+    }
 
-        // GUBER Performance Shares — award the referrer (if any) their cash
-        // share of GUBER's platform fee on this completed-paid job.
-        await awardReferralRewardForJob(job.id, capturedAmount);
-
-        const cronPlatformFee = job.platformFeeRate ? capturedAmount * job.platformFeeRate : capturedAmount - canonicalWorkerShare;
-        await storage.createMoneyLedgerEntry({
-          jobId: job.id,
-          userIdOwner: job.postedById,
-          userIdCounterparty: job.assignedHelperId,
-          ledgerType: "job_payment_captured",
-          amount: -capturedAmount,
-          sourceSystem: "stripe",
-          sourceReferenceId: piId,
-          stripeObjectType: "payment_intent",
-          stripeObjectId: piId,
-          description: `Auto-confirm payment captured for job #${job.id}: ${job.title}`,
-        });
-        await storage.createMoneyLedgerEntry({
-          jobId: job.id,
-          userIdOwner: job.assignedHelperId,
-          userIdCounterparty: job.postedById,
-          ledgerType: "job_earning",
-          amount: canonicalWorkerShare,
-          sourceSystem: "stripe",
-          sourceReferenceId: piId,
-          stripeObjectType: "payment_intent",
-          stripeObjectId: piId,
-          description: `Auto-confirm earning for job #${job.id}: ${job.title}`,
-        });
-        await storage.createMoneyLedgerEntry({
-          jobId: job.id,
-          userIdOwner: null,
-          ledgerType: "platform_fee",
-          amount: cronPlatformFee,
-          sourceSystem: "stripe",
-          sourceReferenceId: piId,
-          stripeObjectType: "payment_intent",
-          stripeObjectId: piId,
-          description: `Platform fee for job #${job.id}: ${job.title}`,
-        });
-      } catch (captureErr: any) {
-        // Check for 7-day expiry (uncaptured authorization expires after 7 days)
-        if (captureErr.code === "charge_expired_for_capture") {
-          console.error(`[GUBER][capture] cron jobId=${job.id} EXPIRED — authorization lapsed. Needs admin attention.`);
-          await db.update(jobs).set({ payoutStatus: "capture_expired", internalPayoutStatus: "on_hold" }).where(eq(jobs.id, job.id));
-          captureExpired = true;
-          // Notify poster immediately — they need to contact support
+    if (!captureSucceeded) {
+      if (captureExpired) {
+        if (job.assignedHelperId) {
           await storage.createNotification({
-            userId: job.postedById,
-            title: "Payment Authorization Expired",
-            body: `The payment hold for "${job.title}" has expired after 7 days. Please contact GUBER support to resolve.`,
+            userId: job.assignedHelperId,
+            title: "Payment Hold Expired — Action Required",
+            body: `The payment authorization for "${job.title}" has expired. Please contact GUBER support to arrange your payment.`,
             type: "job",
             jobId: job.id,
           });
-        } else {
-          console.error(`[GUBER][capture] cron jobId=${job.id} paymentIntentId=${piId} error: ${captureErr.message}`);
         }
+        await storage.createNotification({
+          userId: job.postedById,
+          title: "Payment Authorization Expired",
+          body: `The payment hold for "${job.title}" has expired after 7 days. Please contact GUBER support to resolve.`,
+          type: "job",
+          jobId: job.id,
+        });
+        confirmed++;
       }
+      // Failed standard captures remain completion_submitted with a deferred
+      // retry time set by the settlement service. Do not grant trust, wallet
+      // earnings, or send a paid notification before capture succeeds.
+      continue;
     }
 
     if (job.assignedHelperId) {

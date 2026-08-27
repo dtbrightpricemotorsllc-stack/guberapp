@@ -11,6 +11,7 @@
 - [Overlay sequencing](overlay-sequencing.md) — GPS disclaimer (z-[200], global) and onboarding tour must be mutually exclusive, GPS-first; gate via gps.ts events + isGpsDisclaimerPending().
 - [Mission Control /status endpoint](mission-control-status.md) — GREEN/RED comes only from watchdog (statebleed+tests+manifests); DB columns & VITE env vars don't affect it. Maps key served via /api/config, not VITE_.
 - [Atomic payment fulfillment](atomic-fulfillment.md) — Stripe fulfillment must flip "paid" + apply all entitlements in ONE tx (FOR UPDATE on purchase row), or retries skip effects forever.
+- [Standard job payment rail](standard-job-payment-rail.md) — public paid jobs use destination-charge capture only; never add a second worker transfer.
 - [Direct-offer linked job lifecycle](direct-offer-linked-job-lifecycle.md) — provider service requests bind to direct offers; every terminal offer transition and checkout-expiry race must reconcile the linked job.
 - [Release-code security](release-code-security.md) — pickup codes HMAC-hashed (no fallback secret), timing-safe match, redacted, rate-limited, driver-bound; tow+trailer+VIN hard gates; dark behind flag.
 - [Witness payout authorization](witness-payout-authz.md) — accept+report gate on idVerified; report does atomic accepted→completed first to prevent double-pay; tow/trailer changes allow owner-side roles.

@@ -65,6 +65,8 @@ import { gateJacRouteForConversation, hasGuestGoalSignal, JAC_GUEST_HANDOFF_POLI
 import { recordVoiceEvent } from "./jac-voice-telemetry";
 import { DAY1_OG_PROMOTION_ENDS_AT, DAY1_OG_PROMOTION_END_LABEL, canCreateDay1OgCheckout, day1OgPromotionEndsAt, isDay1OgPromotionActive } from "@shared/day1og-promotion";
 import { evaluatePayoutMultiFactor } from "./payout-guard";
+import { calculateStandardJobPayment } from "./job-payment-accounting";
+import { settleStandardDestinationCharge } from "./job-payment-settlement";
 import * as assetCustody from "./asset-custody";
 import {
   PROTECTION_PACKAGES,
@@ -340,6 +342,12 @@ async function retryPendingPayoutsForUser(userId: number, stripeAccountId: strin
         // the funds are still held. Skip — we must not transfer money we don't have.
         if ((job as any).stripePaymentIntentId && !(job as any).chargedAt) {
           console.log(`[GUBER] retryPendingPayouts: skipping txn ${txn.id} — Stripe capture not yet settled for job ${job.id}`);
+          continue;
+        }
+        if ((job as any).paymentRail === "destination_charge") {
+          // The worker was paid by Stripe as part of the destination-charge
+          // capture. Never turn this legacy wallet retry into a second transfer.
+          await storage.updateWalletTransaction(txn.id, { status: "completed" } as any);
           continue;
         }
         console.log(`[GUBER] retryPendingPayouts: creating job transfer $${job.helperPayout} to ${stripeAccountId}`);
@@ -11022,7 +11030,6 @@ export async function registerRoutes(
 
       const budget = job.budget ?? 0;
       const urgentFee = job.urgentFee ?? 0;
-      const totalCharge = budget + urgentFee;
 
       const isAdmin = poster.role === "admin";
       if (job.category === "Barter Labor" || budget <= 0 || isAdmin) {
@@ -11070,20 +11077,24 @@ export async function registerRoutes(
 
       const feeConfig = await getActiveFeeConfig();
 
-      // Worker receives (1 - platformFeeRate) × budget (default 80% of the job budget amount)
-      // urgentFee and Stripe processing fee are separate; they do not reduce the worker's share
-      const workerShare = job.helperPayout ?? Math.round(budget * (1 - feeConfig.platformFeeRate) * 100) / 100;
-      const workerShareCents = Math.round(workerShare * 100);
-
-      // Poster pays: budget + urgentFee + Stripe processing fee (grossed-up to cover Stripe's cut)
-      const { gross: grossCharge, stripeFee } = grossUpForStripe(totalCharge);
-      const grossChargeCents = Math.round(grossCharge * 100);
-
-      // application_fee_amount = grossCharge − workerShare (neutral pass-through model)
-      //   GUBER keeps: (platformFeeRate × budget) + urgentFee + Stripe processing fee
-      //   Worker receives: workerShareCents exactly (80% of job budget)
-      //   Stripe processing is a neutral pass-through: collected from poster, paid to Stripe by platform
-      const applicationFeeCents = grossChargeCents - workerShareCents;
+      // Snapshot one cents-based calculation. A standard job is a Stripe
+      // destination charge: capture automatically moves the worker share, so
+      // no later code may create a second standalone transfer.
+      const accounting = calculateStandardJobPayment({
+        budget,
+        urgentFee,
+        platformFeeRate: feeConfig.platformFeeRate,
+      });
+      const {
+        workerShare,
+        workerShareCents,
+        grossCharge,
+        grossChargeCents,
+        processingFee: stripeFee,
+        processingFeeCents,
+        applicationFee: platformFee,
+        applicationFeeCents,
+      } = accounting;
 
       const lineItems: any[] = [
         {
@@ -11093,7 +11104,7 @@ export async function registerRoutes(
               name: `GUBER: ${job.title}`,
               description: `Payment held securely by Stripe until job is confirmed complete · ${helperName} receives $${workerShare.toFixed(2)}`,
             },
-            unit_amount: Math.round(budget * 100),
+            unit_amount: accounting.budgetCents,
           },
           quantity: 1,
         },
@@ -11104,7 +11115,7 @@ export async function registerRoutes(
           price_data: {
             currency: "usd",
             product_data: { name: "Urgent Boost Fee", description: "Priority visibility surcharge" },
-            unit_amount: Math.round(urgentFee * 100),
+            unit_amount: accounting.urgentFeeCents,
           },
           quantity: 1,
         });
@@ -11117,7 +11128,7 @@ export async function registerRoutes(
             name: "Payment Processing Fee",
             description: "Stripe card processing (2.9% + 30¢) — passed through at cost",
           },
-          unit_amount: Math.round(stripeFee * 100),
+          unit_amount: processingFeeCents,
         },
         quantity: 1,
       });
@@ -11143,18 +11154,25 @@ export async function registerRoutes(
             created_at: new Date().toISOString(),
             pricingMode: (job as any).pricingMode || "standard",
             feeProfile: (job as any).feeProfile || "standard",
+            payment_rail: "destination_charge",
           },
         },
         success_url: `${baseUrl}/jobs/${jobId}?lock_session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/jobs/${jobId}`,
-        metadata: { guber_job_id: String(jobId), hirer_user_id: String(req.session.userId), flow_type: "public_job", type: "job_lock", created_at: new Date().toISOString() },
-      });
+        metadata: { guber_job_id: String(jobId), hirer_user_id: String(req.session.userId), flow_type: "public_job", type: "job_lock", payment_rail: "destination_charge", created_at: new Date().toISOString() },
+      }, { idempotencyKey: `guber-standard-job-${jobId}-checkout-v1` });
 
       await storage.updateJob(jobId, {
         stripeSessionId: stripeSession.id,
         platformFeeRate: feeConfig.platformFeeRate,
         workerGrossShare: workerShare,
+        helperPayout: workerShare,
+        platformFee,
         posterProcessingFee: stripeFee,
+        paymentRail: "destination_charge",
+        paymentGrossCents: grossChargeCents,
+        workerPayoutCents: workerShareCents,
+        payoutMode: "destination_charge",
       } as any);
       res.json({ checkoutUrl: stripeSession.url, jobId, grossCharge, stripeFee });
     } catch (err: any) {
@@ -12634,7 +12652,9 @@ export async function registerRoutes(
 
       let confirmNewBadge: string | null = null;
       if (newBuyerConfirmed && newHelperConfirmed) {
-        update.status = "completed_paid";
+        // Do not mark this job paid until the authorization has actually been
+        // captured. The durable settlement layer moves it to completed_paid.
+        update.status = "completion_submitted";
         update.confirmedAt = new Date();
         if (!update.completedAt && !job.completedAt) update.completedAt = new Date();
 
@@ -12716,7 +12736,9 @@ export async function registerRoutes(
             }
           }
 
-          const workerShare = (job as any).workerGrossShare || job.helperPayout || 0;
+          const workerShare = ((job as any).workerPayoutCents != null)
+            ? (job as any).workerPayoutCents / 100
+            : ((job as any).workerGrossShare || job.helperPayout || 0);
 
           // ── Anti-fraud payout guardrail ──────────────────────────────────
           // Defense-in-depth: never release funds unless the multi-factor check
@@ -12729,11 +12751,11 @@ export async function registerRoutes(
             customerConfirmed: newBuyerConfirmed,
           });
 
-          // Capture the PaymentIntent — funds move from poster's card into GUBER's Stripe account.
-          // We then transfer the worker's share to their Stripe Connect account immediately.
-          // Idempotency: skip if already paid_out or capture_expired.
+          // Capture is claimed in a durable row. Standard public jobs use a
+          // Stripe destination charge, which moves the worker share as part of
+          // capture; a manual transfer here would double-pay the worker.
           const piId = (job as any).stripePaymentIntentId;
-          const currentPayoutStatus = (job as any).payoutStatus;
+          let paymentReleased = false;
           if (piId && !payoutGate.ok) {
             // Conditions for release not met — hold for manual review instead of
             // moving money. This should not happen on a legitimate dual-confirm
@@ -12747,122 +12769,31 @@ export async function registerRoutes(
               details: JSON.stringify({ jobId: job.id, reasons: payoutGate.reasons, factors: payoutGate.factors }),
             });
             console.warn(`[GUBER][payout-guard] jobId=${job.id} capture HELD — reasons=${payoutGate.reasons.join(",")}`);
-          } else if (piId && currentPayoutStatus !== "paid_out" && currentPayoutStatus !== "capture_expired") {
-            try {
-              const captured = await stripe.paymentIntents.capture(piId);
-              const capturedAmount = (captured.amount_received || captured.amount || 0) / 100;
+          } else if (piId) {
+            const settlement = await settleStandardDestinationCharge(job.id, stripe);
+            if (settlement.status === "captured" || settlement.status === "already_captured") {
+              update.status = "completed_paid";
               update.payoutStatus = "paid_out";
               update.internalPayoutStatus = "released";
-              update.payoutAmount = workerShare;
+              update.payoutAmount = settlement.workerShare;
               update.chargedAt = new Date();
-              console.log(`[GUBER][capture] jobId=${job.id} paymentIntentId=${piId} captured=success amount=$${capturedAmount}`);
-
-              // GUBER Performance Shares — referrer's cash share of platform fee.
-              await awardReferralRewardForJob(job.id, capturedAmount);
-
-              const platformFee = (job as any).platformFeeRate ? capturedAmount * (job as any).platformFeeRate : capturedAmount - workerShare;
-              await storage.createMoneyLedgerEntry({
-                jobId: job.id,
-                userIdOwner: job.postedById,
-                userIdCounterparty: job.assignedHelperId,
-                ledgerType: "job_payment_captured",
-                amount: -capturedAmount,
-                sourceSystem: "stripe",
-                sourceReferenceId: piId,
-                stripeObjectType: "payment_intent",
-                stripeObjectId: piId,
-                description: `Payment captured for job #${job.id}: ${job.title}`,
-              });
-              await storage.createMoneyLedgerEntry({
-                jobId: job.id,
-                userIdOwner: job.assignedHelperId,
-                userIdCounterparty: job.postedById,
-                ledgerType: "job_earning",
-                amount: workerShare,
-                sourceSystem: "stripe",
-                sourceReferenceId: piId,
-                stripeObjectType: "payment_intent",
-                stripeObjectId: piId,
-                description: `Earning for job #${job.id}: ${job.title}`,
-              });
-              await storage.createMoneyLedgerEntry({
-                jobId: job.id,
-                userIdOwner: null,
-                ledgerType: "platform_fee",
-                amount: platformFee,
-                sourceSystem: "stripe",
-                sourceReferenceId: piId,
-                stripeObjectType: "payment_intent",
-                stripeObjectId: piId,
-                description: `Platform fee for job #${job.id}: ${job.title}`,
-              });
-
-              // Create wallet transaction as "available" — the money is confirmed captured.
-              // We'll immediately attempt the Stripe transfer; if the worker has no Connect
-              // account yet, the "available" status lets them claim via the wallet page.
-              const walletTxn = await storage.createWalletTransaction({
-                userId: job.assignedHelperId!,
-                jobId: job.id,
-                type: "earning",
-                amount: workerShare,
-                status: "available",
-                description: `Payment released via Stripe for "${job.title}"`,
-              });
-
-              // Immediately attempt to transfer to worker's Stripe Connect account.
-              const workerForPayout = await storage.getUser(job.assignedHelperId!);
-              const workerAccountId = (workerForPayout as any)?.stripeAccountId;
-              const workerAccountStatus = (workerForPayout as any)?.stripeAccountStatus;
-              if (workerAccountId && workerAccountStatus === "active" && workerShare > 0) {
-                try {
-                  const transfer = await stripe.transfers.create({
-                    amount: Math.round(workerShare * 100),
-                    currency: "usd",
-                    destination: workerAccountId,
-                    transfer_group: `job_${job.id}`,
-                    description: `GUBER payout: ${job.title}`,
-                    metadata: { jobId: String(job.id), userId: String(job.assignedHelperId) },
-                  });
-                  await storage.updateWalletTransaction(walletTxn.id, {
-                    stripeTransferId: transfer.id,
-                    description: `Payout sent: $${workerShare.toFixed(2)} for "${job.title}"`,
-                  } as any);
-                  await storage.updateJob(job.id, { stripeTransferId: transfer.id, paidOutAt: new Date() } as any);
-                  console.log(`[GUBER][transfer] jobId=${job.id} transfer=${transfer.id} amount=$${workerShare}`);
-                } catch (transferErr: any) {
-                  // Transfer failed (e.g. Stripe balance not yet settled) — leave as "available"
-                  // so the worker can claim via the wallet page once balance settles.
-                  console.error(`[GUBER][transfer] jobId=${job.id} transfer failed: ${transferErr.message}`);
-                }
+              paymentReleased = true;
+              if (settlement.status === "captured") {
+                await awardReferralRewardForJob(job.id, settlement.grossCharge);
               }
-              // If no Connect account: stays "available" → wallet shows "Claim Now" once they set up
-            } catch (captureErr: any) {
-              if (captureErr.code === "charge_expired_for_capture") {
-                console.error(`[GUBER][capture] jobId=${job.id} EXPIRED — 7-day authorization lapsed. Admin attention needed.`);
-                update.payoutStatus = "capture_expired";
-                update.internalPayoutStatus = "on_hold";
-                await notify(job.postedById, {
-                  title: "Payment Hold Expired",
-                  body: `The payment hold for "${job.title}" has expired. Please contact support to resolve.`,
-                  jobId: job.id,
-                });
-              } else {
-                console.error(`[GUBER][capture] jobId=${job.id} paymentIntentId=${piId} error: ${captureErr.message}`);
-                // Leave as payout_eligible so admin or worker can retry
-                if (workerShare > 0) {
-                  await storage.createWalletTransaction({
-                    userId: job.assignedHelperId!,
-                    jobId: job.id,
-                    type: "earning",
-                    amount: workerShare,
-                    status: "pending",
-                    description: `Earnings for "${job.title}" — capture failed, awaiting resolution`,
-                  });
-                }
-              }
+            } else if (settlement.status === "capture_expired") {
+              update.status = "completion_submitted";
+              update.payoutStatus = "capture_expired";
+              update.internalPayoutStatus = "on_hold";
+            } else if (settlement.status === "capture_failed") {
+              update.status = "completion_submitted";
+              update.payoutStatus = "capture_failed";
+              update.internalPayoutStatus = "on_hold";
             }
           } else if (!piId && workerShare > 0) {
             // No Stripe PI (e.g. barter/cash jobs) — record as available for manual payout
+            update.status = "completed_paid";
+            paymentReleased = true;
             await storage.createWalletTransaction({
               userId: job.assignedHelperId!,
               jobId: job.id,
@@ -12873,18 +12804,17 @@ export async function registerRoutes(
             });
           }
 
-          if (workerShare > 0) {
-            const transferMade = !!(update as any).stripeTransferId || !!(job as any).stripeTransferId;
+          if (workerShare > 0 && paymentReleased) {
             await notify(job.assignedHelperId!, {
               title: "Payment Released! 💸",
-              body: transferMade
-                ? `$${workerShare.toFixed(2)} has been sent to your Stripe account for "${job.title}". Expect it in your bank within 2–7 business days.`
+              body: (job as any).paymentRail === "destination_charge"
+                ? `$${workerShare.toFixed(2)} was released through Stripe for "${job.title}".`
                 : `$${workerShare.toFixed(2)} is ready in your GUBER wallet for "${job.title}". Set up your payout account to transfer to your bank.`,
               priority: "high",
             }, "/wallet");
           }
 
-          try {
+          if (paymentReleased) try {
             const walletTxns = await storage.getWalletByUser(job.assignedHelperId!);
             const totalEarned = walletTxns.filter(t => t.type === "earning" && t.status === "completed").reduce((sum, t) => sum + t.amount, 0);
             if (totalEarned >= 1000) {
@@ -29034,6 +28964,7 @@ OUTPUT STYLE:
         WHERE j.payout_status = 'paid_out'
           AND j.stripe_payment_intent_id IS NOT NULL
           AND j.stripe_transfer_id IS NULL
+          AND j.payment_rail IS DISTINCT FROM 'destination_charge'
           AND j.assigned_helper_id IS NOT NULL
         ORDER BY j.confirmed_at DESC
       `);
@@ -29050,6 +28981,9 @@ OUTPUT STYLE:
       const job = await storage.getJob(jobId);
       if (!job) return res.status(404).json({ error: "Job not found" });
       if (!job.assignedHelperId) return res.status(400).json({ error: "Job has no assigned worker" });
+      if ((job as any).paymentRail === "destination_charge") {
+        return res.status(409).json({ error: "This standard job uses a Stripe destination charge and has already released the worker share at capture." });
+      }
 
       const worker = await storage.getUser(job.assignedHelperId);
       if (!worker) return res.status(404).json({ error: "Worker not found" });
@@ -29126,6 +29060,7 @@ OUTPUT STYLE:
         WHERE j.payout_status = 'paid_out'
           AND j.stripe_payment_intent_id IS NOT NULL
           AND j.stripe_transfer_id IS NULL
+          AND j.payment_rail IS DISTINCT FROM 'destination_charge'
           AND j.assigned_helper_id IS NOT NULL
           AND u.stripe_account_id IS NOT NULL
           AND u.stripe_account_status = 'active'

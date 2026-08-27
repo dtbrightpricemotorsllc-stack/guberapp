@@ -258,6 +258,25 @@ app.use((req, res, next) => {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS is_test_user boolean DEFAULT false;
   `).catch(e => console.error("[migration] test-flag columns error:", e));
 
+  // Standard-job settlement is durable because a browser return, webhook retry,
+  // confirmation, and cron may all try to finish the same authorization.
+  await pool.query(`
+    ALTER TABLE jobs ADD COLUMN IF NOT EXISTS payment_rail text;
+    ALTER TABLE jobs ADD COLUMN IF NOT EXISTS payment_gross_cents integer;
+    ALTER TABLE jobs ADD COLUMN IF NOT EXISTS worker_payout_cents integer;
+    CREATE TABLE IF NOT EXISTS job_payment_settlements (
+      job_id integer PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+      capture_status text NOT NULL DEFAULT 'pending',
+      capture_attempts integer NOT NULL DEFAULT 0,
+      captured_amount_cents integer,
+      captured_at timestamp,
+      last_attempt_at timestamp,
+      last_error text,
+      created_at timestamp NOT NULL DEFAULT NOW(),
+      updated_at timestamp NOT NULL DEFAULT NOW()
+    );
+  `).catch(e => console.error("[migration] standard job payment settlement error:", e));
+
   await pool.query(`
     ALTER TABLE worker_qualifications ADD COLUMN IF NOT EXISTS expiry_warning_sent_at TIMESTAMP;
   `).catch(e => console.error("[migration] worker_qualifications expiry_warning_sent_at error:", e));

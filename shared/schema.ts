@@ -384,6 +384,11 @@ export const jobs = pgTable("jobs", {
   stripeSessionId: text("stripe_session_id"),
   stripeChargeId: text("stripe_charge_id"),
   stripeTransferId: text("stripe_transfer_id"),
+  // Standard public jobs use a Stripe destination charge. These snapshot fields
+  // keep Checkout, capture, ledger, and worker wallet entries on one amount.
+  paymentRail: text("payment_rail"),
+  paymentGrossCents: integer("payment_gross_cents"),
+  workerPayoutCents: integer("worker_payout_cents"),
   chargedAt: timestamp("charged_at"),
   lockedAt: timestamp("locked_at"),
   completedAt: timestamp("completed_at"),
