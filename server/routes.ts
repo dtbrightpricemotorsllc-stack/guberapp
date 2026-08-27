@@ -12548,8 +12548,8 @@ export async function registerRoutes(
       const job = await storage.getJob(jobId);
       if (!job) return res.status(404).json({ message: "Job not found" });
 
-      if (!["in_progress", "active", "funded", "completion_submitted"].includes(job.status)) {
-        return res.status(400).json({ message: "Job must be active, in progress, or completion submitted to confirm" });
+      if (!["in_progress", "active", "funded", "proof_submitted", "completion_submitted"].includes(job.status)) {
+        return res.status(400).json({ message: "Job must be active, in progress, proof submitted, or completion submitted to confirm" });
       }
 
       const isBuyer = job.postedById === req.session.userId;
