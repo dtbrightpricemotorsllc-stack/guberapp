@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import React from "react";
 
 const startSessionSpy = vi.hoisted(() => vi.fn());
@@ -9,6 +9,8 @@ const endSessionSpy = vi.hoisted(() => vi.fn());
 const microphoneReady = vi.hoisted(() => vi.fn());
 const authState = vi.hoisted(() => ({ user: null as { id: number } | null }));
 const jacSpeakSpy = vi.hoisted(() => vi.fn());
+const saveGuestDraftSpy = vi.hoisted(() => vi.fn());
+const saveServiceOfferPrefillSpy = vi.hoisted(() => vi.fn());
 
 vi.mock("@elevenlabs/react", () => ({
   ConversationProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -28,7 +30,14 @@ vi.mock("@/lib/auth-context", () => ({
 }));
 
 vi.mock("@/hooks/use-guest-jac-session", () => ({
-  useGuestJacSession: () => ({ guestSessionId: "guest-test" }),
+  useGuestJacSession: () => ({
+    guestSessionId: "guest-test",
+    saveGuestDraft: saveGuestDraftSpy,
+  }),
+}));
+
+vi.mock("@/lib/jac-listing-prefill", () => ({
+  saveServiceOfferPrefill: saveServiceOfferPrefillSpy,
 }));
 
 vi.mock("@/lib/jac-tts", () => ({
@@ -73,11 +82,15 @@ function sessionResponse(mode: "app") {
 }
 
 describe("JacLiveExperience auth handoff", () => {
+  afterEach(() => cleanup());
+
   beforeEach(() => {
     authState.user = null;
     startSessionSpy.mockReset();
     endSessionSpy.mockReset();
     jacSpeakSpy.mockReset();
+    saveGuestDraftSpy.mockReset();
+    saveServiceOfferPrefillSpy.mockReset();
     microphoneReady.mockResolvedValue(true);
     window.sessionStorage.clear();
     Element.prototype.scrollIntoView = vi.fn();
@@ -110,5 +123,40 @@ describe("JacLiveExperience auth handoff", () => {
       expect.objectContaining({ method: "POST" }),
     );
     expect(jacSpeakSpy).not.toHaveBeenCalled();
+  });
+
+  it("persists a guest service offer and exposes the signup return route", async () => {
+    microphoneReady.mockResolvedValue(false);
+    const collected = {
+      title: "Same-day lawn care",
+      category: "On-Demand Help",
+      serviceType: "Lawn / Yard Work",
+      description: "Mowing, edging, and cleanup.",
+      capabilities: ["Mowing", "Edging"],
+      pricingType: "starting_at",
+      startingPrice: 65,
+      availableNow: true,
+    };
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        reply: "Your service-offer draft is ready.",
+        route: "/signup?intent=worker&returnTo=%2Foffer-service&from=jac",
+        guestDraft: { type: "service_offer", data: collected },
+      }),
+    } as Response);
+
+    const view = render(<JacLiveExperience />);
+    fireEvent.change(view.getByLabelText("Message JAC"), {
+      target: { value: "I offer lawn care" },
+    });
+    fireEvent.click(view.getByLabelText("Send"));
+
+    await waitFor(() => {
+      expect(saveServiceOfferPrefillSpy).toHaveBeenCalledWith(collected);
+    });
+    expect(saveGuestDraftSpy).toHaveBeenCalledWith("service_offer", collected);
+    expect(view.getByRole("link", { name: /Publish your service/i }).getAttribute("href"))
+      .toBe("/signup?intent=worker&returnTo=%2Foffer-service&from=jac");
   });
 });

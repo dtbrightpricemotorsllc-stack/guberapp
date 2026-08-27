@@ -214,6 +214,7 @@ describe("isAllowedReturnTo — returnTo allowlist validation", () => {
     expect(isAllowedReturnTo("/dashboard")).toBe(true);
     expect(isAllowedReturnTo("/browse-jobs")).toBe(true);
     expect(isAllowedReturnTo("/post-job")).toBe(true);
+    expect(isAllowedReturnTo("/offer-service")).toBe(true);
     expect(isAllowedReturnTo("/my-jobs")).toBe(true);
     expect(isAllowedReturnTo("/profile")).toBe(true);
     expect(isAllowedReturnTo("/account-settings")).toBe(true);
@@ -410,6 +411,24 @@ describe("Google OAuth returnTo — end-to-end flow (start → callback)", () =>
 
     expect(callbackRes.body.success).toBe(true);
     expect(callbackRes.body.returnTo).toBe("/wallet");
+  });
+
+  it("passes returnTo=/offer-service through the full OAuth start → callback flow", async () => {
+    const app = buildReturnToApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent
+      .get("/api/auth/google?returnTo=%2Foffer-service")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    expect(callbackRes.body.success).toBe(true);
+    expect(callbackRes.body.returnTo).toBe("/offer-service");
   });
 
   it("passes returnTo=/biz/dashboard through the full OAuth start → callback flow", async () => {

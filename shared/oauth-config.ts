@@ -4,6 +4,7 @@ export const ALLOWED_RETURN_TO_PREFIXES: readonly string[] = [
   "/browse-jobs",
   "/jobs/",
   "/post-job",
+  "/offer-service",
   "/my-jobs",
   "/profile",
   "/account-settings",

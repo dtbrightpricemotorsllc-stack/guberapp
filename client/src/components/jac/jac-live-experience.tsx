@@ -35,6 +35,7 @@ import {
   JAC_WELCOME_GREETING,
   readSharedJacConversation,
 } from "@/lib/jac-live-coordination";
+import { saveServiceOfferPrefill } from "@/lib/jac-listing-prefill";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Msg {
@@ -410,7 +411,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   const transcriptEndRef        = useRef<HTMLDivElement>(null);
   const inputRef                = useRef<HTMLInputElement>(null);
   const textId                  = useId();
-  const { guestSessionId }      = useGuestJacSession();
+  const { guestSessionId, saveGuestDraft } = useGuestJacSession();
   const automaticStartClaimRef = useRef<(() => boolean) | null>(null);
   if (!automaticStartClaimRef.current) {
     automaticStartClaimRef.current = createJacAutomaticVoiceStartClaim();
@@ -537,9 +538,14 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       if (!res.ok) throw new Error(`${res.status}`);
       const data = await res.json();
       const reply = (data.message || data.reply || "").trim();
+      if (!isAuthenticated && data.guestDraft?.type === "service_offer") {
+        const collected = data.guestDraft.data || {};
+        saveServiceOfferPrefill(collected);
+        void saveGuestDraft("service_offer", collected);
+      }
       if (reply) {
         const route = typeof data.route === "string" && data.route ? data.route : null;
-        const kind = route?.startsWith("/offer-service")
+        const kind = data.guestDraft?.type === "service_offer" || route?.startsWith("/offer-service")
           ? "offer-service"
           : inferSurface(reply);
         addMsg({

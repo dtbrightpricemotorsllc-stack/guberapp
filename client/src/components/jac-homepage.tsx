@@ -13,6 +13,7 @@ import {
   getJacQuickActions,
   readSharedJacConversation,
 } from "@/lib/jac-live-coordination";
+import { saveServiceOfferPrefill } from "@/lib/jac-listing-prefill";
 type ConversationState = ConvaiPhase;
 
 const LIVE_PHASE_LABEL: Record<ConversationState, string> = {
@@ -203,6 +204,7 @@ function buildReturningGreeting(data: JacUpdates): string {
 
 const JAC_FLOAT_HINT_KEY = "jac_float_hint_shown";
 const JAC_MIC_HINT_KEY   = "jac_hp_mic_hint_done";
+const SERVICE_OFFER_SIGNUP_ROUTE = "/signup?intent=worker&returnTo=%2Foffer-service&from=jac";
 
 // ── GUBER context detection for phone content cards ───────────────────
 type GuberCtx = "jobs" | "cash" | "vi" | "business" | "studio" | "default";
@@ -701,7 +703,11 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
       // If the LLM produced a guest draft (not logged in), also persist it client-side
       // so the signup redirect can reference it via the hook.
       if (data.guestDraft && typeof data.guestDraft.type === "string") {
-        saveGuestDraft(data.guestDraft.type, data.guestDraft.data || {}).catch(() => {});
+        const guestDraftData = data.guestDraft.data || {};
+        saveGuestDraft(data.guestDraft.type, guestDraftData).catch(() => {});
+        if (data.guestDraft.type === "service_offer") {
+          saveServiceOfferPrefill(guestDraftData);
+        }
       }
 
       const aMsg: JacMsg = {
@@ -1133,6 +1139,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
                       {latestJacMsg.guestDraft.type === "job" ? "JOB DRAFT READY"
                         : latestJacMsg.guestDraft.type === "business_onboarding" ? "BUSINESS PROFILE READY"
                         : latestJacMsg.guestDraft.type === "worker_profile" ? "WORKER PROFILE READY"
+                        : latestJacMsg.guestDraft.type === "service_offer" ? "SERVICE OFFER READY"
                         : "DRAFT READY"}
                     </span>
                   </div>
@@ -1152,7 +1159,9 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
                     )}
                     <p className="text-[9px] text-white/35">Sign up free — your draft is saved and ready to post</p>
                     <Link
-                      href={`/signup?intent=${latestJacMsg.guestDraft.type}&gsid=${encodeURIComponent(guestSessionId)}`}
+                      href={latestJacMsg.guestDraft.type === "service_offer"
+                        ? SERVICE_OFFER_SIGNUP_ROUTE
+                        : `/signup?intent=${latestJacMsg.guestDraft.type}&gsid=${encodeURIComponent(guestSessionId)}`}
                       className="flex items-center justify-center gap-1.5 w-full rounded-xl py-2 text-[11px] font-display font-black no-underline transition-all active:scale-95"
                       style={{ background: "linear-gradient(135deg, hsl(152 100% 44%), hsl(152 80% 36%))", color: "hsl(152 60% 4%)" }}
                       data-testid="jac-guest-draft-cta"

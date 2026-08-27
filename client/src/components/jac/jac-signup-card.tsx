@@ -16,9 +16,11 @@ export interface SignupCardProps {
   onDismiss: () => void;
   /** Called after a successful native sign-in so the scene can exit. */
   onAuthed: (accountType?: string) => void;
+  /** Optional destination after authentication, for a draft JAC already prepared. */
+  returnTo?: string;
 }
 
-export function SignupCard({ onDismiss, onAuthed }: SignupCardProps) {
+export function SignupCard({ onDismiss, onAuthed, returnTo }: SignupCardProps) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const inFlightRef = useRef(false);
   const isNative = Capacitor.isNativePlatform();
@@ -35,7 +37,7 @@ export function SignupCard({ onDismiss, onAuthed }: SignupCardProps) {
           return;
         }
         if (result.reason === "plugin_not_available") {
-          const browserResult = await browserGoogleSignIn({ returnTo: "/dashboard" });
+          const browserResult = await browserGoogleSignIn({ returnTo: returnTo || "/dashboard" });
           if (browserResult.ok) {
             onAuthed(browserResult.accountType);
             return;
@@ -43,7 +45,7 @@ export function SignupCard({ onDismiss, onAuthed }: SignupCardProps) {
         }
       } else {
         const googleUrl = new URL(`${window.location.origin}/api/auth/google`);
-        googleUrl.searchParams.set("returnTo", "/dashboard");
+        googleUrl.searchParams.set("returnTo", returnTo || "/dashboard");
         window.location.href = googleUrl.toString();
         return; // full-page redirect — no state to reset
       }
@@ -115,7 +117,15 @@ export function SignupCard({ onDismiss, onAuthed }: SignupCardProps) {
       {/* Phone / email — standard signup flow */}
       <button
         type="button"
-        onClick={() => { window.location.href = "/signup?from=jac"; }}
+        onClick={() => {
+          const signupUrl = new URL("/signup", window.location.origin);
+          signupUrl.searchParams.set("from", "jac");
+          if (returnTo) {
+            signupUrl.searchParams.set("intent", "worker");
+            signupUrl.searchParams.set("returnTo", returnTo);
+          }
+          window.location.href = signupUrl.pathname + signupUrl.search;
+        }}
         data-testid="button-jac-signup-phone"
         style={{
           width: "100%", height: 46, borderRadius: 12, marginTop: 8,

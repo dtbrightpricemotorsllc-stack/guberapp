@@ -15,6 +15,14 @@ export function saveListingPrefill(data: Omit<ListingPrefill, "savedAt">) {
   } catch {}
 }
 
+export function saveServiceOfferPrefill(collected: Record<string, any>) {
+  saveListingPrefill({
+    type: "service_offer",
+    collected,
+    route: "/offer-service",
+  });
+}
+
 export function readListingPrefill(): ListingPrefill | null {
   try {
     const raw = localStorage.getItem(KEY);

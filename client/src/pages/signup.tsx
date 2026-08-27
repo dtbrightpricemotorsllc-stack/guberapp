@@ -187,7 +187,8 @@ export default function Signup() {
     } else {
       // Web/PWA: full-page redirect. Show the overlay so the moment of "leaving
       // the app" feels like a controlled handoff instead of a blank flash.
-      const authUrl = `${window.location.origin}/api/auth/google`;
+      const authUrl = new URL("/api/auth/google", window.location.origin);
+      if (returnTo) authUrl.searchParams.set("returnTo", returnTo);
       // Safety net: if the navigation is blocked or the browser stalls, clear
       // the overlay (and re-enable the button) after 10s so the user isn't stuck.
       setTimeout(() => {
@@ -195,7 +196,7 @@ export default function Signup() {
         setGoogleLoading(false);
         googleInFlightRef.current = false;
       }, 10000);
-      window.location.href = authUrl;
+      window.location.href = authUrl.toString();
     }
   };
 

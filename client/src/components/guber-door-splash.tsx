@@ -22,6 +22,7 @@ import {
 import { JacAnimatedCharacter, type JacState } from "@/components/jac/jac-animated-character";
 import { SignupCard } from "@/components/jac/jac-signup-card";
 import { getGuestSessionId } from "@/hooks/use-guest-jac-session";
+import { saveServiceOfferPrefill } from "@/lib/jac-listing-prefill";
 
 // ── Greeting guard: fires at most once per browser tab session ────────────────
 let _greetingHasFired = false;
@@ -100,6 +101,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const [convaiPhase,  setConvaiPhase]  = useState<ConvaiPhase>("idle");
   const [convaiActive, setConvaiActive] = useState(false);
   const [showSignup,   setShowSignup]   = useState(false);
+  const [signupReturnTo, setSignupReturnTo] = useState<string | undefined>();
 
   // JAC character dimensions (responsive to viewport)
   const [jacHeightPx, setJacHeightPx]  = useState(380);
@@ -225,6 +227,14 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
         body: JSON.stringify({ messages: history, mode: "homepage", surface: "door", guest_session_id: getGuestSessionId() }),
       });
       const data = await res.json();
+      if (data.guestDraft?.type === "service_offer") {
+        saveServiceOfferPrefill(data.guestDraft.data || {});
+        setSignupReturnTo("/offer-service");
+        if (!signupOffered.current) {
+          signupOffered.current = true;
+          setShowSignup(true);
+        }
+      }
       // JAC can surface an in-scene signup card when she's gathered enough
       // signal — at most once per conversation (server also guards per session)
       if (!signupOffered.current &&
@@ -818,6 +828,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                 {showSignup && (
                   <div style={{ position:"relative", zIndex:8, background:"rgba(0,0,15,.74)" }}>
                     <SignupCard
+                      returnTo={signupReturnTo}
                       onDismiss={() => setShowSignup(false)}
                       onAuthed={(accountType) => {
                         // Door scene exits → standard new-user onboarding/dashboard
@@ -826,7 +837,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                         cancelAllJacAudio();
                         schedule(() => {
                           setMounted(false);
-                          window.location.href = accountType === "business" ? "/biz/dashboard" : "/dashboard";
+                          window.location.href = signupReturnTo || (accountType === "business" ? "/biz/dashboard" : "/dashboard");
                         }, 440);
                       }}
                     />

@@ -18238,7 +18238,7 @@ POST AN OPEN JOB (explicit phrasing like "post an open job", "post a job for any
 
 OFFER A SERVICE / BECOME A PROVIDER (e.g. "I offer services", "I'm a provider", "I want to list my service", "I do [trade] for hire", "sign me up as a provider", "publish a service offer") — do NOT treat this as a hiring need:
 Confirm once: "Want me to take you to where you can publish a service offer people can hire you for directly?" actions: [{label:"Yes, take me there",message:"yes take me to offer a service"},{label:"Not right now",message:"not right now"}]
-Once confirmed → NOT LOGGED IN: route: /signup?intent=worker&returnTo=%2Foffer-service&from=jac [HIGH] (returnTo lands them on /offer-service right after signup — nothing about their intent is lost). ALREADY LOGGED IN: route: /offer-service [HIGH] directly, no signup step.
+Once confirmed, if the person is NOT logged in, run the SERVICE OFFER INTAKE PROTOCOL below before routing. Do not send them to signup with an empty provider form when they have already shared useful service details. When the draft is ready, route: /signup?intent=worker&returnTo=%2Foffer-service&from=jac [HIGH] (returnTo lands them on /offer-service right after signup). ALREADY LOGGED IN: route: /offer-service [HIGH] directly, no signup step.
 
 CAR WASH / DETAILING — always ask first:
 "Do you want someone to come to you, or are you looking for a nearby shop?"
@@ -18368,6 +18368,35 @@ GENERAL RULE:
 • If user gives info voluntarily (mentions zip, breed, etc.) — absorb it without re-asking.
 • NEVER re-ask what was already answered.
 • Day-1 OG pitch: offer ONCE per conversation, after intake is mostly done. One sentence. Not pushy.
+
+═══════════════════════════════════
+SERVICE OFFER INTAKE PROTOCOL — BECOME A PROVIDER
+═══════════════════════════════════
+
+Only enter this protocol after the user has confirmed they want to publish a service
+offer for customers to hire them directly. This is provider intake, not a job request.
+Ask ONE focused question at a time and silently build a service_offer guestDraft from
+the answers. Absorb details the user already gave; never ask for them again.
+
+Collect the useful core fields:
+• serviceType: the specific service they provide (required)
+• category: General Labor, On-Demand Help, Skilled Labor, or Verify & Inspect
+• title: a clear customer-facing title; auto-generate one from serviceType if needed
+• description: what they do and what customers can expect (required; a concise summary is okay)
+• capabilities: array of short skills/services included (collect when naturally available)
+• pricingType: quote, starting_at, or hourly; price as a number when they provide one
+• availableNow: boolean only when they clearly say whether they are available now
+
+Minimum for a guest draft: serviceType + category + description. Pricing, capabilities,
+equipment, and availableNow are optional; default pricingType to "quote" and availableNow
+to false when they are not provided. Once the minimum is ready, summarize the details,
+say the free account will keep the draft, and route to:
+/signup?intent=worker&returnTo=%2Foffer-service&from=jac
+
+Store the draft data using the exact offer form keys:
+{ title, category, serviceType, description, capabilities: [], equipment: [],
+  pricingType, startingPrice, hourlyRate, availableNow }
+This creates a private draft for the user to review; it is never auto-published.
 
 ═══════════════════════════════════
 SKILLED TRADES, CAREERS & POCKET PRO PATH
@@ -18542,6 +18571,7 @@ Guest draft types and required fields:
 - type="job": title, category, description (partial ok), price (optional), location (optional)
 - type="worker_profile": capabilities_description (what they can do)
 - type="business_onboarding": business_name, business_type, what_you_provide, what_you_need (partial ok)
+- type="service_offer": title, category, serviceType, description, capabilities (array), equipment (array), pricingType, startingPrice, hourlyRate, availableNow
 
 BUSINESS ONBOARDING MODE:
 If the user signals they own a business, manage staff, or run a company ("I own a business", "I'm the manager", "we hire often", "I'm an employer"), shift into business mode:
@@ -18584,7 +18614,7 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
 - tracking: always present, all fields included
 - feedbackDraft: null normally; {"ready":true,"category":"<type>","description":"<summary>"} when capturing issue
 - proposedAction: null normally (always null for guests); {"type":"...","fields":{...}} only for logged-in users with a complete workflow ready
-- guestDraft: null normally; {"type":"job|worker_profile|business_onboarding","cta":"Sign up free to keep your draft →","data":{...all collected fields...}} when enough info gathered for a guest draft (NOT logged-in users only)`;
+- guestDraft: null normally; {"type":"job|worker_profile|business_onboarding|service_offer","cta":"Sign up free to keep your draft →","data":{...all collected fields...}} when enough info gathered for a guest draft (NOT logged-in users only)`;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
@@ -18638,6 +18668,10 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
               : null,
             guestDraft: guestDraftRaw,
           };
+          if (!onboardUserId && guestDraftRaw?.type === "service_offer") {
+            parsed.route = "/signup?intent=worker&returnTo=%2Foffer-service&from=jac";
+            parsed.confidence = "high";
+          }
           if (j.proposedAction && typeof j.proposedAction === "object" && isValidActionType(j.proposedAction.type)) {
             proposedAction = { type: j.proposedAction.type, fields: j.proposedAction.fields ?? {} };
           }

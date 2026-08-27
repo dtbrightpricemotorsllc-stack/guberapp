@@ -49,8 +49,11 @@ export default function OfferService() {
     if (Array.isArray(c.capabilities)) setCapabilities(c.capabilities.join(", "));
     if (Array.isArray(c.equipment)) setEquipment(c.equipment.join(", "));
     if (c.pricingType) setPricingType(String(c.pricingType));
-    if (c.hourlyRate) { setPricingType("hourly"); setPrice(String(c.hourlyRate)); }
-    if (c.startingPrice) { setPricingType("starting_at"); setPrice(String(c.startingPrice)); }
+    if (c.hourlyRate != null) { setPricingType("hourly"); setPrice(String(c.hourlyRate)); }
+    else if (c.startingPrice != null) { setPricingType("starting_at"); setPrice(String(c.startingPrice)); }
+    else if (c.price != null && (c.pricingType === "hourly" || c.pricingType === "starting_at")) {
+      setPrice(String(c.price));
+    }
     if (typeof c.availableNow === "boolean") setAvailableNow(c.availableNow);
     setJacPrefilled(true);
   }, []);

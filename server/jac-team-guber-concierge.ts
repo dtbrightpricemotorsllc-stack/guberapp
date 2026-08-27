@@ -21,7 +21,7 @@ const GOAL_SIGNAL =
 // from wanting to hire one (JOB_OR_HIRING_INTENT above).
 const PROVIDER_OFFERING_ROUTE = /^\/offer-service(?:[/?#]|$)/;
 const PROVIDER_OFFERING_INTENT =
-  /\b(offer(?:ing)?\b.{0,25}\bservice|provide services|i(?:'m| am) a (?:provider|contractor)|list (?:my|a) service|publish\b.{0,15}\bservice|sign (?:me )?up as a provider|advertise my service|i do .* for hire|hire me out)\b/i;
+  /\b(offer(?:ing)?\b.{0,25}\bservice|provide services|i (?:offer|provide|perform) [^.!?]{2,60}|i(?:'m| am) a (?:provider|contractor)|list (?:my|a) service|publish\b.{0,15}\bservice|sign (?:me )?up as a provider|advertise my service|i do .* for hire|hire me out)\b/i;
 
 export const JAC_MAIN_APP_CONCIERGE_POLICY = `
 TEAM GUBER CONCIERGE MODEL — REQUIRED:
@@ -83,5 +83,8 @@ export function hasGuestGoalSignal(messages: readonly JacConversationMessage[]):
     .map((message) => message.content.trim())
     .filter(Boolean)
     .join(" ");
-  return userContext.length >= 12 && GOAL_SIGNAL.test(userContext);
+  return userContext.length >= 12 && (
+    GOAL_SIGNAL.test(userContext) ||
+    PROVIDER_OFFERING_INTENT.test(userContext)
+  );
 }
