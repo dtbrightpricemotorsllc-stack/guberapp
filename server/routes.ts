@@ -1,7 +1,11 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { setupCampaignLabRoutes } from "./campaign-lab";
 import { setupBusinessStudioRoutes } from "./business-studio";
-import { registerServiceOfferRoutes } from "./service-offers";
+import {
+  registerServiceOfferRoutes,
+  getServiceOfferAcceptanceGate,
+  getServiceOfferAcceptanceRequirements,
+} from "./service-offers";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { getStudioToolsCache, setStudioToolsCache } from "./studio-tools-cache";
@@ -29959,6 +29963,39 @@ OUTPUT STYLE:
       const acceptableStatuses = ["sent", "countered_by_hirer"];
       if (!acceptableStatuses.includes(offer.status)) return res.status(400).json({ message: "Offer cannot be accepted in current state" });
       if (new Date() > offer.expiresAt) return res.status(400).json({ message: "Offer has expired" });
+
+      const provider = await storage.getUser(offer.workerUserId);
+      if (!provider) return res.status(400).json({ message: "Provider account not found" });
+
+      let requirements = {
+        category: offer.category,
+        serviceClass: null,
+        serviceType: null,
+        requiredTier: null,
+        credentialRequired: null,
+      };
+      // General direct offers keep their existing requirements. Skilled /
+      // Pro requests re-read the linked catalog row so a change after
+      // publication cannot be bypassed by accepting an old request.
+      if (offer.category === "Skilled Labor" && offer.serviceOfferId) {
+        const currentRequirements = await getServiceOfferAcceptanceRequirements(offer.serviceOfferId);
+        if (currentRequirements) requirements = { ...requirements, ...currentRequirements };
+      }
+      const gate = getServiceOfferAcceptanceGate(provider, requirements);
+      if (gate) {
+        try {
+          await storage.createNotification({
+            userId: offer.hirerUserId,
+            title: "Service request needs provider verification",
+            body: `The provider cannot accept "${offer.jobSummary}" yet. ${gate.body.detail}`,
+            type: "offer_acceptance_blocked",
+            jobId: offer.jobId || null,
+          });
+        } catch (notificationError) {
+          console.error("[GUBER] failed to notify hirer about blocked service request acceptance:", notificationError);
+        }
+        return res.status(gate.status).json(gate.body);
+      }
 
       const updated = await storage.updateDirectOffer(offerId, {
         status: "agreed_payment_pending",

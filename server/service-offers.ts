@@ -129,6 +129,141 @@ async function getOffer(id: number) {
   return rows[0] || null;
 }
 
+export type ServiceOfferAcceptanceRequirements = {
+  category?: string | null;
+  serviceClass?: string | null;
+  serviceType?: string | null;
+  requiredTier?: string | null;
+  credentialRequired?: boolean | null;
+};
+
+export type ServiceOfferAcceptanceGate = {
+  status: number;
+  body: {
+    message: string;
+    detail: string;
+    code: string;
+    needsVerification?: boolean;
+  };
+};
+
+/**
+ * Re-read the catalog requirements when a provider accepts a request. The
+ * direct-offer row intentionally keeps the source offer id, rather than
+ * copying verification state that can become stale after publication.
+ */
+export async function getServiceOfferAcceptanceRequirements(
+  serviceOfferId: number,
+): Promise<ServiceOfferAcceptanceRequirements | null> {
+  const { rows } = await pool.query(
+    `SELECT so.category, so.service_class, so.service_type,
+            st.min_tier AS required_tier, st.requires_credential AS credential_required
+       FROM service_offers so
+       LEFT JOIN service_types st
+         ON st.category = so.category AND st.name = so.service_type
+      WHERE so.id = $1`,
+    [serviceOfferId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    category: row.category,
+    serviceClass: row.service_class,
+    serviceType: row.service_type,
+    requiredTier: row.required_tier,
+    credentialRequired: row.credential_required,
+  };
+}
+
+const SERVICE_TIER_ORDER = ["community", "verified", "credentialed", "elite"];
+
+/**
+ * These are the provider-side checks for accepting service work. Keep this
+ * pure so the same current user state can be exercised by route tests without
+ * relying on a published offer's old verification snapshot.
+ */
+export function getServiceOfferAcceptanceGate(
+  provider: any,
+  requirements: ServiceOfferAcceptanceRequirements = {},
+): ServiceOfferAcceptanceGate | null {
+  if (!provider?.liabilityDisclaimerAcceptedAt) {
+    return {
+      status: 412,
+      body: {
+        message: "DISCLAIMER_REQUIRED",
+        code: "DISCLAIMER_REQUIRED",
+        detail: "Please acknowledge the GUBER liability disclaimer in Profile → Trust & Credentials before accepting service work.",
+      },
+    };
+  }
+
+  if (!provider.idVerified) {
+    return {
+      status: 403,
+      body: {
+        message: "ID_REQUIRED",
+        code: "ID_REQUIRED",
+        needsVerification: true,
+        detail: "You must verify your current ID in Profile → Trust & Credentials before accepting service work.",
+      },
+    };
+  }
+
+  const category = requirements.category || "";
+  const isSkilled = requirements.serviceClass === "skilled_pro" || category === "Skilled Labor";
+  if (!isSkilled) return null;
+
+  const requestedTier = String(requirements.requiredTier || "");
+  const requiredTier = SERVICE_TIER_ORDER.includes(requestedTier) ? requestedTier : "verified";
+  const providerTierIndex = SERVICE_TIER_ORDER.indexOf(String(provider.tier || "community"));
+  const requiredTierIndex = SERVICE_TIER_ORDER.indexOf(requiredTier);
+  if (requiredTierIndex >= 0 && providerTierIndex < requiredTierIndex) {
+    return {
+      status: 403,
+      body: {
+        message: "TIER_REQUIRED",
+        code: "TIER_REQUIRED",
+        detail: `Your current tier is not eligible for this Skilled / Pro service. Reach ${requiredTier} tier or higher in Profile → Trust & Credentials before accepting it.`,
+      },
+    };
+  }
+
+  const credentialRequired =
+    requirements.credentialRequired === true ||
+    requirements.serviceClass === "skilled_pro" ||
+    category === "Skilled Labor";
+  if (credentialRequired && !provider.credentialVerified) {
+    return {
+      status: 403,
+      body: {
+        message: "CREDENTIAL_REQUIRED",
+        code: "CREDENTIAL_REQUIRED",
+        detail: "Your credential is not currently verified for this Skilled / Pro service. Upload or renew it in Profile → Trust & Credentials before accepting.",
+      },
+    };
+  }
+
+  const restrictions = Array.isArray(provider.backgroundCheckRestrictions)
+    ? provider.backgroundCheckRestrictions
+    : [];
+  if (
+    provider.backgroundCheckStatus === "flagged" &&
+    (restrictions.includes("Skilled Labor") ||
+      (!!requirements.serviceType && restrictions.includes(requirements.serviceType)))
+  ) {
+    return {
+      status: 403,
+      body: {
+        message: "BACKGROUND_RESTRICTION",
+        code: "BACKGROUND_RESTRICTION",
+        detail: "Your current background-check restrictions do not allow this Skilled / Pro service. Contact support before accepting it.",
+      },
+    };
+  }
+
+  return null;
+}
+
 export function registerServiceOfferRoutes(app: Express, guards: RouteGuards) {
   const { requireAuth, requireAdmin, checkSuspended } = guards;
 
