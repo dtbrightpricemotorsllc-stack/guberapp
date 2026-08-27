@@ -1,6 +1,6 @@
 const KEY = "jac_listing_prefill";
 
-export type ListingPrefillType = "vehicle" | "item" | "house" | "load" | "vi";
+export type ListingPrefillType = "vehicle" | "item" | "house" | "load" | "vi" | "service_offer";
 
 export interface ListingPrefill {
   type: ListingPrefillType;

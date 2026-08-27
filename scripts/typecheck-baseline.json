@@ -3,14 +3,14 @@
   "diagnostics": [
     {
       "path": "client/src/App.tsx",
-      "line": 642,
+      "line": 648,
       "column": 34,
       "code": "TS2304",
       "message": "Cannot find name 'COLD_START_PING_KEY'."
     },
     {
       "path": "client/src/App.tsx",
-      "line": 643,
+      "line": 649,
       "column": 30,
       "code": "TS2304",
       "message": "Cannot find name 'COLD_START_PING_KEY'."
@@ -58,34 +58,6 @@
       "message": "'canvas' is possibly 'null'."
     },
     {
-      "path": "client/src/components/jac/jac-convai-session.tsx",
-      "line": 372,
-      "column": 36,
-      "code": "TS2304",
-      "message": "Cannot find name 'MicLostToken'."
-    },
-    {
-      "path": "client/src/components/jac/jac-convai-session.tsx",
-      "line": 641,
-      "column": 26,
-      "code": "TS2304",
-      "message": "Cannot find name 'MicLostToken'."
-    },
-    {
-      "path": "client/src/components/jac/jac-convai-session.tsx",
-      "line": 749,
-      "column": 34,
-      "code": "TS2304",
-      "message": "Cannot find name 'MicLostToken'."
-    },
-    {
-      "path": "client/src/components/jac/jac-convai-session.tsx",
-      "line": 752,
-      "column": 30,
-      "code": "TS2304",
-      "message": "Cannot find name 'MicLostToken'."
-    },
-    {
       "path": "client/src/components/jac/jac-investor.tsx",
       "line": 109,
       "column": 25,
@@ -125,7 +97,7 @@
       "line": 219,
       "column": 11,
       "code": "TS2367",
-      "message": "This comparison appears to be unintentional because the types '\"processing\" | \"listening\" | \"speaking\" | \"recording\"' and '\"idle\"' have no overlap."
+      "message": "This comparison appears to be unintentional because the types '\"listening\" | \"speaking\" | \"processing\" | \"recording\"' and '\"idle\"' have no overlap."
     },
     {
       "path": "client/src/lib/voice/WakeWordDetector.ts",
@@ -227,24 +199,24 @@
     },
     {
       "path": "client/src/pages/admin.tsx",
-      "line": 7812,
+      "line": 7817,
       "column": 35,
       "code": "TS2345",
-      "message": "Argument of type 'string' is not assignable to parameter of type 'SetStateAction<\"all\" | \"active\" | \"done\" | \"stuck\">'."
+      "message": "Argument of type 'string' is not assignable to parameter of type 'SetStateAction<\"done\" | \"all\" | \"active\" | \"stuck\">'."
     },
     {
       "path": "client/src/pages/auth-success.tsx",
       "line": 120,
       "column": 20,
       "code": "TS2322",
-      "message": "Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes & { size?: \"sm\" | \"md\" | \"lg\" | \"xl\" | undefined; variant?: \"text\" | \"full\" | \"splash\" | undefined; }'. Property 'className' does not exist on type 'IntrinsicAttributes & { size?: \"sm\" | \"md\" | \"lg\" | \"xl\" | undefined; variant?: \"text\" | \"full\" | \"splash\" | undefined; }'."
+      "message": "Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes & { size?: \"sm\" | \"lg\" | \"md\" | \"xl\" | undefined; variant?: \"splash\" | \"text\" | \"full\" | undefined; }'. Property 'className' does not exist on type 'IntrinsicAttributes & { size?: \"sm\" | \"lg\" | \"md\" | \"xl\" | undefined; variant?: \"splash\" | \"text\" | \"full\" | undefined; }'."
     },
     {
       "path": "client/src/pages/auth-success.tsx",
       "line": 154,
       "column": 18,
       "code": "TS2322",
-      "message": "Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes & { size?: \"sm\" | \"md\" | \"lg\" | \"xl\" | undefined; variant?: \"text\" | \"full\" | \"splash\" | undefined; }'. Property 'className' does not exist on type 'IntrinsicAttributes & { size?: \"sm\" | \"md\" | \"lg\" | \"xl\" | undefined; variant?: \"text\" | \"full\" | \"splash\" | undefined; }'."
+      "message": "Type '{ className: string; }' is not assignable to type 'IntrinsicAttributes & { size?: \"sm\" | \"lg\" | \"md\" | \"xl\" | undefined; variant?: \"splash\" | \"text\" | \"full\" | undefined; }'. Property 'className' does not exist on type 'IntrinsicAttributes & { size?: \"sm\" | \"lg\" | \"md\" | \"xl\" | undefined; variant?: \"splash\" | \"text\" | \"full\" | undefined; }'."
     },
     {
       "path": "client/src/pages/business-dashboard.tsx",
@@ -269,10 +241,10 @@
     },
     {
       "path": "client/src/pages/job-detail.tsx",
-      "line": 772,
+      "line": 876,
       "column": 30,
       "code": "TS2345",
-      "message": "Argument of type '{ id: number; visibility: string; title: string; createdAt: Date | null; lat: number | null; lng: number | null; category: string; description: string | null; proofTemplateId: number | null; ... 140 more ...; isDemo: boolean | null; } | undefined' is not assignable to parameter of type '{ id: number; visibility: string; title: string; createdAt: Date | null; lat: number | null; lng: number | null; category: string; description: string | null; proofTemplateId: number | null; ... 140 more ...; isDemo: boolean | null; }'. Type 'undefined' is not assignable to type '{ id: number; visibility: string; title: string; createdAt: Date | null; lat: number | null; lng: number | null; category: string; description: string | null; proofTemplateId: number | null; ... 140 more ...; isDemo: boolean | null; }'."
+      "message": "Argument of type '{ category: string; serviceType: string | null; zip: string | null; id: number; status: string; title: string; visibility: string; pricingMode: string | null; description: string | null; ... 143 more ...; isDemo: boolean | null; } | undefined' is not assignable to parameter of type '{ category: string; serviceType: string | null; zip: string | null; id: number; status: string; title: string; visibility: string; pricingMode: string | null; description: string | null; ... 143 more ...; isDemo: boolean | null; }'. Type 'undefined' is not assignable to type '{ category: string; serviceType: string | null; zip: string | null; id: number; status: string; title: string; visibility: string; pricingMode: string | null; description: string | null; ... 143 more ...; isDemo: boolean | null; }'."
     },
     {
       "path": "client/src/pages/map-explore.tsx",
@@ -419,7 +391,7 @@
       "line": 280,
       "column": 9,
       "code": "TS2769",
-      "message": "No overload matches this call. Overload 1 of 2, '(value: { itemType: string | SQL<unknown> | Placeholder<string, any>; userId: number | SQL<unknown> | Placeholder<string, any>; itemId: number | SQL<unknown> | Placeholder<...>; id?: number | ... 2 more ... | undefined; invitedBy?: number | ... 3 more ... | undefined; invitedAt?: Date | ... 3 more ... | undefined; }): PgInsertBase<...>', gave the following error. Type 'string | string[]' is not assignable to type 'string | SQL<unknown> | Placeholder<string, any>'. Type 'string[]' is not assignable to type 'string | SQL<unknown> | Placeholder<string, any>'. Overload 2 of 2, '(values: { itemType: string | SQL<unknown> | Placeholder<string, any>; userId: number | SQL<unknown> | Placeholder<string, any>; itemId: number | SQL<unknown> | Placeholder<...>; id?: number | ... 2 more ... | undefined; invitedBy?: number | ... 3 more ... | undefined; invitedAt?: Date | ... 3 more ... | undefined; }[]): PgInsertBase<...>', gave the following error. Object literal may only specify known properties, and 'itemType' does not exist in type '{ itemType: string | SQL<unknown> | Placeholder<string, any>; userId: number | SQL<unknown> | Placeholder<string, any>; itemId: number | SQL<unknown> | Placeholder<...>; id?: number | ... 2 more ... | undefined; invitedBy?: number | ... 3 more ... | undefined; invitedAt?: Date | ... 3 more ... | undefined; }[]'."
+      "message": "No overload matches this call. Overload 1 of 2, '(value: { userId: number | SQL<unknown> | Placeholder<string, any>; itemType: string | SQL<unknown> | Placeholder<string, any>; itemId: number | SQL<unknown> | Placeholder<...>; id?: number | ... 2 more ... | undefined; invitedBy?: number | ... 3 more ... | undefined; invitedAt?: SQL<...> | ... 3 more ... | undefined; }): PgInsertBase<...>', gave the following error. Type 'string | string[]' is not assignable to type 'string | SQL<unknown> | Placeholder<string, any>'. Type 'string[]' is not assignable to type 'string | SQL<unknown> | Placeholder<string, any>'. Overload 2 of 2, '(values: { userId: number | SQL<unknown> | Placeholder<string, any>; itemType: string | SQL<unknown> | Placeholder<string, any>; itemId: number | SQL<unknown> | Placeholder<...>; id?: number | ... 2 more ... | undefined; invitedBy?: number | ... 3 more ... | undefined; invitedAt?: SQL<...> | ... 3 more ... | undefined; }[]): PgInsertBase<...>', gave the following error. Object literal may only specify known properties, and 'itemType' does not exist in type '{ userId: number | SQL<unknown> | Placeholder<string, any>; itemType: string | SQL<unknown> | Placeholder<string, any>; itemId: number | SQL<unknown> | Placeholder<...>; id?: number | ... 2 more ... | undefined; invitedBy?: number | ... 3 more ... | undefined; invitedAt?: SQL<...> | ... 3 more ... | undefined; }[]'."
     },
     {
       "path": "server/admin-qa.ts",
@@ -675,21 +647,7 @@
     },
     {
       "path": "server/cron.ts",
-      "line": 273,
-      "column": 37,
-      "code": "TS2339",
-      "message": "Property 'platformFeeRate' does not exist on type '{ id: number; title: string; postedById: number; assignedHelperId: number | null; helperPayout: number | null; proofRequired: boolean | null; status: string; stripePaymentIntentId: string | null; ... 7 more ...; geofenceVerifiedAt: Date | null; }'."
-    },
-    {
-      "path": "server/cron.ts",
-      "line": 273,
-      "column": 76,
-      "code": "TS2339",
-      "message": "Property 'platformFeeRate' does not exist on type '{ id: number; title: string; postedById: number; assignedHelperId: number | null; helperPayout: number | null; proofRequired: boolean | null; status: string; stripePaymentIntentId: string | null; ... 7 more ...; geofenceVerifiedAt: Date | null; }'."
-    },
-    {
-      "path": "server/cron.ts",
-      "line": 999,
+      "line": 1017,
       "column": 87,
       "code": "TS2769",
       "message": "No overload matches this call. Overload 1 of 4, '(value: string | number | Date): Date', gave the following error. Argument of type 'null' is not assignable to parameter of type 'string | number | Date'. Overload 2 of 4, '(value: string | number): Date', gave the following error. Argument of type 'null' is not assignable to parameter of type 'string | number'."
@@ -724,456 +682,435 @@
     },
     {
       "path": "server/routes.ts",
-      "line": 1176,
+      "line": 934,
+      "column": 52,
+      "code": "TS18048",
+      "message": "'job' is possibly 'undefined'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 934,
+      "column": 93,
+      "code": "TS18048",
+      "message": "'job' is possibly 'undefined'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 1259,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 1365,
+      "line": 1448,
       "column": 25,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 1401,
+      "line": 1484,
       "column": 25,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 1702,
+      "line": 1785,
       "column": 25,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 1739,
+      "line": 1822,
       "column": 25,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 1817,
+      "line": 1900,
       "column": 29,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 1971,
+      "line": 2054,
       "column": 45,
       "code": "TS7016",
       "message": "Could not find a declaration file for module 'formidable'. '/home/runner/workspace/node_modules/formidable/src/index.js' implicitly has an 'any' type. Try `npm i --save-dev @types/formidable` if it exists or add a new declaration (.d.ts) file containing `declare module 'formidable';`"
     },
     {
       "path": "server/routes.ts",
-      "line": 1979,
+      "line": 2062,
       "column": 20,
       "code": "TS7031",
       "message": "Binding element 'mimetype' implicitly has an 'any' type."
     },
     {
       "path": "server/routes.ts",
-      "line": 2238,
+      "line": 2321,
       "column": 25,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 2263,
+      "line": 2346,
       "column": 25,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 2514,
+      "line": 2597,
       "column": 25,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 2539,
+      "line": 2622,
       "column": 25,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 3194,
+      "line": 3277,
       "column": 35,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 3288,
+      "line": 3371,
       "column": 59,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 3409,
+      "line": 3492,
       "column": 25,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 4354,
+      "line": 4437,
       "column": 49,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 4497,
+      "line": 4580,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 4889,
+      "line": 4972,
       "column": 15,
       "code": "TS2304",
       "message": "Cannot find name 'awardReferralGrowthCredits'."
     },
     {
       "path": "server/routes.ts",
-      "line": 4892,
+      "line": 4975,
       "column": 15,
       "code": "TS2304",
       "message": "Cannot find name 'awardReferralGrowthCredits'."
     },
     {
       "path": "server/routes.ts",
-      "line": 5317,
+      "line": 5400,
       "column": 31,
       "code": "TS2304",
       "message": "Cannot find name 'users'."
     },
     {
       "path": "server/routes.ts",
-      "line": 5321,
+      "line": 5404,
       "column": 27,
       "code": "TS2304",
       "message": "Cannot find name 'users'."
     },
     {
       "path": "server/routes.ts",
-      "line": 5426,
+      "line": 5509,
       "column": 47,
       "code": "TS2339",
       "message": "Property 'subscription' does not exist on type 'Invoice'."
     },
     {
       "path": "server/routes.ts",
-      "line": 5426,
+      "line": 5509,
       "column": 83,
       "code": "TS2339",
       "message": "Property 'subscription' does not exist on type 'Invoice'."
     },
     {
       "path": "server/routes.ts",
-      "line": 5426,
+      "line": 5509,
       "column": 107,
       "code": "TS2339",
       "message": "Property 'subscription' does not exist on type 'Invoice'."
     },
     {
       "path": "server/routes.ts",
-      "line": 5673,
-      "column": 17,
-      "code": "TS2322",
-      "message": "Type 'null' is not assignable to type 'number | undefined'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 5679,
-      "column": 17,
-      "code": "TS2322",
-      "message": "Type 'null' is not assignable to type 'number | undefined'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 5748,
+      "line": 5832,
       "column": 15,
       "code": "TS2304",
       "message": "Cannot find name 'awardReferralGrowthCredits'."
     },
     {
       "path": "server/routes.ts",
-      "line": 5751,
+      "line": 5835,
       "column": 15,
       "code": "TS2304",
       "message": "Cannot find name 'awardReferralGrowthCredits'."
     },
     {
       "path": "server/routes.ts",
-      "line": 5936,
+      "line": 6020,
       "column": 47,
       "code": "TS2339",
       "message": "Property 'subscription' does not exist on type 'Invoice'."
     },
     {
       "path": "server/routes.ts",
-      "line": 5936,
+      "line": 6020,
       "column": 83,
       "code": "TS2339",
       "message": "Property 'subscription' does not exist on type 'Invoice'."
     },
     {
       "path": "server/routes.ts",
-      "line": 5936,
+      "line": 6020,
       "column": 107,
       "code": "TS2339",
       "message": "Property 'subscription' does not exist on type 'Invoice'."
     },
     {
       "path": "server/routes.ts",
-      "line": 6456,
+      "line": 6540,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 6578,
+      "line": 6662,
       "column": 100,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 6599,
+      "line": 6683,
       "column": 137,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 6615,
+      "line": 6699,
       "column": 19,
       "code": "TS2304",
       "message": "Cannot find name 'awardReferralGrowthCredits'."
     },
     {
       "path": "server/routes.ts",
-      "line": 6636,
+      "line": 6720,
       "column": 100,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 6644,
+      "line": 6728,
       "column": 137,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 6660,
+      "line": 6744,
       "column": 37,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 6690,
+      "line": 6774,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 6768,
+      "line": 6852,
       "column": 31,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 6792,
-      "column": 27,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 6840,
-      "column": 27,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 6861,
-      "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
       "line": 6876,
+      "column": 27,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 6924,
+      "column": 27,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 6945,
+      "column": 27,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 6960,
       "column": 34,
       "code": "TS2339",
       "message": "Property 'toUpperCase' does not exist on type 'string | string[]'. Property 'toUpperCase' does not exist on type 'string[]'."
     },
     {
       "path": "server/routes.ts",
-      "line": 7022,
+      "line": 7106,
       "column": 59,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 7043,
+      "line": 7127,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 7186,
+      "line": 7270,
       "column": 27,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 7226,
-      "column": 27,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 7242,
-      "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
       "line": 7310,
-      "column": 31,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 7376,
-      "column": 31,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 7770,
-      "column": 31,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 7896,
-      "column": 34,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 7912,
-      "column": 34,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 7940,
-      "column": 34,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 7956,
-      "column": 34,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 7970,
-      "column": 34,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 7971,
-      "column": 34,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 8010,
-      "column": 34,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 8011,
-      "column": 34,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 8114,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 8128,
-      "column": 27,
+      "line": 7326,
+      "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 8160,
-      "column": 27,
+      "line": 7394,
+      "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 8173,
+      "line": 7460,
+      "column": 31,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 7854,
+      "column": 31,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 7980,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 8219,
+      "line": 7996,
       "column": 34,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 8024,
+      "column": 34,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 8040,
+      "column": 34,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 8054,
+      "column": 34,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 8055,
+      "column": 34,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 8094,
+      "column": 34,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 8095,
+      "column": 34,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 8198,
+      "column": 27,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 8212,
+      "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
@@ -1186,105 +1123,105 @@
     },
     {
       "path": "server/routes.ts",
-      "line": 8261,
+      "line": 8257,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 8330,
+      "line": 8303,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 8350,
-      "column": 32,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 8478,
-      "column": 34,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 8511,
-      "column": 34,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 8542,
-      "column": 34,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 8616,
-      "column": 34,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 8646,
+      "line": 8328,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 8779,
+      "line": 8345,
+      "column": 34,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 8414,
+      "column": 34,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 8434,
+      "column": 32,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 8562,
+      "column": 34,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 8595,
+      "column": 34,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 8626,
+      "column": 34,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 8700,
+      "column": 34,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 8730,
+      "column": 27,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 8863,
       "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 8808,
+      "line": 8892,
       "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 8919,
+      "line": 9003,
       "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 8936,
-      "column": 31,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 8974,
-      "column": 31,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 8985,
-      "column": 31,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 9041,
+      "line": 9020,
       "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
@@ -1292,1623 +1229,1609 @@
     {
       "path": "server/routes.ts",
       "line": 9058,
+      "column": 31,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 9069,
+      "column": 31,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 9125,
+      "column": 31,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 9142,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 9089,
+      "line": 9173,
       "column": 49,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 9264,
+      "line": 9354,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 9335,
+      "line": 9425,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 9360,
+      "line": 9450,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 9549,
+      "line": 9639,
       "column": 25,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 9685,
+      "line": 9775,
       "column": 64,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 9690,
+      "line": 9780,
       "column": 72,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 9695,
+      "line": 9785,
       "column": 72,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 9700,
+      "line": 9790,
       "column": 56,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 9739,
+      "line": 9829,
       "column": 36,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 10386,
+      "line": 10476,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 10590,
+      "line": 10680,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 10638,
+      "line": 10728,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 10685,
+      "line": 10775,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 10722,
+      "line": 10812,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 10772,
+      "line": 10862,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 10833,
+      "line": 10923,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 10911,
+      "line": 11001,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 11085,
+      "line": 11185,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 11121,
+      "line": 11221,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 11209,
+      "line": 11309,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 11253,
+      "line": 11353,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 11413,
+      "line": 11513,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 11503,
+      "line": 11603,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 11569,
+      "line": 11669,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 11584,
+      "line": 11684,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 11626,
+      "line": 11726,
       "column": 47,
       "code": "TS2345",
       "message": "Argument of type 'number | null' is not assignable to parameter of type 'number'. Type 'null' is not assignable to type 'number'."
     },
     {
       "path": "server/routes.ts",
-      "line": 11735,
+      "line": 11835,
       "column": 28,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 11800,
+      "line": 11900,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 11846,
+      "line": 11946,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 11889,
+      "line": 11989,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 11991,
+      "line": 12091,
       "column": 28,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 11992,
+      "line": 12092,
       "column": 64,
       "code": "TS2769",
       "message": "No overload matches this call. Overload 1 of 3, '(left: PgColumn<{ name: \"key\"; tableName: \"platform_settings\"; dataType: \"string\"; columnType: \"PgText\"; data: string; driverParam: string; notNull: true; hasDefault: false; isPrimaryKey: false; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>, right: string | SQLWrapper): SQL<...>', gave the following error. Argument of type 'string | string[]' is not assignable to parameter of type 'string | SQLWrapper'. Type 'string[]' is not assignable to type 'string | SQLWrapper'. Overload 2 of 3, '(left: Aliased<string | string[]>, right: string | string[] | SQLWrapper): SQL<unknown>', gave the following error. Argument of type 'PgColumn<{ name: \"key\"; tableName: \"platform_settings\"; dataType: \"string\"; columnType: \"PgText\"; data: string; driverParam: string; notNull: true; hasDefault: false; isPrimaryKey: false; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>' is not assignable to parameter of type 'Aliased<string | string[]>'. Type 'PgColumn<{ name: \"key\"; tableName: \"platform_settings\"; dataType: \"string\"; columnType: \"PgText\"; data: string; driverParam: string; notNull: true; hasDefault: false; isPrimaryKey: false; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>' is missing the following properties from type 'Aliased<string | string[]>': sql, fieldAlias Overload 3 of 3, '(left: never, right: unknown): SQL<unknown>', gave the following error. Argument of type 'PgColumn<{ name: \"key\"; tableName: \"platform_settings\"; dataType: \"string\"; columnType: \"PgText\"; data: string; driverParam: string; notNull: true; hasDefault: false; isPrimaryKey: false; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>' is not assignable to parameter of type 'never'."
     },
     {
       "path": "server/routes.ts",
-      "line": 12009,
+      "line": 12109,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 12435,
+      "line": 12535,
       "column": 28,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 12447,
+      "line": 12547,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 12617,
+      "line": 12719,
       "column": 15,
       "code": "TS2304",
       "message": "Cannot find name 'awardReferralGrowthCredits'."
     },
     {
       "path": "server/routes.ts",
-      "line": 12645,
+      "line": 12749,
       "column": 13,
       "code": "TS2322",
-      "message": "Type '{ id: number; jobId: number; createdAt: Date | null; notes: string | null; submittedBy: number; checklistItemId: number | null; imageUrls: string | null; videoUrl: string | null; ... 14 more ...; mediaPurgedAt: Date | null; }[]' is not assignable to type '{ notEncountered?: boolean | null | undefined; imageUrls?: string[] | null | undefined; videoUrl?: string | null | undefined; }[]'. Type '{ id: number; jobId: number; createdAt: Date | null; notes: string | null; submittedBy: number; checklistItemId: number | null; imageUrls: string | null; videoUrl: string | null; ... 14 more ...; mediaPurgedAt: Date | null; }' is not assignable to type '{ notEncountered?: boolean | null | undefined; imageUrls?: string[] | null | undefined; videoUrl?: string | null | undefined; }'. Types of property 'imageUrls' are incompatible. Type 'string | null' is not assignable to type 'string[] | null | undefined'. Type 'string' is not assignable to type 'string[]'."
+      "message": "Type '{ id: number; notes: string | null; verified: boolean | null; createdAt: Date | null; jobId: number; submittedBy: number; checklistItemId: number | null; imageUrls: string | null; ... 14 more ...; mediaPurgedAt: Date | null; }[]' is not assignable to type '{ notEncountered?: boolean | null | undefined; imageUrls?: string[] | null | undefined; videoUrl?: string | null | undefined; }[]'. Type '{ id: number; notes: string | null; verified: boolean | null; createdAt: Date | null; jobId: number; submittedBy: number; checklistItemId: number | null; imageUrls: string | null; ... 14 more ...; mediaPurgedAt: Date | null; }' is not assignable to type '{ notEncountered?: boolean | null | undefined; imageUrls?: string[] | null | undefined; videoUrl?: string | null | undefined; }'. Types of property 'imageUrls' are incompatible. Type 'string | null' is not assignable to type 'string[] | null | undefined'. Type 'string' is not assignable to type 'string[]'."
     },
     {
       "path": "server/routes.ts",
-      "line": 12866,
+      "line": 12878,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 12979,
+      "line": 12991,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 13055,
+      "line": 13067,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 13102,
+      "line": 13114,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 13178,
+      "line": 13190,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 13239,
+      "line": 13251,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 13281,
+      "line": 13293,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 15737,
+      "line": 15749,
       "column": 161,
       "code": "TS2353",
       "message": "Object literal may only specify known properties, and 'imageFocus' does not exist in type 'PromoRenderInput'."
     },
     {
       "path": "server/routes.ts",
-      "line": 15997,
+      "line": 16009,
       "column": 62,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16007,
+      "line": 16019,
       "column": 49,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16021,
+      "line": 16033,
       "column": 49,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16031,
+      "line": 16043,
       "column": 47,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16102,
+      "line": 16114,
       "column": 58,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16225,
+      "line": 16237,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16257,
+      "line": 16269,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16597,
+      "line": 16609,
       "column": 40,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16606,
+      "line": 16618,
       "column": 25,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16652,
+      "line": 16664,
       "column": 25,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16662,
+      "line": 16674,
       "column": 25,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16682,
+      "line": 16694,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16696,
+      "line": 16708,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16722,
+      "line": 16734,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16723,
+      "line": 16735,
       "column": 29,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16781,
+      "line": 16793,
       "column": 29,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16844,
+      "line": 16856,
       "column": 61,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 16850,
+      "line": 16862,
       "column": 36,
       "code": "TS2551",
       "message": "Property 'getProofSubmissions' does not exist on type 'DatabaseStorage'. Did you mean 'getProofSubmission'?"
     },
     {
       "path": "server/routes.ts",
-      "line": 16850,
+      "line": 16862,
       "column": 65,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 19010,
-      "column": 15,
-      "code": "TS2304",
-      "message": "Cannot find name 'sseLine'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 19010,
-      "column": 23,
-      "code": "TS2304",
-      "message": "Cannot find name 'buildStreamChunk'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 19015,
-      "column": 19,
-      "code": "TS2304",
-      "message": "Cannot find name 'sseLine'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 19015,
-      "column": 27,
-      "code": "TS2304",
-      "message": "Cannot find name 'buildStreamChunk'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 19019,
-      "column": 15,
-      "code": "TS2304",
-      "message": "Cannot find name 'sseLine'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 19019,
-      "column": 23,
-      "code": "TS2304",
-      "message": "Cannot find name 'buildStreamChunk'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 20227,
+      "line": 20389,
       "column": 32,
-      "code": "TS2304",
-      "message": "Cannot find name 'openai'."
+      "code": "TS2552",
+      "message": "Cannot find name 'openai'. Did you mean 'open'?"
     },
     {
       "path": "server/routes.ts",
-      "line": 20274,
+      "line": 20436,
       "column": 67,
       "code": "TS2339",
       "message": "Property 'user' does not exist on type 'RealtimeSessionOptions | undefined'."
     },
     {
       "path": "server/routes.ts",
-      "line": 21543,
+      "line": 21705,
       "column": 48,
       "code": "TS18047",
       "message": "'balance' is possibly 'null'."
     },
     {
       "path": "server/routes.ts",
-      "line": 21633,
+      "line": 21795,
       "column": 30,
       "code": "TS2869",
       "message": "Right operand of ?? is unreachable because the left operand is never nullish."
     },
     {
       "path": "server/routes.ts",
-      "line": 22719,
+      "line": 22881,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 22731,
+      "line": 22893,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 22747,
+      "line": 22909,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 22793,
+      "line": 22955,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 23392,
+      "line": 23554,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 23535,
+      "line": 23697,
       "column": 42,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 23544,
+      "line": 23706,
       "column": 77,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 23585,
+      "line": 23747,
       "column": 70,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 23594,
+      "line": 23756,
       "column": 75,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 23620,
+      "line": 23782,
       "column": 19,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 23628,
+      "line": 23790,
       "column": 82,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 23689,
+      "line": 23851,
       "column": 54,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 23692,
+      "line": 23854,
       "column": 103,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 23731,
+      "line": 23893,
       "column": 55,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 25161,
+      "line": 25323,
       "column": 27,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 25184,
-      "column": 27,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 25197,
-      "column": 30,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 25257,
-      "column": 30,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 25279,
-      "column": 30,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 25280,
-      "column": 34,
-      "code": "TS2345",
-      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
-    },
-    {
-      "path": "server/routes.ts",
-      "line": 25345,
-      "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
       "line": 25346,
+      "column": 27,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 25359,
+      "column": 30,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 25419,
+      "column": 30,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 25441,
+      "column": 30,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 25442,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 25521,
+      "line": 25507,
+      "column": 30,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 25508,
+      "column": 34,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 25683,
       "column": 13,
       "code": "TS2488",
       "message": "Type 'QueryResult<Record<string, unknown>>' must have a '[Symbol.iterator]()' method that returns an iterator."
     },
     {
       "path": "server/routes.ts",
-      "line": 25547,
+      "line": 25709,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 25617,
+      "line": 25779,
       "column": 33,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 25649,
+      "line": 25811,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 25808,
+      "line": 25970,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26235,
+      "line": 26397,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26305,
+      "line": 26467,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26356,
+      "line": 26518,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26386,
+      "line": 26548,
       "column": 42,
-      "code": "TS2304",
-      "message": "Cannot find name 'jobs'."
+      "code": "TS2552",
+      "message": "Cannot find name 'jobs'. Did you mean 'job'?"
     },
     {
       "path": "server/routes.ts",
-      "line": 26388,
+      "line": 26550,
       "column": 23,
-      "code": "TS2304",
-      "message": "Cannot find name 'jobs'."
+      "code": "TS2552",
+      "message": "Cannot find name 'jobs'. Did you mean 'job'?"
     },
     {
       "path": "server/routes.ts",
-      "line": 26389,
+      "line": 26551,
       "column": 26,
       "code": "TS2304",
       "message": "Cannot find name 'jobs'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26399,
+      "line": 26561,
       "column": 25,
       "code": "TS2304",
       "message": "Cannot find name 'jobs'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26399,
+      "line": 26561,
       "column": 88,
       "code": "TS2304",
       "message": "Cannot find name 'jobs'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26409,
+      "line": 26571,
       "column": 25,
       "code": "TS2304",
       "message": "Cannot find name 'jobs'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26409,
+      "line": 26571,
       "column": 88,
       "code": "TS2304",
       "message": "Cannot find name 'jobs'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26415,
+      "line": 26577,
       "column": 25,
       "code": "TS2304",
       "message": "Cannot find name 'jobs'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26415,
+      "line": 26577,
       "column": 88,
       "code": "TS2304",
       "message": "Cannot find name 'jobs'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26462,
+      "line": 26624,
       "column": 25,
       "code": "TS2304",
       "message": "Cannot find name 'jobs'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26462,
+      "line": 26624,
       "column": 88,
       "code": "TS2304",
       "message": "Cannot find name 'jobs'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26501,
+      "line": 26663,
       "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26610,
+      "line": 26772,
       "column": 55,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26645,
+      "line": 26807,
       "column": 55,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26707,
+      "line": 26869,
       "column": 62,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26717,
+      "line": 26879,
       "column": 55,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26751,
+      "line": 26913,
       "column": 62,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26761,
+      "line": 26923,
       "column": 55,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26814,
+      "line": 26976,
       "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26891,
+      "line": 27053,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26927,
+      "line": 27089,
       "column": 45,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26936,
+      "line": 27098,
       "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 26937,
+      "line": 27099,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 27108,
+      "line": 27270,
       "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 27207,
+      "line": 27369,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 27243,
+      "line": 27405,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 27343,
+      "line": 27505,
       "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 27380,
+      "line": 27542,
       "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 27410,
+      "line": 27572,
       "column": 50,
       "code": "TS2339",
       "message": "Property 'trim' does not exist on type 'string | string[]'. Property 'trim' does not exist on type 'string[]'."
     },
     {
       "path": "server/routes.ts",
-      "line": 27709,
+      "line": 27871,
       "column": 25,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 27915,
+      "line": 28077,
       "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 27944,
+      "line": 28106,
       "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 28224,
+      "line": 28386,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 28235,
+      "line": 28397,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 28357,
+      "line": 28519,
       "column": 33,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 28447,
+      "line": 28609,
       "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 28649,
+      "line": 28811,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 28781,
+      "line": 28943,
       "column": 33,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 28800,
+      "line": 28962,
       "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 28813,
+      "line": 28975,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 28850,
+      "line": 29013,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 29029,
+      "line": 29196,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 29153,
+      "line": 29320,
       "column": 35,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 29351,
+      "line": 29518,
       "column": 57,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 29380,
+      "line": 29547,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 29458,
+      "line": 29625,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 29667,
+      "line": 29834,
       "column": 59,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 29723,
+      "line": 29893,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 29782,
+      "line": 29953,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 29813,
+      "line": 29991,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 29845,
+      "line": 30021,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 29958,
+      "line": 30054,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 30091,
+      "line": 30169,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 30272,
+      "line": 30303,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 30312,
+      "line": 30486,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 30341,
+      "line": 30526,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 30369,
+      "line": 30556,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 30403,
+      "line": 30585,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 30466,
+      "line": 30620,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 30516,
+      "line": 30684,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 31152,
+      "line": 30735,
+      "column": 32,
+      "code": "TS2345",
+      "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 31395,
       "column": 26,
       "code": "TS18047",
       "message": "'browser' is possibly 'null'."
     },
     {
       "path": "server/routes.ts",
-      "line": 31173,
+      "line": 31416,
       "column": 13,
       "code": "TS18047",
       "message": "'browser' is possibly 'null'."
     },
     {
       "path": "server/routes.ts",
-      "line": 31250,
+      "line": 31493,
       "column": 30,
       "code": "TS2345",
       "message": "Argument of type '(req: Request<ParamsDictionary, any, any, ParsedQs, Record<string, any>>, res: Response<any, Record<string, any>>, next: Function) => Promise<...>' is not assignable to parameter of type 'RequireAdmin'. Type 'Promise<Response<any, Record<string, any>> | undefined>' is not assignable to type 'void | Promise<void>'. Type 'Promise<Response<any, Record<string, any>> | undefined>' is not assignable to type 'Promise<void>'. Type 'Response<any, Record<string, any>> | undefined' is not assignable to type 'void'. Type 'Response<any, Record<string, any>>' is not assignable to type 'void'."
     },
     {
       "path": "server/routes.ts",
-      "line": 31637,
+      "line": 31880,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 31663,
+      "line": 31906,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 31684,
+      "line": 31927,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 31855,
+      "line": 32098,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 31875,
+      "line": 32118,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 31876,
+      "line": 32119,
       "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 31910,
+      "line": 32153,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 31911,
+      "line": 32154,
       "column": 31,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 31938,
+      "line": 32181,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 31955,
+      "line": 32198,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32137,
+      "line": 32380,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32162,
+      "line": 32405,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32186,
+      "line": 32429,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32219,
+      "line": 32462,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32240,
+      "line": 32483,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32264,
+      "line": 32507,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32287,
+      "line": 32530,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32317,
+      "line": 32560,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32353,
+      "line": 32596,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32377,
+      "line": 32620,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32402,
+      "line": 32645,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32427,
+      "line": 32670,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32453,
+      "line": 32696,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32480,
+      "line": 32723,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32501,
+      "line": 32744,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32525,
+      "line": 32768,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32542,
+      "line": 32785,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32558,
+      "line": 32801,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32611,
+      "line": 32854,
       "column": 37,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32633,
+      "line": 32876,
       "column": 37,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32693,
+      "line": 32936,
       "column": 73,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32703,
+      "line": 32946,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32715,
+      "line": 32958,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32741,
+      "line": 32984,
       "column": 35,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32755,
+      "line": 32998,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 32810,
+      "line": 33053,
       "column": 67,
       "code": "TS2322",
       "message": "Type '\"2024-06-20\"' is not assignable to type '\"2026-02-25.clover\"'."
     },
     {
       "path": "server/routes.ts",
-      "line": 33113,
+      "line": 33356,
       "column": 20,
       "code": "TS2769",
       "message": "No overload matches this call. Overload 1 of 4, '(value: string | number | Date): Date', gave the following error. Argument of type 'Date | null' is not assignable to parameter of type 'string | number | Date'. Type 'null' is not assignable to type 'string | number | Date'. Overload 2 of 4, '(value: string | number): Date', gave the following error. Argument of type 'Date | null' is not assignable to parameter of type 'string | number'. Type 'null' is not assignable to type 'string | number'."
     },
     {
       "path": "server/routes.ts",
-      "line": 33113,
+      "line": 33356,
       "column": 69,
       "code": "TS2769",
       "message": "No overload matches this call. Overload 1 of 4, '(value: string | number | Date): Date', gave the following error. Argument of type 'Date | null' is not assignable to parameter of type 'string | number | Date'. Type 'null' is not assignable to type 'string | number | Date'. Overload 2 of 4, '(value: string | number): Date', gave the following error. Argument of type 'Date | null' is not assignable to parameter of type 'string | number'. Type 'null' is not assignable to type 'string | number'."
     },
     {
       "path": "server/routes.ts",
-      "line": 33193,
+      "line": 33436,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 33246,
+      "line": 33489,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 33249,
+      "line": 33492,
       "column": 68,
       "code": "TS2339",
       "message": "Property 'isAdmin' does not exist on type 'Session & Partial<SessionData>'."
     },
     {
       "path": "server/routes.ts",
-      "line": 33267,
+      "line": 33510,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 33353,
+      "line": 33596,
       "column": 32,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 33473,
+      "line": 33716,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 33530,
+      "line": 33773,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 33627,
+      "line": 33870,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 33745,
+      "line": 33988,
       "column": 37,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 33791,
+      "line": 34034,
       "column": 33,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 33895,
+      "line": 34138,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 33989,
+      "line": 34232,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 34036,
+      "line": 34279,
       "column": 34,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 34155,
+      "line": 34398,
       "column": 35,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 34211,
+      "line": 34454,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 34231,
+      "line": 34474,
       "column": 47,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 34252,
+      "line": 34495,
       "column": 39,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 34267,
+      "line": 34510,
       "column": 35,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 34308,
+      "line": 34551,
       "column": 27,
       "code": "TS2339",
       "message": "Property 'user' does not exist on type 'Request<ParamsDictionary, any, any, ParsedQs, Record<string, any>>'."
     },
     {
       "path": "server/routes.ts",
-      "line": 34328,
+      "line": 34571,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 34457,
+      "line": 34700,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 34469,
+      "line": 34712,
       "column": 27,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 34594,
+      "line": 34837,
       "column": 35,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 34666,
+      "line": 34909,
       "column": 35,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
     },
     {
       "path": "server/routes.ts",
-      "line": 34741,
+      "line": 34984,
       "column": 35,
       "code": "TS2345",
       "message": "Argument of type 'string | string[]' is not assignable to parameter of type 'string'. Type 'string[]' is not assignable to type 'string'."
@@ -2936,7 +2859,7 @@
     },
     {
       "path": "shared/schema.ts",
-      "line": 1896,
+      "line": 1949,
       "column": 38,
       "code": "TS2345",
       "message": "Argument of type 'null' is not assignable to parameter of type 'string | SQL<unknown>'."

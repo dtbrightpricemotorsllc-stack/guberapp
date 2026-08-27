@@ -25,6 +25,32 @@ describe("Team GUBER concierge policy", () => {
     ])).toBe("/post-job");
   });
 
+  it("does not default an unrelated intent to browsing or offering services", () => {
+    const conversation = [
+      { role: "user" as const, content: "My car payment is behind and I do not know what to do first." },
+    ];
+
+    expect(gateJacRouteForConversation("/services", conversation)).toBeNull();
+    expect(gateJacRouteForConversation("/offer-service", conversation)).toBeNull();
+  });
+
+  it("routes to browse/hire providers only on a real hiring signal", () => {
+    expect(gateJacRouteForConversation("/services", [
+      { role: "user", content: "Can you show me providers I can hire directly for lawn care?" },
+    ])).toBe("/services");
+  });
+
+  it("routes to offer-service only on a real provider-offering signal, not a hiring one", () => {
+    expect(gateJacRouteForConversation("/offer-service", [
+      { role: "user", content: "I want to offer my cleaning service and get hired directly." },
+    ])).toBe("/offer-service");
+
+    // Wanting to HIRE someone must never be gated through as a provider-offering route.
+    expect(gateJacRouteForConversation("/offer-service", [
+      { role: "user", content: "I need to hire a plumber this week." },
+    ])).toBeNull();
+  });
+
   it("requires a concrete guest goal before a signup progression can begin", () => {
     expect(hasGuestGoalSignal([{ role: "user", content: "Hi" }])).toBe(false);
     expect(hasGuestGoalSignal([

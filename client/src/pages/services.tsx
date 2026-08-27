@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { GuberLayout } from "@/components/guber-layout";
 import { GoogleMap, type JobPin } from "@/components/google-map";
 import { Badge } from "@/components/ui/badge";
@@ -52,10 +52,22 @@ function priceText(offer: ServiceOffer) {
 
 export default function BrowseServices() {
   const [, navigate] = useLocation();
+  const urlSearch = useSearch();
   const { toast } = useToast();
   const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
+
+  // ── JAC handoff: a routed "browse a provider" conversation can carry a
+  // search term / category so the person lands on the right filter, not a
+  // blank list. Read once on mount.
+  useEffect(() => {
+    const params = new URLSearchParams(urlSearch);
+    const q = params.get("q");
+    const cat = params.get("category");
+    if (q) setSearch(q);
+    if (cat && categories.includes(cat)) setCategory(cat);
+  }, []);
   const [availableOnly, setAvailableOnly] = useState(false);
   const [view, setView] = useState<"list" | "map">("list");
   const [selectedOffer, setSelectedOffer] = useState<ServiceOffer | null>(null);
@@ -92,7 +104,10 @@ export default function BrowseServices() {
 
   const beginRequest = (offer: ServiceOffer) => {
     if (!user) {
-      navigate("/login?returnTo=%2Fservices");
+      // Preserve the current search/category filters through login so the
+      // person lands back on the same filtered list, not a blank one.
+      const qs = urlSearch ? `?${urlSearch}` : "";
+      navigate(`/login?returnTo=${encodeURIComponent(`/services${qs}`)}`);
       return;
     }
     setSelectedOffer(offer);

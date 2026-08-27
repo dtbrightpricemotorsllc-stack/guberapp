@@ -107,6 +107,13 @@ const LISTING_PATTERNS = [
   /\bneed (help with|someone to|a hand with)\b/i,
   /\b(looking for|need)\b.{0,30}\b(lawn|cleaning|mowing|moving|plumber|handyman|electrician|painter|cleaner|pet sitter|dog walker|delivery|driver)\b/i,
   /\bI (want|need) (to hire|to find a worker|to post a job)\b/i,
+  // offering a service (opposite of hiring — becoming the provider)
+  /\b(offer|publish|list)\b.{0,25}\b(my|a)\b.{0,15}\bservice\b/i,
+  /\bi(?:'m| am) a (provider|contractor)\b/i,
+  /\bbecome a (service )?provider\b/i,
+  /\bsign (me )?up as a provider\b/i,
+  /\bi do .{0,30} for hire\b/i,
+  /\bhire me\b/i,
 ];
 
 function hasListingIntent(text: string): boolean {

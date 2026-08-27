@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { GuberLayout } from "@/components/guber-layout";
@@ -13,7 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
-import { Archive, CirclePause, CirclePlay, ClipboardList, ShieldAlert, ShieldCheck } from "lucide-react";
+import { readListingPrefill, clearListingPrefill } from "@/lib/jac-listing-prefill";
+import { Archive, CirclePause, CirclePlay, ClipboardList, ShieldAlert, ShieldCheck, Bot } from "lucide-react";
 
 type ManagedOffer = { id: number; title: string; category: string; serviceType: string | null; status: string; moderationStatus: string; serviceClass: string; availability: string; updatedAt: string };
 
@@ -29,9 +30,30 @@ export default function OfferService() {
   const [pricingType, setPricingType] = useState("quote");
   const [price, setPrice] = useState("");
   const [availableNow, setAvailableNow] = useState(false);
+  const [jacPrefilled, setJacPrefilled] = useState(false);
   const { data: offers = [], isLoading } = useQuery<ManagedOffer[]>({ queryKey: ["/api/service-offers/mine"] });
   const credentialRequired = category === "Skilled Labor";
   const canPublish = !!(user as any)?.idVerified && (!credentialRequired || !!(user as any)?.credentialVerified);
+
+  // ── JAC prefill: auto-populate from a conversation about becoming a provider ──
+  // Survives login/signup — saved client-side before any auth redirect, read once here.
+  useEffect(() => {
+    const prefill = readListingPrefill();
+    if (!prefill || prefill.type !== "service_offer") return;
+    const c = prefill.collected || {};
+    clearListingPrefill();
+    if (c.title) setTitle(String(c.title));
+    if (c.category) setCategory(String(c.category));
+    if (c.serviceType) setServiceType(String(c.serviceType));
+    if (c.description) setDescription(String(c.description));
+    if (Array.isArray(c.capabilities)) setCapabilities(c.capabilities.join(", "));
+    if (Array.isArray(c.equipment)) setEquipment(c.equipment.join(", "));
+    if (c.pricingType) setPricingType(String(c.pricingType));
+    if (c.hourlyRate) { setPricingType("hourly"); setPrice(String(c.hourlyRate)); }
+    if (c.startingPrice) { setPricingType("starting_at"); setPrice(String(c.startingPrice)); }
+    if (typeof c.availableNow === "boolean") setAvailableNow(c.availableNow);
+    setJacPrefilled(true);
+  }, []);
 
   const createMutation = useMutation({
     mutationFn: async () => (await apiRequest("POST", "/api/service-offers", {
@@ -75,6 +97,7 @@ export default function OfferService() {
           <Link href="/services"><Button variant="outline" className="rounded-xl text-xs">Browse services</Button></Link>
         </div>
 
+        {jacPrefilled && <Card className="mb-4 p-3 border-primary/30 bg-primary/5 flex gap-2" data-testid="jac-context-strip"><Bot className="w-4 h-4 text-primary shrink-0 mt-0.5" /><p className="text-xs text-foreground/80">JAC filled in what you told it — review the details below before saving.</p></Card>}
         {credentialRequired && <Card className="mb-4 p-3 border-amber-500/30 bg-amber-500/5 flex gap-2"><ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" /><p className="text-xs text-foreground/80">Skilled / Pro offers need a verified credential before they can be published. You can still save a draft.</p></Card>}
         {!user?.idVerified && <Card className="mb-4 p-3 border-destructive/30 bg-destructive/5 flex gap-2"><ShieldAlert className="w-4 h-4 text-destructive shrink-0 mt-0.5" /><p className="text-xs text-foreground/80">Verify your identity to publish a service. Drafts remain private until you do.</p></Card>}
 

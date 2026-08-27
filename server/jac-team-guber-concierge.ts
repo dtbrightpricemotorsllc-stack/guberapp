@@ -11,11 +11,17 @@ export type JacConversationMessage = {
   content: string;
 };
 
-const JOB_ROUTE = /^\/(?:browse-jobs|post-job)(?:[/?#]|$)/;
+const JOB_ROUTE = /^\/(?:browse-jobs|post-job|services)(?:[/?#]|$)/;
 const JOB_OR_HIRING_INTENT =
-  /\b(job|jobs|work|working|worker|workers|gig|gigs|earn(?:ing)?|income|paycheck|make (?:money|cash)|need (?:money|cash)|hire|hiring|labor|handyman|helper|helpers|lawn care|moving help|cleaning (?:job|help)|shift)\b/i;
+  /\b(job|jobs|work|working|worker|workers|gig|gigs|earn(?:ing)?|income|paycheck|make (?:money|cash)|need (?:money|cash)|hire|hiring|labor|handyman|helper|helpers|lawn care|moving help|cleaning (?:job|help)|shift|provider|providers|service|services)\b/i;
 const GOAL_SIGNAL =
   /\b(?:i (?:need|want|am trying|m trying|have to|plan to)|help me|can you help|looking (?:to|for)|how (?:can|do) i|show me|find me|i(?:'m| am) (?:dealing|stuck|behind|moving|selling|buying|starting)|my goal|trying to)\b/i;
+// A provider-offering route is allowed only when the person has actually
+// signaled they want to LIST/PUBLISH themselves as a provider — distinct
+// from wanting to hire one (JOB_OR_HIRING_INTENT above).
+const PROVIDER_OFFERING_ROUTE = /^\/offer-service(?:[/?#]|$)/;
+const PROVIDER_OFFERING_INTENT =
+  /\b(offer(?:ing)?\b.{0,25}\bservice|provide services|i(?:'m| am) a (?:provider|contractor)|list (?:my|a) service|publish\b.{0,15}\bservice|sign (?:me )?up as a provider|advertise my service|i do .* for hire|hire me out)\b/i;
 
 export const JAC_MAIN_APP_CONCIERGE_POLICY = `
 TEAM GUBER CONCIERGE MODEL — REQUIRED:
@@ -44,18 +50,26 @@ Keep guest conversations concise but thoughtful. Give enough help to understand 
  * A job route is allowed only if the conversation contains a direct work or
  * hiring signal. This is a final deterministic safety net behind the prompt:
  * a model may still be creative, but an unrelated intent must not navigate a
- * person to Hire/Work by default.
+ * person to Hire/Work by default. The same net covers /offer-service, gated
+ * on an actual provider-offering signal instead — so a service need never
+ * silently defaults to "become a provider" or vice versa.
  */
 export function gateJacRouteForConversation(
   route: string | null | undefined,
   messages: readonly JacConversationMessage[],
 ): string | null {
-  if (!route || !JOB_ROUTE.test(route)) return route ?? null;
+  if (!route) return null;
   const userContext = messages
     .filter((message) => message.role === "user")
     .map((message) => message.content)
     .join(" ");
-  return JOB_OR_HIRING_INTENT.test(userContext) ? route : null;
+  if (PROVIDER_OFFERING_ROUTE.test(route)) {
+    return PROVIDER_OFFERING_INTENT.test(userContext) ? route : null;
+  }
+  if (JOB_ROUTE.test(route)) {
+    return JOB_OR_HIRING_INTENT.test(userContext) ? route : null;
+  }
+  return route;
 }
 
 /**

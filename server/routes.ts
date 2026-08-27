@@ -18220,11 +18220,20 @@ EARN / WORK / MONEY:
 Route: /signup?intent=worker&from=jac [HIGH]
 Ask what kind of work they're open to first.
 
-HIRE / GET HELP:
+HIRE / GET HELP — do NOT default straight to posting an open job. A "need help" statement is ambiguous between wanting to browse and hire a specific provider directly, or posting an open job any nearby worker can apply to:
 Multiple needs → "I can help with both. Which would you like to handle first?" + one button per need.
-General labor → route: /signup?intent=hirer&service=general_labor&from=jac [HIGH]
-Skilled labor (plumbing/electrical/HVAC/roofing) → route: /signup?intent=hirer&service=skilled_labor&from=jac [HIGH]
-Vague → ask follow-up: Lawn/Yard · Cleaning · Moving · Handyman · Pressure Washing · Something else
+First, if the person hasn't already been explicit about which they want, ask ONE clarifying question [MEDIUM] before routing anywhere:
+  "Want me to show you providers you can hire directly, or help you post an open job so any nearby worker can apply?"
+  actions: [{label:"Browse providers to hire",message:"show me providers I can hire directly"},{label:"Post an open job",message:"I want to post an open job"}]
+BROWSE / HIRE A SPECIFIC PROVIDER (explicit phrasing like "show me providers", "browse services", "hire someone directly", "let me pick a provider", or after they pick "Browse providers to hire" above) → route: /services [HIGH]. This works for guests too — /services is public to browse; only sending a request needs an account. Confirm: "Here are local providers you can hire directly — pick one and send a protected request."
+POST AN OPEN JOB (explicit phrasing like "post an open job", "post a job for anyone", or after they pick "Post an open job" above) → continue with the JOB INTAKE PROTOCOL below.
+  General labor → route: /signup?intent=hirer&service=general_labor&from=jac [HIGH]
+  Skilled labor (plumbing/electrical/HVAC/roofing) → route: /signup?intent=hirer&service=skilled_labor&from=jac [HIGH]
+  Vague → ask follow-up: Lawn/Yard · Cleaning · Moving · Handyman · Pressure Washing · Something else
+
+OFFER A SERVICE / BECOME A PROVIDER (e.g. "I offer services", "I'm a provider", "I want to list my service", "I do [trade] for hire", "sign me up as a provider", "publish a service offer") — do NOT treat this as a hiring need:
+Confirm once: "Want me to take you to where you can publish a service offer people can hire you for directly?" actions: [{label:"Yes, take me there",message:"yes take me to offer a service"},{label:"Not right now",message:"not right now"}]
+Once confirmed → NOT LOGGED IN: route: /signup?intent=worker&returnTo=%2Foffer-service&from=jac [HIGH] (returnTo lands them on /offer-service right after signup — nothing about their intent is lost). ALREADY LOGGED IN: route: /offer-service [HIGH] directly, no signup step.
 
 CAR WASH / DETAILING — always ask first:
 "Do you want someone to come to you, or are you looking for a nearby shop?"
@@ -18239,18 +18248,22 @@ CREDITS / MISSIONS: route: /signup?intent=credits&from=jac [HIGH]
 CASH DROPS / TREASURE HUNTS: route: /signup?intent=explore&from=jac (only AFTER education) — see CASH DROPS section above
 DAY-1 OG: route: /signup?intent=og&from=jac [HIGH]
 BUSINESS OWNER: route: /business-signup?intent=business&from=jac [HIGH]
-SERVICE PROVIDER: route: /signup?intent=worker&from=jac [HIGH]
+SERVICE PROVIDER: see OFFER A SERVICE / BECOME A PROVIDER above — confirm once, then route to /offer-service (with returnTo if not logged in).
 CONTENT CREATOR: route: /signup?intent=creator&from=jac [HIGH]
 RETIRED: route: /signup?intent=worker&type=flexible&from=jac [HIGH after clarification]
 JUST EXPLORING: Explain GUBER simply. Ask what interests them. Route after conversation.
 RETURNING USER: route: /login [HIGH]
 
 NOTE — all "route: /signup..." lines above are for users who are NOT logged in.
-${onboardUserId ? `This user IS already logged in — never send them to /signup or /login for SELL ITEMS, SELL VEHICLE, VERIFY & INSPECT, or TRANSPORT / LOAD BOARD. Instead gather the needed details in conversation and use the EXECUTE WORKFLOWS section below to stage a proposedAction so they can confirm and submit right here in chat.` : `This user is NOT logged in, so the /signup routes above apply as written.`}
+${onboardUserId ? `This user IS already logged in — never send them to /signup or /login for SELL ITEMS, SELL VEHICLE, VERIFY & INSPECT, TRANSPORT / LOAD BOARD, BROWSE/HIRE A PROVIDER, or OFFER A SERVICE. Instead: for SELL ITEMS, SELL VEHICLE, VERIFY & INSPECT, and TRANSPORT / LOAD BOARD, gather the needed details in conversation and use the EXECUTE WORKFLOWS section below to stage a proposedAction so they can confirm and submit right here in chat. For BROWSE/HIRE A PROVIDER, once confirmed, route directly to /services [HIGH]. For OFFER A SERVICE, once confirmed, route directly to /offer-service [HIGH] — no signup/returnTo needed since they're already in.` : `This user is NOT logged in, so the /signup routes above apply as written.`}
 
 ═══════════════════════════════════
 JOB INTAKE PROTOCOL — HIRE MODE
 ═══════════════════════════════════
+
+Only enter this protocol once the user has confirmed they want to POST AN OPEN JOB
+(any nearby worker can apply) rather than browse and hire a specific provider — see
+HIRE / GET HELP above for the clarifying question when that's still ambiguous.
 
 When a user needs a service, conduct a natural conversation to collect enough details
 to pre-fill a complete job post. Ask ONE focused question at a time. Sound genuinely
@@ -19266,8 +19279,23 @@ INTENT ENGINE:
 FIND WORK / EARN MONEY → route: /browse-jobs
 "need a job" / "need money" / "need work" / "any gigs" / "need income" / "make cash" / "looking for work" / "find jobs near me"
 
-POST A JOB / HIRE → route: /post-job
+NEED HELP / HIRE (ambiguous — could mean browsing a specific provider to hire directly, OR posting an open job any worker can apply to) — MEDIUM confidence, ask first, do NOT default to /post-job:
 "need help" / "need somebody" / "need labor" / "need a worker" / "need a handyman" / "need cleaning" / "need my grass cut" / "need painting" / "need pressure washing" / "need a plumber" / "need moving help" / "I want to hire"
+Ask: "Want me to show you providers you can hire directly, or post an open job so any nearby worker can apply?"
+actions: [{"label":"Browse providers to hire","message":"show me providers I can hire directly"},{"label":"Post an open job","message":"I want to post an open job"}]
+
+BROWSE / HIRE A SPECIFIC PROVIDER → route: /services [HIGH]
+"show me providers" / "browse providers" / "browse services" / "hire someone directly" / "let me pick a provider" / "see who's available" / or after the user picks "Browse providers to hire" above.
+Confirm in the reply: "Here are local providers you can hire directly — pick one and send a protected request."
+
+POST AN OPEN JOB → route: /post-job [HIGH]
+Only once the person has confirmed an OPEN job post is what they want — explicit phrasing like "post an open job", "post a job for anyone", "I want to post a job", or after they pick "Post an open job" above.
+
+OFFER A SERVICE / BECOME A PROVIDER → route: /offer-service [HIGH after one confirm]
+"I offer services" / "I'm a provider" / "I want to list my service" / "sign me up as a provider" / "I do [trade] for hire" / "publish a service offer" / "let me offer my service" — this is the OPPOSITE of hiring, never confuse the two.
+First confirm once: "Want me to take you to where you can publish a service offer people can hire you for directly?"
+actions: [{"label":"Yes, take me there","message":"yes take me to offer a service"},{"label":"Not right now","message":"not right now"}]
+Then, once confirmed, route: /offer-service [HIGH].
 
 MARKETPLACE — SELL VEHICLE → route: /marketplace/new?type=vehicle [HIGH]
 "sell my car" / "list my vehicle" / "post my truck" / "got a car to sell" / "selling my SUV" / "sell my motorcycle"
@@ -20290,6 +20318,11 @@ job: category, jobType, descriptionSeed, budget (number), zip
   PLUS up to 2 key jobDetails answers (see JOB GUIDED QUESTIONS below).
   → route: /post-job?from=jac
 
+service_offer (the user wants to BECOME a provider people can hire directly — opposite of "job", which is hiring someone else): title, category (General Labor/On-Demand Help/Skilled Labor/Verify & Inspect), serviceType, description, capabilities (array of short skills/services offered), pricingType (quote/starting_at/hourly), price (number, omit if pricingType is quote), availableNow (boolean, default false)
+  → auto-generate title if not given, e.g. "Lawn care & yard work"
+  → route: /offer-service
+  Note: this only creates a private DRAFT the user reviews and submits themselves — it is never auto-published.
+
 ──────────────────────────────────────
 JOB TYPE LOOKUP  (jobType → category)
 ──────────────────────────────────────
@@ -20341,8 +20374,8 @@ ALWAYS respond with valid JSON only — no markdown, no prose outside the JSON:
   "actions": [{"label": "chip label", "message": "sent when tapped"}],
   "collected": { ...all fields gathered so far },
   "ready": false,
-  "listingType": "vehicle|item|house|load|vi|job",
-  "route": "/marketplace|/load-board/post|/verify-inspect|/post-job?from=jac"
+  "listingType": "vehicle|item|house|load|vi|job|service_offer",
+  "route": "/marketplace|/load-board/post|/verify-inspect|/post-job?from=jac|/offer-service"
 }
 
 When ready=true → reply: "Perfect! I've got everything. Opening your form now — it'll be pre-filled and ready to post!"

@@ -791,6 +791,8 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
   const ctaLabel = (route?: string) => {
     if (!route) return null;
     if (route.startsWith("/login")) return "Log In";
+    if (route.startsWith("/services")) return "Browse Providers";
+    if (route.includes("returnTo=%2Foffer-service") || route.startsWith("/offer-service")) return "Publish Your Service";
     if (route.startsWith("/post-job")) return "Post This Job";
     if (route.includes("seller_vehicle")) return "List Your Vehicle";
     if (route.includes("seller")) return "List on Marketplace";
