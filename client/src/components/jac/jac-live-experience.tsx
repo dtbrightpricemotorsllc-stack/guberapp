@@ -54,11 +54,13 @@ type Surface2Kind =
   | "cash"
   | "marketplace"
   | "services"
+  | "offer-service"
   | "signup"
   | "draft";
 
 interface Surface2State {
   kind: Surface2Kind;
+  route?: string | null;
   data?: Record<string, any>;
 }
 
@@ -99,6 +101,7 @@ function uid() { return Math.random().toString(36).slice(2); }
 function inferSurface(text: string): Surface2Kind {
   const t = text.toLowerCase();
   if (t.includes("sign up") || t.includes("create an account")) return "signup";
+  if (t.includes("offer a service") || t.includes("publish a service") || t.includes("become a provider")) return "offer-service";
   if (isServiceDiscoveryIntent(t)) return "services";
   if (t.includes("studio") || t.includes("video") || t.includes("music") || t.includes("content")) return "studio";
   if (t.includes("cash drop") || t.includes("drop") && t.includes("earn")) return "cash";
@@ -148,12 +151,16 @@ function Surface2({ surface, onChipClick }: { surface: Surface2State; onChipClic
       <div className="flex flex-col gap-3 h-full">
         <div className="flex items-center justify-between mb-1">
           <span className="text-[10px] font-display font-black tracking-[0.2em]" style={{ color: "hsl(152 100% 55%)" }}>JOBS NEAR YOU</span>
-          <Link href="/browse-jobs" className="text-[10px] text-white/40 hover:text-white/70 transition-colors">View all →</Link>
+          {surface.route && (
+            <Link href={surface.route} className="text-[10px] text-white/40 hover:text-white/70 transition-colors">View all →</Link>
+          )}
         </div>
         <div className="rounded-xl p-4" style={{ background: "hsl(152 60% 4%)", border: "1px solid hsl(152 100% 44% / 0.15)" }}>
           <p className="text-sm font-semibold text-white">Browse current opportunities</p>
           <p className="text-xs mt-1 text-white/50">See live job posts in your area. JAC will not show sample jobs as if they are active.</p>
-          <Link href="/browse-jobs" className="inline-flex mt-3 text-xs font-display font-bold" style={{ color: "hsl(152 100% 55%)" }}>Browse live jobs <ArrowRight className="w-3 h-3 ml-1" /></Link>
+          {surface.route && (
+            <Link href={surface.route} className="inline-flex mt-3 text-xs font-display font-bold" style={{ color: "hsl(152 100% 55%)" }}>Browse live jobs <ArrowRight className="w-3 h-3 ml-1" /></Link>
+          )}
         </div>
         <button
           onClick={() => onChipClick("I want to post a job")}
@@ -201,14 +208,33 @@ function Surface2({ surface, onChipClick }: { surface: Surface2State; onChipClic
         <div className="rounded-xl p-4" style={{ background: "hsl(152 60% 4%)", border: "1px solid hsl(152 100% 44% / 0.15)" }}>
           <p className="text-sm font-semibold text-white">Find a verified provider</p>
           <p className="text-xs mt-1.5 text-white/50">Browse only published, approved services. Availability and exact details stay protected until the request flow needs them.</p>
-          <Link href="/services" className="inline-flex items-center gap-1 mt-3 text-xs font-display font-bold" style={{ color: "hsl(152 100% 55%)" }}>
-            Browse services <ArrowRight className="w-3 h-3" />
-          </Link>
+          {surface.route && (
+            <Link href={surface.route} className="inline-flex items-center gap-1 mt-3 text-xs font-display font-bold" style={{ color: "hsl(152 100% 55%)" }}>
+              Browse services <ArrowRight className="w-3 h-3" />
+            </Link>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {["I need cleaning help", "I need lawn care", "I need a skilled repair"].map((message) => (
             <button key={message} onClick={() => onChipClick(message)} className="px-3 py-2 rounded-full text-xs text-white/70" style={{ background: "hsl(222 47% 10%)", border: "1px solid hsl(222 47% 20%)" }}>{message.replace("I need ", "")}</button>
           ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (surface.kind === "offer-service") {
+    return (
+      <div className="flex flex-col gap-3 h-full justify-center">
+        <span className="text-[10px] font-display font-black tracking-[0.2em]" style={{ color: "hsl(270 100% 72%)" }}>OFFER YOUR SERVICE</span>
+        <div className="rounded-xl p-4" style={{ background: "hsl(270 60% 5%)", border: "1px solid hsl(270 100% 65% / 0.2)" }}>
+          <p className="text-sm font-semibold text-white">Publish a service people can hire you for</p>
+          <p className="text-xs mt-1.5 text-white/50">Your service offer stays under your control until you review and submit it.</p>
+          {surface.route && (
+            <Link href={surface.route} className="inline-flex items-center gap-1 mt-3 text-xs font-display font-bold" style={{ color: "hsl(270 100% 78%)" }}>
+              Publish your service <ArrowRight className="w-3 h-3" />
+            </Link>
+          )}
         </div>
       </div>
     );
@@ -512,7 +538,10 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       const data = await res.json();
       const reply = (data.message || data.reply || "").trim();
       if (reply) {
-        const kind = inferSurface(reply);
+        const route = typeof data.route === "string" && data.route ? data.route : null;
+        const kind = route?.startsWith("/offer-service")
+          ? "offer-service"
+          : inferSurface(reply);
         addMsg({
           id: uid(),
           role: "assistant",
@@ -520,7 +549,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
           buttons: data.buttons,
           surface: kind,
         });
-        setSurface({ kind });
+        setSurface({ kind, route });
       }
     } catch {
       addMsg({ id: uid(), role: "assistant", text: "Sorry, I had trouble responding. Try again?" });
@@ -740,6 +769,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
             border: "1px solid hsl(270 100% 65% / 0.12)",
             boxShadow: "inset 0 1px 0 hsl(270 100% 65% / 0.05)",
           }}
+          data-testid="jac-live-surface"
         >
           <Surface2 surface={surface} onChipClick={handleChipClick} />
         </div>
