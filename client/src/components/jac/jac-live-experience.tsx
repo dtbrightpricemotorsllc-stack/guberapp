@@ -24,6 +24,7 @@ import { JacCharacterRenderer, type JacState } from "@/components/jac/jac-charac
 import { Link } from "wouter";
 import { useGuestJacSession } from "@/hooks/use-guest-jac-session";
 import { jacSpeak, cancelAllJacAudio, setJacConvaiActive } from "@/lib/jac-tts";
+import { createJacConvaiVoiceOverride } from "@/lib/jac-convai-voice-lock";
 import {
   appendSharedJacMessage,
   claimJacWelcomeGreeting,
@@ -452,7 +453,10 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       if (session.userContext?.jac_mode)  dynVars["jac_mode"]         = session.userContext.jac_mode;
       if (session.userContext?.userId != null) dynVars["user_id"]     = String(session.userContext.userId);
 
-      const params: Record<string, any> = { dynamicVariables: dynVars };
+      const params: Record<string, any> = {
+        dynamicVariables: dynVars,
+        overrides: createJacConvaiVoiceOverride(),
+      };
       if (session.signedUrl) params.signedUrl = session.signedUrl;
       else                   params.agentId   = session.agentId;
 

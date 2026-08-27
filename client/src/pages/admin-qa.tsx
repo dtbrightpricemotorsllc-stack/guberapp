@@ -12,10 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import { UserLink } from "@/components/user-link";
 import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity, ImageOff, Image as ImageIcon, Film, Plus, Pencil, X as XIcon, ChevronUp, ChevronDown, ShieldCheck, Volume2, FileText, Crown, RefreshCw, Mail, Star, Siren } from "lucide-react";
 import {
-  TTS_PROVIDER, JAC_TARGET_VOICE,
-  loadJacVoice, getVoiceDebugInfo, resetJacVoiceCache,
-  type VoiceDebugInfo,
-} from "@/lib/jac-voice";
+  jacSpeak,
+} from "@/lib/jac-tts";
+import { JAC_ELEVENLABS_VOICE_ID } from "@shared/jac-voice";
 
 type Check = { key: string; label: string; status: "pass" | "fail" | "skip"; detail?: string };
 
@@ -1970,65 +1969,19 @@ function OGAuditTab() {
 
 // ── JAC Voice Debug Tab ───────────────────────────────────────────────────────
 function JacVoiceDebugTab() {
-  const [info, setInfo] = useState<VoiceDebugInfo | null>(null);
-  const [override, setOverride] = useState(() => {
-    try { return localStorage.getItem("jac_voice_override") ?? ""; } catch { return ""; }
-  });
   const [testText, setTestText] = useState("Hi — I'm Jack, your Goober Job Assisting Coordinator! Day One Oh Gee members get priority access.");
-  const [pregenStatus, setPregenStatus] = useState<Record<string, string> | null>(null);
-  const [pregenLoading, setPregenLoading] = useState(false);
+  const [testing, setTesting] = useState(false);
   const { toast } = useToast();
 
-  function refresh() {
-    loadJacVoice().then(() => setInfo(getVoiceDebugInfo()));
-  }
-
-  useEffect(() => { refresh(); }, []);
-
-  async function runPregen() {
-    setPregenLoading(true);
-    setPregenStatus(null);
-    try {
-      const res = await fetch("/api/jac/tts/pregen", { method: "POST" });
-      const data = await res.json();
-      if (data.results) {
-        setPregenStatus(data.results);
-        toast({ title: "Pre-generation complete" });
-      } else {
-        toast({ title: "Error", description: data.message || "Unknown error", variant: "destructive" });
-      }
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
-    } finally {
-      setPregenLoading(false);
-    }
-  }
-
-  function applyOverride() {
-    try {
-      if (override.trim()) localStorage.setItem("jac_voice_override", override.trim());
-      else localStorage.removeItem("jac_voice_override");
-    } catch {}
-    resetJacVoiceCache();
-    loadJacVoice().then(() => {
-      const d = getVoiceDebugInfo();
-      setInfo(d);
-      toast({ title: `JAC voice updated: "${d.activeVoiceName}"` });
-    });
-  }
-
-  function testSpeak() {
-    if (!("speechSynthesis" in window) || !info) return;
-    window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(testText);
-    const v = window.speechSynthesis.getVoices().find(
-      (x) => x.voiceURI === info.activeVoiceId || x.name === info.activeVoiceName
+  async function testSpeak() {
+    setTesting(true);
+    const played = await jacSpeak(testText);
+    setTesting(false);
+    toast(
+      played
+        ? { title: "Locked ElevenLabs voice played" }
+        : { title: "Voice unavailable", description: "JAC did not switch to an alternate voice.", variant: "destructive" },
     );
-    if (v) utt.voice = v;
-    utt.lang = "en-US";
-    utt.rate = 1.05;
-    utt.pitch = 1.1;
-    window.speechSynthesis.speak(utt);
   }
 
   const Row = ({ label, value, mono = true }: { label: string; value: string; mono?: boolean }) => (
@@ -2040,62 +1993,19 @@ function JacVoiceDebugTab() {
 
   return (
     <div className="space-y-4">
-      {/* ── Status card ── */}
-      {info ? (
-        <Card className={
-          info.targetFound
-            ? "border-green-500 bg-green-50 dark:bg-green-950/20"
-            : "border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20"
-        }>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Volume2 className="w-4 h-4" />
-              {info.targetFound ? "✓ Target voice active" : "⚠ Target voice NOT available — fallback in use"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1.5">
-            <Row label="TTS Provider"      value={info.provider} />
-            <Row label="Requested voice"   value={info.requestedVoice} />
-            <Row label="Target found"      value={info.targetFound ? "YES" : "NO — not in browser voice list"} />
-            <Row label="Active voice name" value={info.activeVoiceName} />
-            <Row label="Active voice ID"   value={info.activeVoiceId} />
-            <Row label="Active lang"       value={info.activeLang} />
-            <Row label="Fallback used"     value={info.fallbackUsed ? "YES" : "NO"} />
-            <Row label="Voices available"  value={String(info.allVoices.length)} mono={false} />
-            {!info.targetFound && (
-              <p className="text-[11px] text-yellow-700 dark:text-yellow-400 pt-1">
-                "{JAC_TARGET_VOICE}" was not found. Check the voice list below — click "use" on any row to set an override, or see DevTools console for the full dump.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <Card><CardContent className="p-4 text-xs text-muted-foreground">Loading voice info…</CardContent></Card>
-      )}
-
-      {/* ── ElevenLabs pre-cache ── */}
+      {/* ── Locked voice status ── */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">ElevenLabs Cache — Pre-generate Top 20 Clips</CardTitle>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Volume2 className="w-4 h-4" />
+            JAC Voice Lock
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            Generates static MP3s in <code className="font-mono">/jac-audio/</code> for the 20 most common JAC responses.
-            These play instantly with zero API cost. Already-generated clips are skipped.
+            JAC uses only ElevenLabs voice <code className="font-mono">{JAC_ELEVENLABS_VOICE_ID}</code>.
+            Browser voices, static clips, and voice overrides are disabled.
           </p>
-          <Button size="sm" onClick={runPregen} disabled={pregenLoading} data-testid="button-jac-pregen">
-            {pregenLoading ? "Generating…" : "Generate Cache Now"}
-          </Button>
-          {pregenStatus && (
-            <div className="max-h-48 overflow-y-auto space-y-0.5 text-[11px] font-mono mt-2">
-              {Object.entries(pregenStatus).map(([key, status]) => (
-                <div key={key} className="flex gap-2">
-                  <span className={`w-28 shrink-0 ${status === "generated" ? "text-green-600" : status.startsWith("error") ? "text-red-500" : "text-muted-foreground"}`}>{status}</span>
-                  <span>{key}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -2122,7 +2032,7 @@ function JacVoiceDebugTab() {
 
       {/* ── Test TTS ── */}
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm">Test JAC Voice (with pronunciation overrides)</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Test Locked JAC Voice</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           <Input
             value={testText}
@@ -2130,75 +2040,9 @@ function JacVoiceDebugTab() {
             className="text-sm"
             data-testid="input-jac-voice-test"
           />
-          <Button size="sm" onClick={testSpeak} data-testid="button-jac-voice-play">
-            <Volume2 className="w-3 h-3 mr-1" /> Play
+          <Button size="sm" onClick={testSpeak} disabled={testing} data-testid="button-jac-voice-play">
+            <Volume2 className="w-3 h-3 mr-1" /> {testing ? "Playing…" : "Play"}
           </Button>
-        </CardContent>
-      </Card>
-
-      {/* ── Override ── */}
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm">Voice Override (Admin)</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Paste an exact voice name or voice ID from the list below. Leave blank to use auto-selection. Saved to localStorage.
-          </p>
-          <div className="flex gap-2">
-            <Input
-              value={override}
-              onChange={(e) => setOverride(e.target.value)}
-              placeholder="e.g. Google UK English Female"
-              className="text-xs font-mono"
-              data-testid="input-jac-voice-override"
-            />
-            <Button size="sm" onClick={applyOverride} data-testid="button-jac-voice-override-apply">Apply</Button>
-            <Button size="sm" variant="ghost" onClick={() => { setOverride(""); }} data-testid="button-jac-voice-clear">Clear</Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ── All voices ── */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center justify-between">
-            <span>All Available Voices ({info?.allVoices.length ?? "…"})</span>
-            <button className="text-[10px] underline text-primary" onClick={refresh}>Refresh</button>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {!info || info.allVoices.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No voices loaded yet — click Refresh or Play to trigger loading.</p>
-          ) : (
-            <div className="max-h-72 overflow-y-auto space-y-0.5 text-[11px] font-mono">
-              {/* Header */}
-              <div className="grid grid-cols-[60px_1fr_minmax(0,1.5fr)_40px] gap-1 px-1.5 py-1 text-[9px] text-muted-foreground uppercase tracking-wide border-b">
-                <span>Lang</span><span>Name</span><span>Voice ID (voiceURI)</span><span></span>
-              </div>
-              {info.allVoices.map((v) => {
-                const isActive = v.voiceId === info.activeVoiceId;
-                const isTarget = v.name === JAC_TARGET_VOICE;
-                return (
-                  <div
-                    key={v.voiceId}
-                    className={`grid grid-cols-[60px_1fr_minmax(0,1.5fr)_40px] gap-1 items-center px-1.5 py-1 rounded ${isActive ? "bg-primary/10 font-bold" : "hover:bg-muted/40"}`}
-                    data-testid={`voice-row-${v.name.replace(/\s+/g, "-")}`}
-                  >
-                    <span className="text-muted-foreground truncate">{v.lang}</span>
-                    <span className="truncate">{v.name}</span>
-                    <span className="truncate text-muted-foreground">{v.voiceId}</span>
-                    <div className="flex gap-1 items-center justify-end shrink-0">
-                      {isActive && <Badge variant="outline" className="text-[8px] px-1 py-0">ACTIVE</Badge>}
-                      {isTarget && <Badge className="text-[8px] px-1 py-0 bg-green-500">TARGET</Badge>}
-                      <button
-                        className="text-[9px] underline text-primary"
-                        onClick={() => setOverride(v.name)}
-                      >use</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </CardContent>
       </Card>
 

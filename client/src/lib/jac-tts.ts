@@ -1,13 +1,11 @@
 /**
- * JAC TTS — ElevenLabs via server proxy, with static cache + Web Speech fallback.
+ * JAC TTS — ElevenLabs via the server proxy.
  *
- * Priority per utterance:
- *   1. /jac-audio/<slug>.mp3  — pre-generated static file (free, instant)
- *   2. POST /api/jac/tts      — live ElevenLabs proxy (real voice, costs credits)
- *   3. Web Speech API         — browser built-in (always works, no cost)
+ * JAC always speaks with the approved ElevenLabs voice. Static clips and
+ * browser speech are intentionally not fallbacks: either could make JAC sound
+ * like a different assistant.
  */
 
-import { applyJacVoice } from "./jac-voice";
 import { isIOS } from "./platform";
 import { registerJacAnalyser, unlockJacAnalyserContext } from "./jac-audio-analyser";
 
@@ -23,50 +21,14 @@ export function normalizeTtsText(text: string): string {
     .slice(0, 800);
 }
 
-/**
- * Topic slug → static audio file mapping.
- * Keys are matched against the normalized text via simple keyword detection.
- */
-const CACHE_MAP: Array<{ slug: string; keywords: string[] }> = [
-  { slug: "welcome",           keywords: ["job assisting coordinator", "what brings you"] },
-  { slug: "homepage-welcome",  keywords: ["trying to make happen", "welcome to team guber"] },
-  { slug: "what-is-guber",     keywords: ["what is guber", "what does guber do", "guber stand for", "global unlimited"] },
-  { slug: "how-earn-money",    keywords: ["how do i earn", "how to earn", "make money", "earn money"] },
-  { slug: "how-post-job",      keywords: ["how do i post", "post a job", "posting a job"] },
-  { slug: "what-is-verify",    keywords: ["verify and inspect", "inspection", "inspect a car", "inspect a property"] },
-  { slug: "background-check",  keywords: ["background check", "id verification", "identity verify"] },
-  { slug: "how-get-paid",      keywords: ["how do i get paid", "when do i get paid", "payout", "get paid"] },
-  { slug: "what-is-og",        keywords: ["day-1 og", "day 1 og", "founding member", "og membership", "og member"] },
-  { slug: "what-is-cashdrop",  keywords: ["cash drop", "cashdrop"] },
-  { slug: "what-is-studio",    keywords: ["guber studio", "ai content", "studio"] },
-  { slug: "what-is-marketplace", keywords: ["marketplace", "buy and sell", "cars for sale"] },
-  { slug: "what-is-loadboard", keywords: ["load board", "loadboard", "hauling", "transport"] },
-  { slug: "how-id-verify",     keywords: ["verify my id", "id verify", "upload id", "photo id"] },
-  { slug: "fees",              keywords: ["how much does it cost", "what are the fees", "platform fee", "how much is"] },
-  { slug: "how-signup",        keywords: ["how do i sign up", "how to sign up", "create account", "get started"] },
-  { slug: "safety",            keywords: ["is it safe", "how safe", "safety", "secure"] },
-  { slug: "what-is-barter",    keywords: ["barter", "exchange services", "trade"] },
-  { slug: "contact-support",   keywords: ["contact support", "get help", "customer service", "help me"] },
-  { slug: "us-only",           keywords: ["available in", "what country", "international", "us only"] },
-  { slug: "what-is-trustbox",  keywords: ["trust box", "trustbox", "unlimited plays"] },
-];
-
-function detectCacheSlug(text: string): string | null {
-  const lower = text.toLowerCase();
-  for (const { slug, keywords } of CACHE_MAP) {
-    if (keywords.some((k) => lower.includes(k))) return slug;
-  }
-  return null;
-}
-
 let _currentAudio: HTMLAudioElement | null = null;
 let _audioUnlocked = false;
 let _currentAbort: AbortController | null = null;
 
 // ── ConvAI ownership flag ──────────────────────────────────────────────────
 // When ElevenLabs ConvAI is active it is the sole audio owner.
-// jacSpeak() and webSpeechFallback() both no-op while this is true,
-// preventing any TTS from firing alongside the ConvAI voice.
+// jacSpeak() no-ops while this is true, preventing direct TTS from firing
+// alongside the ConvAI voice.
 let _convaiActive = false;
 export function setJacConvaiActive(active: boolean): void {
   _convaiActive = active;
@@ -130,18 +92,13 @@ export function cancelElevenLabsAudio() {
 }
 
 /**
- * True while JAC is actively producing audible speech (ElevenLabs audio
- * element playing, or Web Speech synthesis speaking/pending). Used by the
+ * True while JAC is actively producing direct ElevenLabs audio. Used by the
  * live-conversation engine to know when interruption should be armed.
  */
 export function isJacSpeaking(): boolean {
   if (_audioCtxSource) return true;
   if (_currentAudio && !_currentAudio.paused) return true;
-  try {
-    return typeof window !== "undefined" && !!window.speechSynthesis?.speaking;
-  } catch {
-    return false;
-  }
+  return false;
 }
 
 /**
@@ -199,33 +156,21 @@ export function unlockAudioContext() {
     a.volume = 0;
     a.play().then(() => { _audioUnlocked = true; }).catch(() => {});
   }
-  // Resume speechSynthesis (Chrome Android suspends it after mic activity).
-  // We do NOT speak a primer utterance here — the old approach fired an audible
-  // browser/Web Speech voice blip before ElevenLabs ConvAI started, which was
-  // exactly the "ChatGPT voice" users heard at startup.
-  // ElevenLabs ConvAI is now the sole voice owner; Web Speech is only a last-
-  // resort fallback for text-mode TTS when ConvAI is NOT active.
-  try {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.resume();
-    }
-  } catch {}
 }
 
 /**
- * Cancel ALL active JAC audio — both ElevenLabs and Web Speech.
+ * Cancel ALL active direct ElevenLabs JAC audio.
  * Safe to call from any component; prevents simultaneous speech.
  */
 export function cancelAllJacAudio() {
   cancelElevenLabsAudio();
-  try { window.speechSynthesis?.cancel(); } catch {}
 }
 
 /**
- * Reports a silent Web Speech fallback to the server so it shows up in
- * admin-visible JAC voice usage logs (never fail silently — item D).
+ * Records unavailable ElevenLabs speech so failures are observable without
+ * substituting a browser voice.
  */
-function reportFallback(reason: string) {
+function reportVoiceUnavailable(reason: string) {
   try {
     fetch("/api/jac/tts/fallback-log", {
       method: "POST",
@@ -237,46 +182,26 @@ function reportFallback(reason: string) {
 }
 
 /**
- * Speak text using ElevenLabs (cached → live → Web Speech fallback).
- * Returns a promise that resolves when audio ends (or immediately on error).
+ * Speak text with the locked ElevenLabs voice.
+ * Returns true when audio played; returns false when the fixed voice is
+ * unavailable. It never substitutes another voice.
  * `onStart` fires the moment audible playback actually begins — use it to
  * measure end-to-end latency from STT completion to first sound.
  *
- * `staticSrc` — if provided, attempt this URL before slug detection.
- *   Useful for callers that already know the pre-generated asset path so they
- *   don't rely solely on keyword matching.  Falls through to the normal
- *   slug/live/Web-Speech chain if the file is missing or fails to play.
  */
 export async function jacSpeak(
   rawText: string,
-  opts: { muted?: boolean; onFallback?: () => void; onStart?: () => void; staticSrc?: string } = {}
-): Promise<void> {
-  if (opts.muted) return;
+  opts: { muted?: boolean; onStart?: () => void; onError?: (message: string) => void } = {}
+): Promise<boolean> {
+  if (opts.muted) return false;
   // ConvAI owns audio — silently discard any TTS request while a session is active
-  if (_convaiActive) return;
+  if (_convaiActive) return false;
 
   // Cancel any ongoing speech from either JAC component before starting
   cancelAllJacAudio();
 
   const text = normalizeTtsText(rawText);
-  if (!text.trim()) return;
-
-  // ── Tier 1a: explicit static path (caller-supplied, zero API round-trip) ──
-  if (opts.staticSrc) {
-    const played = await tryPlayAudio(opts.staticSrc, false, opts.onStart);
-    if (played) return;
-    // File absent or failed — fall through to slug detection / live API
-  }
-
-  // ── Tier 1b: static cache (free, instant, all platforms) ─────────────────
-  const slug = detectCacheSlug(rawText);
-  if (slug) {
-    // Skip if staticSrc already tried this same path to avoid a double-fetch
-    if (!opts.staticSrc || opts.staticSrc !== `/jac-audio/${slug}.mp3`) {
-      const played = await tryPlayAudio(`/jac-audio/${slug}.mp3`, false, opts.onStart);
-      if (played) return;
-    }
-  }
+  if (!text.trim()) return false;
 
   // ── Tier 2: live ElevenLabs via backend proxy ─────────────────────────────
   // ALL platforms use the buffered path (fetch-all → ArrayBuffer → AudioContext).
@@ -293,12 +218,13 @@ export async function jacSpeak(
   // Latency difference is negligible: ElevenLabs responses for typical
   // utterances (~5 s audio) are ~80 KB and download in ~100–200 ms.
   const played = await tryLiveElevenLabsBuffered(text, opts.onStart);
-  if (played) return;
+  if (played) return true;
 
-  // ── Tier 3: Web Speech (always available, no cost) ────────────────────────
-  opts.onFallback?.();
-  reportFallback("live_elevenlabs_failed");
-  webSpeechFallback(text, opts.onStart);
+  const message = "JAC's voice is temporarily unavailable. Please try again.";
+  console.warn("[JAC TTS] Fixed ElevenLabs voice unavailable; no alternate voice will be used.");
+  reportVoiceUnavailable("fixed_elevenlabs_voice_unavailable");
+  opts.onError?.(message);
+  return false;
 }
 
 /**
@@ -424,7 +350,6 @@ async function tryLiveElevenLabsStreaming(text: string, onStart?: () => void): P
     });
   });
 }
-
 /** Full-blob buffering fallback — used when MediaSource streaming is unsupported or fails (e.g. iOS Safari). */
 async function tryLiveElevenLabsBuffered(text: string, onStart?: () => void): Promise<boolean> {
   const controller = new AbortController();
@@ -541,51 +466,4 @@ function playViaAudioElement(url: string, isBlob = false, onStart?: () => void):
     audio.onerror = () => { cleanup(); resolve(false); };
     audio.play().catch(() => { cleanup(); resolve(false); });
   });
-}
-
-/** True for any iOS browser — Safari, CriOS, Firefox iOS, etc. */
-function isIOSBrowser(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
-}
-
-function webSpeechFallback(text: string, onStart?: () => void) {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  // Never use Web Speech while ElevenLabs ConvAI is the active voice owner
-  if (_convaiActive) return;
-  const ss = window.speechSynthesis;
-  ss.cancel();
-  // Chrome Android suspends speechSynthesis when the mic is active (or after
-  // it stops). We must call resume() BEFORE enqueueing an utterance, otherwise
-  // the utterance silently queues but never plays.
-  try { ss.resume(); } catch {}
-
-  // Delay rationale:
-  //   Android WebView / Chrome Android: cancel() needs a short settle gap or
-  //   the first utterance is silently dropped. 220 ms was the original safe
-  //   value; with resume() called before AND after the gap, 120 ms is reliable
-  //   and removes the noticeable lag users hear on Android.
-  //   iOS (Safari + CriOS): cancel→speak race is not an issue on iOS WebKit,
-  //   and a long delay risks re-suspension. 50 ms is enough.
-  const delay = isIOSBrowser() ? 50 : 120;
-
-  setTimeout(() => {
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.lang   = "en-US";
-    utt.rate   = 1.05;
-    utt.pitch  = 1.1;
-    utt.volume = 1.0;
-    // Only apply a specific voice if voices are already loaded; otherwise let
-    // the browser pick the system default (safer on mobile).
-    const voices = ss.getVoices();
-    if (voices.length > 0) applyJacVoice(utt);
-    let started = false;
-    utt.onstart = () => { if (!started) { started = true; onStart?.(); } };
-    // Resume again right before speaking — both Chrome Android and iOS can
-    // re-suspend between the cancel() call and this timeout.
-    try { ss.resume(); } catch {}
-    ss.speak(utt);
-    // Final nudge: if still paused 300 ms after enqueue, force resume.
-    setTimeout(() => { try { if (ss.paused) ss.resume(); } catch {} }, 300);
-  }, delay);
-}
+} // end playViaAudioElement

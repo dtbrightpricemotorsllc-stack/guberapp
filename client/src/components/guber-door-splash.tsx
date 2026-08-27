@@ -178,7 +178,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
       if (!_greetingHasFired) {
         _greetingHasFired = true;
         setGreetingPlaying(true);
-        jacSpeak(GREETING_TEXT, { staticSrc: "/jac-audio/homepage-welcome.mp3" })
+        jacSpeak(GREETING_TEXT)
           .catch(() => {})
           .finally(() => setGreetingPlaying(false));
       }

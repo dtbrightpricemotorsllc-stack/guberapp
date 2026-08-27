@@ -106,7 +106,7 @@ function JacTextChat() {
 
       const aMsg: JacMsg = { role: "assistant", content: reply, buttons };
       setMessages(prev => [...prev, aMsg]);
-      jacSpeak(reply, { mode: "auto" });
+      jacSpeak(reply);
     } catch {
       setMessages(prev => [
         ...prev,

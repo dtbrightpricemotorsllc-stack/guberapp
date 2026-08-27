@@ -2,6 +2,9 @@
 // Centralizes all direct contact with the ElevenLabs API. The API key is read
 // from process.env.ELEVENLABS_API_KEY here ONLY — callers never see the key,
 // and it must never be included in logs, error messages, or client responses.
+import { JAC_ELEVENLABS_VOICE_ID } from "../shared/jac-voice";
+
+export { JAC_ELEVENLABS_VOICE_ID };
 
 export type ElevenLabsErrorCode =
   | "missing_key"
@@ -23,8 +26,6 @@ export interface ElevenLabsSuccess {
 }
 
 export type ElevenLabsResult = ElevenLabsSuccess | ElevenLabsError;
-
-export const DEFAULT_JAC_VOICE_ID = "cgSgspJ2msm6clMCkdW9"; // "Jessica" — playful, bright, warm, conversational (more exciting than the old "Hailey" voice)
 
 /**
  * Classifies an ElevenLabs error response into a stable, loggable code.
@@ -57,7 +58,7 @@ function classifyError(status: number, bodyText: string): ElevenLabsError {
 // being fast enough for real-time conversational use.
 export const DEFAULT_JAC_MODEL_ID = "eleven_turbo_v2_5";
 
-// similarity_boost at 0.9 keeps the output close to the Jessica reference
+// similarity_boost at 0.9 keeps the output close to the approved JAC reference
 // recording while leaving room for expressiveness.
 // stability at 0.38 (lower = more dynamic/expressive delivery — this is what
 // makes the voice sound "exciting" instead of flat) while staying above the
@@ -78,14 +79,16 @@ export const DEFAULT_JAC_VOICE_SETTINGS = {
  */
 export async function synthesizeSpeech(
   text: string,
-  opts: { voiceId?: string; modelId?: string; stream?: boolean } = {}
+  opts: { modelId?: string; stream?: boolean } = {}
 ): Promise<ElevenLabsResult> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
     return { ok: false, code: "missing_key", message: "ELEVENLABS_API_KEY is not configured." };
   }
 
-  const voiceId = opts.voiceId || process.env.JAC_ELEVENLABS_VOICE_ID || DEFAULT_JAC_VOICE_ID;
+  // Never accept an environment or call-site voice override for JAC. A failed
+  // or misconfigured override must fail visibly, not turn JAC into another bot.
+  const voiceId = JAC_ELEVENLABS_VOICE_ID;
   const modelId = opts.modelId || process.env.JAC_ELEVENLABS_MODEL_ID || DEFAULT_JAC_MODEL_ID;
   const stream = opts.stream !== false;
   const path = stream ? "stream" : "";

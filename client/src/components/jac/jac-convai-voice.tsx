@@ -11,6 +11,7 @@ import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import { apiRequest } from "@/lib/queryClient";
 import { Mic, MicOff, PhoneOff, Loader2, Radio, X, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { createJacConvaiVoiceOverride } from "@/lib/jac-convai-voice-lock";
 
 // ── Global session guard ──────────────────────────────────────────────────────
 let _convaiSessions = 0;
@@ -194,7 +195,10 @@ function JacConvaiPanel({ onClose, sessionEndpoint = "/api/jac/convai/session" }
         if (session.userContext?.role)      dynVars["user_role"]        = session.userContext.role;
         if (session.userContext?.platform)  dynVars["user_platform"]    = session.userContext.platform;
 
-        const params: Record<string, any> = { dynamicVariables: dynVars };
+        const params: Record<string, any> = {
+          dynamicVariables: dynVars,
+          overrides: createJacConvaiVoiceOverride(),
+        };
         if (session.signedUrl) params.signedUrl = session.signedUrl;
         else                   params.agentId   = session.agentId;
 

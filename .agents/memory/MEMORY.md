@@ -34,6 +34,7 @@
 - [Capacitor plugin compilation gaps](capacitor-plugin-compilation.md) — npm plugins need `cap sync`; local/custom native plugins get PERMANENTLY wiped by every `cap sync` (never re-added) — needs a post-sync repair script, not a one-time fix.
 - [jobs table column traps](jobs-table-column-traps.md) — hand-written "nearby" SQL in routes.ts often names columns that don't exist; always verify raw jobs/load-board/offers SQL against the live DB before trusting it.
 - [JAC voice latency optimization](jac-voice-latency-optimization.md) — eleven_flash_v2_5 streaming model + MediaSource progressive playback + voiceMode-gated short/warm prompt + admin-visible fallback logging.
+- [JAC voice identity lock](jac-voice-identity-lock.md) — direct TTS and every ConvAI session share one approved voice; never substitute browser or cached audio on failure.
 - [JAC spoken-output safety](jac-spoken-output-safety.md) — all ConvAI speech passes one final whole-message boundary; UI/action metadata must never be vocalized.
 - [JAC voice session lifecycle](jac-voice-lifecycle.md) — auto-start-on-gesture removed (now re-added via splash); mic tap toggles mute on live session, not stop/start; pre-existing brace collapse in convai-session fixed.
 - [ElevenLabs firstMessage empty-string disconnect](elevenlabs-firstmessage-disconnect.md) — firstMessage:"" in startSession overrides causes immediate server-side WebSocket close; never use it.

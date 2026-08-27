@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { loadJacVoice, applyJacVoice } from "@/lib/jac-voice";
 import { getSTTProvider } from "@/lib/voice";
+import { cancelAllJacAudio, jacSpeak } from "@/lib/jac-tts";
 
 /**
  * useSpeechInput — platform-aware STT hook.
@@ -65,42 +65,23 @@ export function useSpeechOutput() {
   const [muted, setMuted] = useState(() => {
     try { return localStorage.getItem("jac_muted") === "1"; } catch { return false; }
   });
-  const supported = typeof window !== "undefined" && "speechSynthesis" in window;
-
-  useEffect(() => {
-    if (supported) loadJacVoice();
-  }, [supported]);
+  // Direct JAC speech is served by ElevenLabs, not a browser-installed voice.
+  const supported = typeof window !== "undefined";
 
   const speak = useCallback((text: string) => {
     if (!supported || muted) return;
-    try {
-      window.speechSynthesis.cancel();
-      const normalized = text
-        .replace(/[*_#`[\]]/g, "")
-        .replace(/(?<!\d)(\d{5})(?!\d)/g, (_, z) => z.split("").join(" "))
-        .replace(/\bDay[-\s]?1\s+OG\b/gi, "Day One Oh Gee")
-        .replace(/\bOG\b/g, "Oh Gee")
-        .replace(/\bJAC\b/g, "Jack")
-        .replace(/\bGUBER\b/g, "Goober")
-        .slice(0, 500);
-      const utt = new SpeechSynthesisUtterance(normalized);
-      applyJacVoice(utt);
-      utt.rate  = 1.05;
-      utt.pitch = 1.1;
-      utt.volume = 1.0;
-      window.speechSynthesis.speak(utt);
-    } catch {}
+    void jacSpeak(text, { muted });
   }, [supported, muted]);
 
   const cancel = useCallback(() => {
-    if (supported) try { window.speechSynthesis.cancel(); } catch {}
+    cancelAllJacAudio();
   }, [supported]);
 
   const toggleMute = useCallback(() => {
     setMuted((prev) => {
       const next = !prev;
       try { localStorage.setItem("jac_muted", next ? "1" : "0"); } catch {}
-      if (next) try { window.speechSynthesis?.cancel(); } catch {}
+      if (next) cancelAllJacAudio();
       return next;
     });
   }, []);

@@ -16,9 +16,10 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map, Bell, VolumeX, MapPin, Sliders, Zap, Circle, Bot, RotateCcw, Volume2, Mic, Smartphone, BrainCircuit, Globe, Headphones, BellRing, Sparkles } from "lucide-react";
+import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map, Bell, VolumeX, MapPin, Sliders, Zap, Circle, Bot, RotateCcw, Volume2, Mic, Smartphone, BrainCircuit, Globe, BellRing, Sparkles } from "lucide-react";
 import { WakeWordDetector } from "@/lib/voice";
 import { Link, useLocation } from "wouter";
+import { JAC_ELEVENLABS_VOICE_ID } from "@shared/jac-voice";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -119,19 +120,11 @@ function StandbyMissionCard({ user, form }: { user: any; form: any }) {
 
 // ── Active JAC Voice Row (shown inside JAC Settings) ─────────────────────────
 function ActiveJacVoiceRow() {
-  const [voiceName, setVoiceName] = useState("Loading…");
-
-  useEffect(() => {
-    import("@/lib/jac-voice").then(({ loadJacVoice, getActiveJacVoiceName }) => {
-      loadJacVoice().then(() => setVoiceName(getActiveJacVoiceName()));
-    });
-  }, []);
-
   return (
     <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/20">
       <div>
         <p className="font-display font-semibold text-sm">Active JAC Voice</p>
-        <p className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">{voiceName}</p>
+        <p className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">{JAC_ELEVENLABS_VOICE_ID}</p>
       </div>
       <span className="text-[10px] px-2 py-1 rounded-full border border-border/30 text-muted-foreground font-display">
         TTS
@@ -154,7 +147,6 @@ function JacSettingsSection() {
   const [proactiveSuggestions, setProactiveSuggestions]               = useState(true);
   const [personalizedRecommendations, setPersonalizedRecommendations] = useState(true);
   const [language, setLanguage]                       = useState("en");
-  const [voiceSelection, setVoiceSelection]           = useState("default");
   const [lowDataMode, setLowDataMode]                 = useState(false);
 
   const profileQ = useQuery<any>({
@@ -175,7 +167,6 @@ function JacSettingsSection() {
     setProactiveSuggestions(d.proactive_suggestions ?? true);
     setPersonalizedRecommendations(d.personalized_recommendations ?? true);
     setLanguage(d.language ?? "en");
-    setVoiceSelection(d.voice_selection ?? "default");
     setLowDataMode(d.low_data_mode ?? false);
   }, [profileQ.data]);
 
@@ -376,28 +367,6 @@ function JacSettingsSection() {
               <SelectContent>
                 <SelectItem value="en">🇺🇸 English</SelectItem>
                 <SelectItem value="es">🇲🇽 Español</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-background border border-border/20 ${jacDisabled ? "opacity-40 pointer-events-none" : ""}`}>
-            <Headphones className="w-4 h-4 text-primary/80 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="font-display font-semibold text-sm">Voice Selection</p>
-              <p className="text-xs text-muted-foreground">JAC's speaking style</p>
-            </div>
-            <Select
-              value={voiceSelection}
-              onValueChange={(v) => { setVoiceSelection(v); save({ voiceSelection: v }); }}
-            >
-              <SelectTrigger className="h-8 w-28 text-xs border-border/20 shrink-0" data-testid="select-jac-voice-selection">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="default">Default</SelectItem>
-                <SelectItem value="professional">Professional</SelectItem>
-                <SelectItem value="casual">Casual</SelectItem>
-                <SelectItem value="energetic">Energetic</SelectItem>
               </SelectContent>
             </Select>
           </div>

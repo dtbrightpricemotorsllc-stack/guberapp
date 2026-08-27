@@ -5,7 +5,7 @@ import { registerServiceOfferRoutes } from "./service-offers";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { getStudioToolsCache, setStudioToolsCache } from "./studio-tools-cache";
-import { synthesizeSpeech, httpStatusForError, estimateCostUsd, DEFAULT_JAC_VOICE_ID, DEFAULT_JAC_MODEL_ID } from "./elevenlabs";
+import { synthesizeSpeech, httpStatusForError, estimateCostUsd, JAC_ELEVENLABS_VOICE_ID, DEFAULT_JAC_MODEL_ID } from "./elevenlabs";
 import { lookupZip, lookupZipCity, geocodeZip, geocodeZipFull, lookupZipsByCity, flushZipGeocodeCache } from "./zip-geocode";
 import { validateSameDayAvailability } from "./availability-same-day";
 import { createServer, type Server } from "http";
@@ -24073,11 +24073,11 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         return res.status(429).json({ message: "Voice budget reached for this session." });
       }
 
-      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || DEFAULT_JAC_VOICE_ID;
+      const voiceId = JAC_ELEVENLABS_VOICE_ID;
       const modelId = process.env.JAC_ELEVENLABS_MODEL_ID || DEFAULT_JAC_MODEL_ID;
       console.log(`[JAC TTS] ${cleaned.length} chars | model ${modelId} | IP ${ip} (${bucket.count}/${TTS_IP_MAX}) | session ${sess.ttsCharsUsed}/${TTS_SESSION_CHAR_BUDGET}`);
 
-      const result = await synthesizeSpeech(cleaned, { voiceId, modelId, stream: true });
+      const result = await synthesizeSpeech(cleaned, { modelId, stream: true });
       const upstreamMs = Date.now() - _ttsStart;
 
       if (!result.ok) {
@@ -24106,22 +24106,20 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     }
   });
 
-  // ── JAC TTS client-side fallback event log ───────────────────────────────────
-  // Called (fire-and-forget) by the browser when it silently falls back to the
-  // robotic Web Speech API because live ElevenLabs playback failed on the
-  // client side (network error, blob empty, autoplay blocked, etc). Without
-  // this, those failures are invisible to admins — the user hears a fallback
-  // voice but the usage log would otherwise show nothing happened.
+  // ── JAC fixed-voice unavailability event log ─────────────────────────────────
+  // Called (fire-and-forget) by the browser when live ElevenLabs playback fails
+  // on the client (network error, blob empty, autoplay blocked, etc). JAC remains
+  // silent instead of substituting a browser voice, so record the failure here.
   app.post("/api/jac/tts/fallback-log", async (req: Request, res: Response) => {
     try {
       const { reason, textLength } = req.body as { reason?: string; textLength?: number };
       const userIdForLog = (req.session as any)?.userId ?? null;
       const ip = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
-      console.warn(`[JAC TTS] client fell back to Web Speech — reason: ${reason || "unknown"}`);
+      console.warn(`[JAC TTS] locked ElevenLabs voice unavailable — reason: ${reason || "unknown"}`);
       logJacVoiceUsage({
-        userId: userIdForLog, type: "tts", provider: "web_speech_fallback",
+        userId: userIdForLog, type: "tts", provider: "elevenlabs_unavailable",
         units: typeof textLength === "number" ? textLength : 0, success: false,
-        errorMessage: `client_fallback:${(reason || "unknown").slice(0, 100)}`, ip,
+        errorMessage: `fixed_voice_unavailable:${(reason || "unknown").slice(0, 100)}`, ip,
       });
       res.status(204).end();
     } catch {
@@ -24359,7 +24357,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       if (userRow.rows[0]?.role !== "admin") return res.status(403).json({ message: "Admin only" });
 
       const apiKey = process.env.ELEVENLABS_API_KEY;
-      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || DEFAULT_JAC_VOICE_ID;
+      const voiceId = JAC_ELEVENLABS_VOICE_ID;
       if (!apiKey) return res.status(503).json({ message: "TTS not configured" });
 
       const { readFileSync, writeFileSync, existsSync } = await import("fs");
@@ -24393,7 +24391,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       for (const [key, text] of Object.entries(CACHE_CLIPS)) {
         const filePath = path.join(dir, `${key}.mp3`);
         if (existsSync(filePath)) { results[key] = "skipped (exists)"; continue; }
-        const result = await synthesizeSpeech(text, { voiceId });
+        const result = await synthesizeSpeech(text);
         if (!result.ok) {
           results[key] = `error: ${result.code}`;
           logJacVoiceUsage({ userId, type: "tts", provider: "elevenlabs", voiceId, units: text.length, success: false, errorMessage: result.code });

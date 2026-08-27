@@ -20,6 +20,7 @@ import type { ReactNode } from "react";
 import { useConversation } from "@elevenlabs/react";
 import { apiRequest } from "@/lib/queryClient";
 import { unlockAudioContext, setJacConvaiActive, cancelAllJacAudio } from "@/lib/jac-tts";
+import { createJacConvaiVoiceOverride } from "@/lib/jac-convai-voice-lock";
 
 const JAC_MIC_CONSTRAINTS: MediaTrackConstraints = {
   echoCancellation: true,
@@ -663,7 +664,10 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           // on Samsung Internet.  We always pass signedUrl so WebSocket is used.
           // NOTE: connectionType and connectionDelay are NOT in the SDK v1.9.0 type
           // and are silently dropped — do not add them.
-          const params: Record<string, any> = { dynamicVariables: dynVars };
+          const params: Record<string, any> = {
+            dynamicVariables: dynVars,
+            overrides: createJacConvaiVoiceOverride(),
+          };
           if (session.signedUrl) params.signedUrl = session.signedUrl;
           else                   params.agentId   = session.agentId;
 

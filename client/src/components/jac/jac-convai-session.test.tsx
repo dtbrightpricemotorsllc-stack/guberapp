@@ -66,6 +66,7 @@ vi.mock("@/lib/jac-tts", () => ({
 // ── Import component AFTER all mocks are registered ──────────────────────────
 
 import { JacConvaiSession, _testOnlyFireMicLost, isJacEchoTranscript } from "./jac-convai-session";
+import { JAC_ELEVENLABS_VOICE_ID } from "@shared/jac-voice";
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
 
@@ -262,6 +263,7 @@ describe("JacConvaiSession — WebSocket transport guarantee", () => {
     expect(params.agentId).toBeUndefined();
     expect(params.connectionType).toBeUndefined();
     expect(params.connectionDelay).toBeUndefined();
+    expect(params.overrides).toEqual({ tts: { voiceId: JAC_ELEVENLABS_VOICE_ID } });
   });
 
   it("requests echo cancellation, noise suppression, and automatic gain control for live voice", async () => {
