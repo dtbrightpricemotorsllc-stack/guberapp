@@ -424,6 +424,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   const statusRef = useRef<string>("disconnected");
   const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recoveryAttemptsRef = useRef(0);
+  const voiceConnectedRef = useRef(false);
   const recoveryRef = useRef<((reason: string) => void) | null>(null);
   const voiceTokenRef = useRef<string | null>(null);
   const bootAttemptRef = useRef(0);
@@ -452,7 +453,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   const { startSession, endSession, status, isSpeaking, isListening, isMuted, setMuted } = useConversation({
     onConnect:    () => {
       statusRef.current = "connected";
-      recoveryAttemptsRef.current = 0;
+      voiceConnectedRef.current = true;
       setReconnecting(false);
       setJacConvaiActive(true);
       cancelAllJacAudio();
@@ -547,7 +548,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     if (!mountedRef.current) return;
     if (event.kind === "connect") {
       statusRef.current = "connected";
-      recoveryAttemptsRef.current = 0;
+      voiceConnectedRef.current = true;
       setE2EVoice({ connected: true, phase: "listening" });
       setReconnecting(false);
       setJacConvaiActive(true);
@@ -571,6 +572,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     }
     if (event.kind === "error") {
       statusRef.current = "disconnected";
+      voiceConnectedRef.current = false;
       setJacConvaiActive(false);
       setE2EVoice({ connected: false, phase: "idle" });
       setReconnecting(false);
@@ -580,6 +582,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     }
     if (event.kind === "disconnect") {
       statusRef.current = "disconnected";
+      voiceConnectedRef.current = false;
       setJacConvaiActive(false);
       setE2EVoice({ connected: false, phase: "idle" });
       setReconnecting(false);
@@ -723,6 +726,16 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       || recoveryTimerRef.current
     ) return;
 
+    // A failed first start is not a disconnected live session. Do not turn a
+    // permission, browser-policy, or slow-session failure into a reconnect
+    // loop. The existing Start voice control is the only recovery surface.
+    if (!voiceConnectedRef.current) {
+      setReconnecting(false);
+      setEnded(true);
+      setError("Voice is unavailable right now. JAC text is still ready.");
+      return;
+    }
+
     const attempt = recoveryAttemptsRef.current + 1;
     if (attempt > 2) {
       console.error(`[JAC ConvAI] recovery exhausted platform=${getJacVoicePlatform()} reason=${reason}`);
@@ -767,6 +780,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       mountedRef.current = false;
       bootAttemptRef.current += 1;
       voiceRequestedRef.current = false;
+      voiceConnectedRef.current = false;
       intentionalEndRef.current = true;
       if (recoveryTimerRef.current) {
         clearTimeout(recoveryTimerRef.current);
@@ -878,6 +892,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       recoveryTimerRef.current = null;
     }
     recoveryAttemptsRef.current = 0;
+    voiceConnectedRef.current = false;
     try { endSession(); } catch {}
     setEnded(false);
     setError(null);
