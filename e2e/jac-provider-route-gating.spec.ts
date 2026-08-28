@@ -138,9 +138,18 @@ async function dismissDashboardOverlays(page: Page) {
 
 test("guest JAC asks whether to browse or post before showing a destination", async ({ page }) => {
   const requests = await installJacResponses(page, "guest");
+  const voiceRequests: string[] = [];
+  page.on("request", (request) => {
+    if (/\/api\/jac\/convai\/(?:public-)?session/.test(request.url())) {
+      voiceRequests.push(request.url());
+    }
+  });
 
   await page.goto("/");
   await expect(page.getByTestId("page-home")).toBeVisible();
+  // Text JAC must be immediately usable. Voice is optional on web/PWA and
+  // cannot mint a session until the user explicitly taps the voice control.
+  expect(voiceRequests).toEqual([]);
   await sendGuestMessage(page, "I need help finding someone for a repair.");
 
   await page.getByRole("button", { name: "Chat", exact: true }).click();

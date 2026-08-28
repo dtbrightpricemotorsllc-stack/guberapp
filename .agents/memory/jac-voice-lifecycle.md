@@ -17,22 +17,21 @@ then calling `jacSpeak(GREETING_TTS)` → user heard greeting for seemingly no r
 **Fix**: Removed the document-level auto-start-on-gesture effect entirely. It remains
 important that text input and ordinary page gestures never trigger voice.
 
-### 2a. Public and signed-in JAC use permission-safe automatic live start
-The public live homepage and signed-in main-app assistant may automatically start
-their live sessions on entry, but only after confirming that microphone permission
-is already granted and an audio-input device exists. All other states keep JAC
-visible in text mode and deliver the one-time welcome through output-only TTS,
-without prompting for permission or showing a blocking overlay.
+### 2a. Public and signed-in JAC are text-first
+Web and installed-PWA JAC must initialize text, conversation state, routing,
+memory, and actions without minting or starting an ElevenLabs session. Voice
+starts only from the explicit voice control so audio unlock and microphone access
+remain inside the user's gesture. Native may auto-start only when the platform
+supports it and microphone permission was already granted.
 
-**Why:** The desired first impression is that JAC comes alive automatically for
-ready devices, but unavailable or blocked microphones must never make the product
-feel broken.
+**Why:** External voice initialization and mobile browser gesture rules made the
+homepage appear stuck or drop immediately from Listening to Ended. Voice failure
+must not delay or disable the core JAC experience.
 
-**How to apply:** Keep document-level gesture listeners removed. Share the generic
-greeting claim across every JAC surface, but scope automatic live-start claims to
-one mounted voice-session lifecycle. An auth-triggered provider remount therefore
-gets one fresh automatic start without creating a retry loop. Starting live voice
-must cancel pending TTS.
+**How to apply:** Keep document-level gesture listeners removed. Treat voice as a
+single-flight optional attachment with bounded reconnect attempts. Preserve the
+shared transcript, campaign context, and greeting claim across voice disconnects;
+never substitute browser speech or static audio for the approved JAC voice.
 
 ### 3. handleConvaiError replayed the greeting via TTS
 Any voice failure called `jacSpeak(GREETING_TTS)` — the greeting text spoken aloud.
