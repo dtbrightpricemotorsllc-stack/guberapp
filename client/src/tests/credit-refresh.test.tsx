@@ -213,7 +213,7 @@ describe("ExternalPurchaseSheet – browserFinished fallback", () => {
     addListenerSpy.mockClear();
 
     render(
-      <ExternalPurchaseSheet product="studio_credits">
+       <ExternalPurchaseSheet product="marketplace_buyer_order">
         {({ onPress }) => (
           <button data-testid="trigger" onClick={onPress}>Buy</button>
         )}
@@ -230,7 +230,7 @@ describe("ExternalPurchaseSheet – browserFinished fallback", () => {
 
   it("invalidates /api/auth/me 3 seconds after browserFinished fires", async () => {
     render(
-      <ExternalPurchaseSheet product="studio_credits">
+       <ExternalPurchaseSheet product="marketplace_buyer_order">
         {({ onPress }) => (
           <button data-testid="trigger" onClick={onPress}>Buy</button>
         )}
@@ -253,7 +253,7 @@ describe("ExternalPurchaseSheet – browserFinished fallback", () => {
 
   it("does NOT invalidate before 3 seconds elapse after browserFinished", async () => {
     render(
-      <ExternalPurchaseSheet product="studio_credits">
+       <ExternalPurchaseSheet product="marketplace_buyer_order">
         {({ onPress }) => (
           <button data-testid="trigger" onClick={onPress}>Buy</button>
         )}
@@ -270,7 +270,7 @@ describe("ExternalPurchaseSheet – browserFinished fallback", () => {
 
   it("does NOT invalidate when the user cancels the Apple disclosure", async () => {
     render(
-      <ExternalPurchaseSheet product="studio_credits">
+       <ExternalPurchaseSheet product="marketplace_buyer_order">
         {({ onPress }) => (
           <button data-testid="trigger" onClick={onPress}>Buy</button>
         )}

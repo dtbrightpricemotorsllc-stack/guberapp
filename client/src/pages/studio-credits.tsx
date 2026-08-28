@@ -1,7 +1,7 @@
 // GUBER Studio · Credits & Subscriptions (task-519, task-561)
 // Lists the 6 credit packs and 3 subscription tiers.
-// On iOS/Android store builds, purchase buttons go through the
-// ExternalPurchaseSheet (Apple External Purchase Link) disclosure flow.
+// Native store builds are entitlement-only; digital commerce remains on the
+// canonical guberapp.com web surface.
 
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
@@ -53,7 +53,7 @@ export default function StudioCreditsPage() {
 
   const buyPack = useMutation({
     mutationFn: async (packId: string) => {
-      if (isStoreBuild) throw new Error("Studio purchases are available on guberapp.com");
+      if (isStoreBuild) throw new Error("Studio purchases aren't available in this app.");
       const res = await apiRequest("POST", "/api/stripe/studio-credits-checkout", { packId });
       return res.json();
     },
@@ -65,7 +65,7 @@ export default function StudioCreditsPage() {
 
   const subscribe = useMutation({
     mutationFn: async (tier: string) => {
-      if (isStoreBuild) throw new Error("Studio subscriptions are managed on guberapp.com");
+      if (isStoreBuild) throw new Error("Studio subscriptions aren't available in this app.");
       const res = await apiRequest("POST", "/api/stripe/studio-subscription-checkout", { tier });
       return res.json();
     },
@@ -77,7 +77,7 @@ export default function StudioCreditsPage() {
 
   const cancel = useMutation({
     mutationFn: async () => {
-      if (isStoreBuild) throw new Error("Studio subscriptions are managed on guberapp.com");
+      if (isStoreBuild) throw new Error("Studio subscriptions aren't available in this app.");
       const res = await apiRequest("POST", "/api/stripe/cancel-studio-subscription", {});
       return res.json();
     },
@@ -124,7 +124,7 @@ export default function StudioCreditsPage() {
           <div className="mb-6">
             <p className="text-white/60 text-sm mb-4">
               {isStoreBuild
-                ? "This app shows your Studio entitlements and credit balance. Subscription and purchase management is available on guberapp.com."
+                 ? "This app shows your Studio entitlements and credit balance. Digital commerce isn't available here."
                 : "Studio credits are earned through eligible GUBER activities. Complete jobs and missions to unlock AI generation tools."}
             </p>
             {!isStoreBuild && <Link href="/earning-opportunities">
@@ -169,7 +169,7 @@ export default function StudioCreditsPage() {
                       </Button>
                     </Link>
                   ) : isStoreBuild ? (
-                    <p className="mt-2 text-xs text-white/45">Purchase management on guberapp.com</p>
+                    <p className="mt-2 text-xs text-white/45">Managed outside this app</p>
                   ) : (
                     <Button
                       size="sm"
@@ -219,7 +219,7 @@ export default function StudioCreditsPage() {
                     {isCurrent ? (
                       isStoreBuild ? (
                         <Button size="sm" variant="outline" disabled data-testid={`button-managed-${t.id}`}>
-                          Managed on guberapp.com
+                          Managed outside this app
                         </Button>
                       ) : me?.subscription?.cancelAtPeriodEnd ? (
                         <Button size="sm" variant="outline" disabled data-testid={`button-cancelled-${t.id}`}>
@@ -243,7 +243,7 @@ export default function StudioCreditsPage() {
                         </Button>
                       </Link>
                     ) : isStoreBuild ? (
-                      <p className="text-xs text-white/45">Subscription management on guberapp.com</p>
+                     <p className="text-xs text-white/45">Managed outside this app</p>
                     ) : (
                       <Button
                         size="sm"

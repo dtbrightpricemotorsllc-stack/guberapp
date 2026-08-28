@@ -16,6 +16,22 @@ const VALID_PRODUCTS = [
 
 export type MobileCheckoutProduct = (typeof VALID_PRODUCTS)[number];
 
+// Native builds are entitlement-only. These products stay in the token
+// vocabulary for legacy web routes and existing tokens, but the mobile bridge
+// must never mint or redeem them.
+export const NATIVE_DIGITAL_COMMERCE_PRODUCTS = [
+  "studio_credits",
+  "studio_subscription",
+  "day1og",
+  "trust_box",
+  "business_scout",
+  "business_unlock",
+] as const satisfies readonly MobileCheckoutProduct[];
+
+export function isNativeDigitalCommerceProduct(product: MobileCheckoutProduct): boolean {
+  return (NATIVE_DIGITAL_COMMERCE_PRODUCTS as readonly string[]).includes(product);
+}
+
 export interface MobileCheckoutPayload {
   userId: number;
   product: MobileCheckoutProduct;

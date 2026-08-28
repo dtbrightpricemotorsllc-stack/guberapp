@@ -587,6 +587,11 @@ export function NativeDeepLinkHandler() {
         return;
       }
 
+      // Entitlements are server-authoritative. Refresh on every native
+      // foreground transition so web-created subscription changes and
+      // revocations are reflected without requiring a relaunch.
+      void queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+
       // App returned to foreground — re-prompt if biometric is enabled and session is locked
       (async () => {
         try {

@@ -14,12 +14,6 @@ import { reportIssue } from "@/lib/report-issue";
 import { ExternalLink } from "lucide-react";
 
 export type ExternalPurchaseProduct =
-  | "studio_credits"
-  | "studio_subscription"
-  | "day1og"
-  | "trust_box"
-  | "business_scout"
-  | "business_unlock"
   | "marketplace_buyer_order"
   | "asset_protection"
   | "asset_protection_founders";
@@ -52,20 +46,7 @@ export function ExternalPurchaseSheet({
         ...(isIOS ? {
           successUrl: (() => {
             const params = new URLSearchParams();
-            if (product === "studio_subscription") {
-              params.set("type", "subscription");
-              if (options?.tier) params.set("tier", options.tier);
-            } else if (product === "studio_credits") {
-              params.set("type", "credits");
-            } else if (product === "day1og") {
-              params.set("type", "day1og");
-            } else if (product === "trust_box") {
-              params.set("type", "trust_box");
-            } else if (product === "business_scout") {
-              params.set("type", "business_scout");
-            } else if (product === "business_unlock") {
-              params.set("type", "business_unlock");
-            } else if (product === "asset_protection") {
+            if (product === "asset_protection") {
               params.set("type", "asset_protection");
             } else if (product === "asset_protection_founders") {
               params.set("type", "asset_protection_founders");

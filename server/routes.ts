@@ -59,7 +59,12 @@ import { demoGuard, getDemoUserIds, isDemoUser, viewerCanSeeJobSync } from "./de
 import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword, handleLogin, handleSignup, handleForgotPassword, handleBusinessSignup, handleNativeGoogleAuth, handleNativeAppleAuth } from "./auth";
 import { detectDisallowedJobContent, detectOffPlatformPhrase, detectViLanguageHit, replaceViLanguage } from "@shared/liability";
 import { generateJWT, verifyJWT } from "./jwt";
-import { signMobileCheckoutToken, verifyMobileCheckoutToken, isValidProduct } from "./mobile-checkout-token";
+import {
+  signMobileCheckoutToken,
+  verifyMobileCheckoutToken,
+  isValidProduct,
+  isNativeDigitalCommerceProduct,
+} from "./mobile-checkout-token";
 import { verifyJacVoiceToken, signJacVoiceToken } from "./jac-voice-token";
 import { sanitizeAssistMessages, isReflectedAssistantTurn, resolveVoiceToken, newCompletionId, writeOpenAiStream, writeSuppressedOpenAiStream, buildNonStreamCompletion, buildSuppressedCompletion, checkConvaiRateLimit } from "./jac-convai";
 import { getJacSession, setJacSession, clearJacSession, summarizeSession } from "./jac-session";
@@ -14099,10 +14104,10 @@ export async function registerRoutes(
     }
   });
 
-  // ── Apple External Purchase Link — mobile checkout bridge ─────────────────
-  // On iOS builds, all digital purchases must either use Apple IAP or go
-  // through Apple's External Purchase Link entitlement (EU / reader-app path).
-  // These two endpoints implement the signed-token bridge:
+  // ── Mobile checkout bridge for permitted non-subscription transactions ─────
+  // Native builds are entitlement-only for digital commerce. This bridge is
+  // retained for permitted marketplace/asset-protection transactions; the
+  // server blocks every digital product before a token can be minted or used.
   //
   //   1. POST /api/mobile/checkout-link  (requires session auth)
   //      Authenticated in-app call. Signs a 15-min HMAC token containing
@@ -14120,6 +14125,12 @@ export async function registerRoutes(
       const { product, options = {} } = req.body;
       if (!product || !isValidProduct(product)) {
         return res.status(400).json({ message: "Invalid product" });
+      }
+      if (isNativeDigitalCommerceProduct(product)) {
+        return res.status(403).json({
+          code: "NATIVE_DIGITAL_COMMERCE_BLOCKED",
+          message: "Digital subscriptions and purchases are managed on guberapp.com.",
+        });
       }
       if (product === "day1og" && (!isDay1OgPromotionActive() || !canCreateDay1OgCheckout())) {
         return res.status(410).json({
@@ -14162,6 +14173,12 @@ export async function registerRoutes(
       return res.status(401).json({ message: "Checkout link has expired or is invalid. Please try again." });
     }
     const { userId, product, options } = payload;
+    if (isNativeDigitalCommerceProduct(product)) {
+      return res.status(403).json({
+        code: "NATIVE_DIGITAL_COMMERCE_BLOCKED",
+        message: "Digital subscriptions and purchases are managed on guberapp.com.",
+      });
+    }
     try {
       const user = await storage.getUser(userId);
       if (!user || (user as any).deletedAt) {

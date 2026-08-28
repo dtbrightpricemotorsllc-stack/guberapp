@@ -56,7 +56,7 @@ export default function FoundersClub() {
 
   const startWebCheckout = async () => {
     if (isStoreBuild) {
-      toast({ title: "Manage on guberapp.com", description: "Founders Club enrollment is managed on the web." });
+      toast({ title: "Not available in this app", description: "Digital commerce isn't available here." });
       return;
     }
     try {
@@ -203,7 +203,7 @@ export default function FoundersClub() {
                 style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)" }}
                 data-testid="text-founders-web-managed"
               >
-                Founders Club enrollment and account management are available on guberapp.com.
+                This app displays your founding entitlement. Digital commerce isn't available here.
               </div>
             ) : (
               <Button
@@ -218,7 +218,7 @@ export default function FoundersClub() {
 
             <p className="text-[10px] text-muted-foreground/40 text-center leading-relaxed px-2">
               {isStoreBuild
-                ? "This app displays your founding entitlement. Enrollment and billing actions stay on guberapp.com."
+                ? "This app displays your founding entitlement. Digital commerce isn't available here."
                 : "One-time enrollment via secure Stripe checkout. U.S. customers only. Founding Member status is lifetime and non-transferable."}
             </p>
           </>

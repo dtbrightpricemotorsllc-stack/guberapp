@@ -9,8 +9,8 @@
 //  - malformed strings → null (utility)
 //  - POST /api/mobile/checkout-link  requires auth (401)
 //  - POST /api/mobile/checkout-link  rejects invalid/missing product (400)
-//  - POST /api/mobile/checkout-link  happy path for all 6 products
-//  - End-to-end bridge (POST mint → GET redirect) for all 6 product types
+//  - POST /api/mobile/checkout-link  blocks every digital-commerce product
+//  - End-to-end bridge remains available for permitted marketplace products
 //  - GET  /api/mobile/checkout-redirect  expired token → 401 JSON
 //  - GET  /api/mobile/checkout-redirect  tampered token → 401 JSON
 //  - GET  /api/mobile/checkout-redirect  missing token → 401 JSON
@@ -51,6 +51,7 @@ const mockStorage = vi.hoisted(() => ({
   getUser: vi.fn(async (id: number) => state.users.get(id)),
   getUserByEmail: vi.fn(async () => undefined),
   getBusinessAccount: vi.fn(async (userId: number) => state.businessAccounts.get(userId)),
+  getMarketplaceItem: vi.fn(async () => ({ id: 42, title: "Test Vehicle", vinNumber: "1HGCM82633A123456" })),
   updateBusinessAccount: vi.fn(async (id: number, data: any) => {
     const acct = [...state.businessAccounts.values()].find((a) => a.id === id);
     if (acct) Object.assign(acct, data);
@@ -309,14 +310,11 @@ describe("mobile checkout HTTP routes (registerRoutes)", () => {
     });
 
     it.each([
-      ["studio_credits",      { packId: "spark" }],
-      ["studio_subscription", { tier: "standard" }],
-      ["day1og",              {}],
-      ["trust_box",           {}],
-      ["business_scout",      {}],
-      ["business_unlock",     { quantity: "5" }],
+      ["marketplace_buyer_order", { itemId: "42" }],
+      ["asset_protection", { assetId: "42" }],
+      ["asset_protection_founders", { assetId: "42" }],
     ] as const)(
-      "returns a signed token URL for product '%s'",
+      "returns a signed token URL for permitted product '%s'",
       async (product, options) => {
         const res = await agent
           .post("/api/mobile/checkout-link")
@@ -335,22 +333,41 @@ describe("mobile checkout HTTP routes (registerRoutes)", () => {
       },
     );
 
-    it("returns 410 instead of minting a Day-1 OG token after the campaign ends", async () => {
+    it.each([
+      "studio_credits",
+      "studio_subscription",
+      "day1og",
+      "trust_box",
+      "business_scout",
+      "business_unlock",
+    ] as const)(
+      "blocks native digital-commerce product '%s'",
+      async (product) => {
+        const res = await agent
+          .post("/api/mobile/checkout-link")
+          .send({ product })
+          .expect(403);
+        expect(res.body.code).toBe("NATIVE_DIGITAL_COMMERCE_BLOCKED");
+        expect(res.body.url).toBeUndefined();
+      },
+    );
+
+    it("blocks Day-1 OG before evaluating campaign timing", async () => {
       const now = vi.spyOn(Date, "now").mockReturnValue(day1OgPromotionEndsAt().getTime() + 1);
       try {
         const res = await agent
           .post("/api/mobile/checkout-link")
           .send({ product: "day1og" })
-          .expect(410);
+          .expect(403);
 
-        expect(res.body.campaignEndsAt).toBe(day1OgPromotionEndsAt().toISOString());
+        expect(res.body.code).toBe("NATIVE_DIGITAL_COMMERCE_BLOCKED");
         expect(res.body.url).toBeUndefined();
       } finally {
         now.mockRestore();
       }
     });
 
-    it("returns 410 instead of minting a Day-1 OG token in Stripe's final 30-minute window", async () => {
+    it("blocks Day-1 OG before evaluating Stripe campaign timing", async () => {
       const now = vi.spyOn(Date, "now").mockReturnValue(
         day1OgPromotionEndsAt().getTime() - 29 * 60 * 1000,
       );
@@ -358,7 +375,7 @@ describe("mobile checkout HTTP routes (registerRoutes)", () => {
         await agent
           .post("/api/mobile/checkout-link")
           .send({ product: "day1og" })
-          .expect(410);
+          .expect(403);
       } finally {
         now.mockRestore();
       }
@@ -370,7 +387,7 @@ describe("mobile checkout HTTP routes (registerRoutes)", () => {
   // calls POST to mint a signed URL, opens that URL in SFSafariViewController,
   // the server validates the token and 302-redirects to Stripe.
 
-  describe("end-to-end bridge (POST → GET) — all 6 product types", () => {
+  describe("end-to-end bridge (POST → GET) — permitted products only", () => {
     async function bridge(product: string, options: Record<string, string>) {
       const linkRes = await agent
         .post("/api/mobile/checkout-link")
@@ -388,48 +405,11 @@ describe("mobile checkout HTTP routes (registerRoutes)", () => {
       return { redirectRes, token };
     }
 
-    it("studio_credits: full POST→GET bridge lands on Stripe", async () => {
-      const { redirectRes } = await bridge("studio_credits", { packId: "boost" });
+    it("marketplace_buyer_order: full POST→GET bridge lands on Stripe", async () => {
+      state.businessAccounts.clear();
+      const { redirectRes } = await bridge("marketplace_buyer_order", { itemId: "42" });
       expect(redirectRes.headers.location).toMatch(/checkout\.stripe\.com/);
-      expect(state.stripeSessionsCreated[0].params.metadata.packId).toBe("boost");
-    });
-
-    it("studio_subscription: full POST→GET bridge lands on Stripe", async () => {
-      const { redirectRes } = await bridge("studio_subscription", { tier: "business" });
-      expect(redirectRes.headers.location).toMatch(/checkout\.stripe\.com/);
-      expect(state.stripeSessionsCreated[0].params.metadata.tier).toBe("business");
-    });
-
-    it("day1og: full POST→GET bridge lands on Stripe", async () => {
-      const { redirectRes } = await bridge("day1og", {});
-      expect(redirectRes.headers.location).toMatch(/checkout\.stripe\.com/);
-      expect(state.stripeSessionsCreated[0].params.metadata.type).toBe("day1og");
-    });
-
-    it("trust_box: full POST→GET bridge lands on Stripe", async () => {
-      const { redirectRes } = await bridge("trust_box", {});
-      expect(redirectRes.headers.location).toMatch(/checkout\.stripe\.com/);
-      expect(state.stripeSessionsCreated[0].params.metadata.type).toBe("trust_box");
-    });
-
-    it("business_scout: full POST→GET bridge lands on Stripe", async () => {
-      state.businessAccounts.set(USER_ID, {
-        id: 3001, userId: USER_ID, workEmail: "scout@guber.test",
-        businessName: "Scout Co", stripeCustomerId: "cus_scout_bridge",
-      });
-      const { redirectRes } = await bridge("business_scout", {});
-      expect(redirectRes.headers.location).toMatch(/checkout\.stripe\.com/);
-      expect(state.stripeSessionsCreated[0].params.metadata.type).toBe("business_scout_plan");
-    });
-
-    it("business_unlock: full POST→GET bridge lands on Stripe", async () => {
-      state.businessAccounts.set(USER_ID, {
-        id: 3002, userId: USER_ID, workEmail: "unlock@guber.test",
-        businessName: "Unlock Co", stripeCustomerId: "cus_unlock_bridge",
-      });
-      const { redirectRes } = await bridge("business_unlock", { quantity: "4" });
-      expect(redirectRes.headers.location).toMatch(/checkout\.stripe\.com/);
-      expect(state.stripeSessionsCreated[0].params.line_items[0].quantity).toBe(4);
+      expect(state.stripeSessionsCreated[0].params.metadata.type).toBe("marketplace_buyer_order");
     });
   });
 
@@ -468,14 +448,38 @@ describe("mobile checkout HTTP routes (registerRoutes)", () => {
       expect(res.body.message).toMatch(/expired|invalid/i);
     });
 
-    it("redirects to error page when the user does not exist", async () => {
-      state.users.clear(); // no user found
+    it("blocks a signed digital product before looking up the user", async () => {
+      state.users.clear();
       const token = signMobileCheckoutToken(USER_ID, "day1og", {});
       const res = await agent
         .get(`/api/mobile/checkout-redirect?token=${encodeURIComponent(token)}`)
-        .expect(302);
-      expect(res.headers.location).toMatch(/login.*account_not_found/);
+        .expect(403);
+      expect(res.body.code).toBe("NATIVE_DIGITAL_COMMERCE_BLOCKED");
     });
+
+    it.each([
+      "studio_credits",
+      "studio_subscription",
+      "day1og",
+      "trust_box",
+      "business_scout",
+      "business_unlock",
+    ] as const)(
+      "rejects a signed native digital-commerce token for '%s' before Stripe",
+      async (product) => {
+        const token = signMobileCheckoutToken(USER_ID, product, {});
+        const res = await agent
+          .get(`/api/mobile/checkout-redirect?token=${encodeURIComponent(token)}`)
+          .expect(403);
+        expect(res.body.code).toBe("NATIVE_DIGITAL_COMMERCE_BLOCKED");
+        expect(state.stripeSessionsCreated).toHaveLength(0);
+      },
+    );
+
+    // These assertions describe the retired native digital checkout behavior.
+    // Keep them as documentation while the token vocabulary remains backwards
+    // compatible for old signed links; the active contract above is the guard.
+    describe.skip("retired native digital checkout behavior", () => {
 
     // ── studio_credits ──────────────────────────────────────────────────────
 
@@ -760,6 +764,7 @@ describe("mobile checkout HTTP routes (registerRoutes)", () => {
         .expect(302);
       // Should NOT use the evil URL
       expect(state.stripeSessionsCreated[0].params.success_url).not.toContain("evil.example.com");
+    });
     });
   });
 });

@@ -145,7 +145,7 @@ export default function BizDashboard() {
 
   const planSelection = useMutation({
     mutationFn: async ({ planType, foundingOffer = false }: { planType: string; foundingOffer?: boolean }) => {
-      if (isStoreBuild) throw new Error("Business subscriptions are managed on guberapp.com");
+       if (isStoreBuild) throw new Error("Business subscriptions aren't available in this app.");
       const response = await apiRequest("POST", "/api/business/create-plan-subscription", { planType, foundingOffer });
       return response.json();
     },
@@ -163,7 +163,7 @@ export default function BizDashboard() {
 
   const billingPortal = useMutation({
     mutationFn: async () => {
-      if (isStoreBuild) throw new Error("Business billing is managed on guberapp.com");
+       if (isStoreBuild) throw new Error("Business billing isn't available in this app.");
       const response = await apiRequest("POST", "/api/business/billing-portal");
       return response.json();
     },
@@ -175,7 +175,7 @@ export default function BizDashboard() {
 
   const cancelSubscription = useMutation({
     mutationFn: async () => {
-      if (isStoreBuild) throw new Error("Business subscriptions are managed on guberapp.com");
+       if (isStoreBuild) throw new Error("Business subscriptions aren't available in this app.");
       const response = await apiRequest("POST", "/api/business/cancel-subscription");
       return response.json();
     },
@@ -354,7 +354,7 @@ export default function BizDashboard() {
                   {businessPlans.current?.cancelAtPeriodEnd
                     ? `Scheduled to end after ${businessPlans.current?.renewsAt ? new Date(businessPlans.current.renewsAt).toLocaleDateString() : "the current billing period"}.`
                     : isStoreBuild
-                      ? "Plan entitlements are shown here. Subscription and billing management is available on guberapp.com."
+                      ? "Plan entitlements are shown here. Digital commerce isn't available in this app."
                       : businessPlans.foundingOffer?.eligible
                         ? `Founding Local Business Offer: $${(businessPlans.foundingOffer.monthlyPriceCents / 100).toFixed(2)}/month through September 30, 2026.`
                       : "Plan access and billing status are managed from your business account."}
