@@ -572,31 +572,60 @@ export async function reviewCashoutRequest(
   requestId: number,
   adminId: number,
   decision: "approved" | "denied",
-  adminNote?: string
+  adminNote?: string,
+  settleBusinessReferral?: (input: {
+    requestId: number;
+    userId: number;
+    amountCents: number;
+    destinationAccountId: string;
+  }) => Promise<{ id: string }>,
 ) {
-  const reqRow = await pool.query(
-    `SELECT * FROM cashout_requests WHERE id = $1`,
-    [requestId]
-  );
-  const req = reqRow.rows[0];
-  if (!req) throw new Error("Request not found");
-  if (req.status !== "pending") throw new Error("Request already reviewed");
-  const isBusinessReferral = req.source_type === "business_referral";
-
-  const creditsPerDollar = await getRewardConfigValue("credits_per_dollar", 1000);
-
-  await pool.query("BEGIN");
+  const client = await pool.connect();
   try {
-    await pool.query(
+    await client.query("BEGIN");
+    const reqRow = await client.query(
+      `SELECT cr.*, u.id_verified, u.stripe_account_id, u.stripe_account_status
+         FROM cashout_requests cr
+         JOIN users u ON u.id = cr.user_id
+        WHERE cr.id = $1
+        FOR UPDATE OF cr`,
+      [requestId],
+    );
+    const req = reqRow.rows[0];
+    if (!req) throw new Error("Request not found");
+    if (req.status !== "pending") throw new Error("Request already reviewed");
+    const isBusinessReferral = req.source_type === "business_referral";
+    let payoutReference: string | null = null;
+    let payoutDestinationAccountId: string | null = req.payout_destination_account_id || null;
+
+    if (decision === "approved" && isBusinessReferral) {
+      if (!req.id_verified) throw new Error("Distributor ID verification is no longer active");
+      if (req.stripe_account_status !== "active" || !req.stripe_account_id) {
+        throw new Error("Distributor Stripe Connect payout account is no longer active");
+      }
+      if (!settleBusinessReferral) throw new Error("Stripe Connect settlement is unavailable");
+      const transfer = await settleBusinessReferral({
+        requestId: req.id,
+        userId: req.user_id,
+        amountCents: Math.round(Number(req.dollar_amount) * 100),
+        destinationAccountId: req.stripe_account_id,
+      });
+      payoutReference = transfer.id;
+      payoutDestinationAccountId = req.stripe_account_id;
+    }
+
+    await client.query(
       `UPDATE cashout_requests
-       SET status = $1, admin_note = $2, reviewed_at = NOW(), reviewed_by = $3
-       WHERE id = $4`,
-      [decision, adminNote ?? null, adminId, requestId]
+          SET status = $1, admin_note = $2, reviewed_at = NOW(), reviewed_by = $3,
+              payout_destination_account_id = COALESCE($4, payout_destination_account_id),
+              payout_reference = COALESCE($5, payout_reference)
+        WHERE id = $6`,
+      [decision, adminNote ?? null, adminId, payoutDestinationAccountId, payoutReference, requestId],
     );
 
     if (decision === "denied") {
       if (isBusinessReferral) {
-        await pool.query(
+        await client.query(
           `UPDATE business_referral_attributions
               SET reward_status = 'failed'
             WHERE id = $1 AND cashout_request_id = $2`,
@@ -605,11 +634,12 @@ export async function reviewCashoutRequest(
       }
       // Refund credits back to user
       if (!isBusinessReferral) {
-        await pool.query(
+        const creditsPerDollar = await getRewardConfigValue("credits_per_dollar", 1000);
+        await client.query(
           `UPDATE users SET growth_credits = COALESCE(growth_credits,0) + $1 WHERE id = $2`,
           [req.credits_requested, req.user_id]
         );
-        await pool.query(
+        await client.query(
           `INSERT INTO credit_ledger (user_id, amount, dollar_equivalent, source_type, status, approved_at, reason)
            VALUES ($1, $2, $3, 'cashout', 'denied', NOW(), $4)`,
           [req.user_id, req.credits_requested, (req.credits_requested / creditsPerDollar).toFixed(4),
@@ -617,29 +647,32 @@ export async function reviewCashoutRequest(
         );
       }
     } else {
-      // approved — admin will pay out manually; mark ledger redeemed
+      // Referral cash is already transferred above; legacy credit cash-outs
+      // retain their existing admin-managed settlement process.
       if (isBusinessReferral) {
-        await pool.query(
+        await client.query(
           `UPDATE business_referral_attributions SET reward_status = 'paid'
             WHERE id = $1 AND cashout_request_id = $2`,
           [req.business_referral_id, req.id],
         );
       } else {
-        await pool.query(
+        await client.query(
           `UPDATE users SET lifetime_credits_redeemed = COALESCE(lifetime_credits_redeemed,0) + $1 WHERE id = $2`,
           [req.credits_requested, req.user_id]
         );
-        await pool.query(
+        await client.query(
           `UPDATE credit_ledger SET status = 'redeemed', redeemed_at = NOW()
            WHERE user_id = $1 AND source_type = 'cashout' AND status = 'pending' AND amount = -$2`,
           [req.user_id, req.credits_requested]
         );
       }
     }
-    await pool.query("COMMIT");
+    await client.query("COMMIT");
   } catch (e) {
-    await pool.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {});
     throw e;
+  } finally {
+    client.release();
   }
 }
 

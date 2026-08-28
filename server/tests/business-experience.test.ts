@@ -3,7 +3,9 @@ import {
   BUSINESS_PLAN_CATALOG,
   FOUNDING_LOCAL_OFFER,
   calculateBusinessPlatformFee,
+  getBusinessReferralCashoutBlock,
   getBusinessRequirementsForIndustry,
+  resolveBusinessReferralPayoutOwner,
 } from "../business-experience";
 
 describe("business handout promises", () => {
@@ -40,5 +42,54 @@ describe("business handout promises", () => {
     const retailKeys = getBusinessRequirementsForIndustry("Retail").map((item) => item.key);
     expect(contractorKeys).toEqual(expect.arrayContaining(["registration_ein", "license", "insurance", "bonding"]));
     expect(retailKeys).toEqual(["registration_ein"]);
+  });
+
+  it("keeps the signup-time distributor when a code is reassigned later", () => {
+    expect(resolveBusinessReferralPayoutOwner(
+      { distributor_user_id: 41, distributor_label: "Original Distributor" },
+      { owner_user_id: 82, owner_label: "New Distributor" },
+    )).toEqual({
+      ownerUserId: 41,
+      ownerLabel: "Original Distributor",
+      source: "attribution",
+    });
+  });
+
+  it("uses the current code owner only when the signup was originally unassigned", () => {
+    expect(resolveBusinessReferralPayoutOwner(
+      { distributor_user_id: null, distributor_label: null },
+      { owner_user_id: 82, owner_label: "Configured Distributor" },
+    )).toEqual({
+      ownerUserId: 82,
+      ownerLabel: "Configured Distributor",
+      source: "code",
+    });
+    expect(resolveBusinessReferralPayoutOwner(
+      { distributor_user_id: null, distributor_label: null },
+      { owner_user_id: null, owner_label: null },
+    )).toBeNull();
+  });
+
+  it("allows earnings to accrue but blocks cash-out until identity and Stripe are ready", () => {
+    expect(getBusinessReferralCashoutBlock({
+      idVerified: false,
+      stripeAccountId: "acct_ready",
+      stripeAccountStatus: "active",
+    })).toContain("ID verification");
+    expect(getBusinessReferralCashoutBlock({
+      idVerified: true,
+      stripeAccountId: "acct_pending",
+      stripeAccountStatus: "pending",
+    })).toContain("Stripe Connect");
+    expect(getBusinessReferralCashoutBlock({
+      idVerified: true,
+      stripeAccountId: null,
+      stripeAccountStatus: "active",
+    })).toContain("Stripe Connect");
+    expect(getBusinessReferralCashoutBlock({
+      idVerified: true,
+      stripeAccountId: "acct_ready",
+      stripeAccountStatus: "active",
+    })).toBeNull();
   });
 });

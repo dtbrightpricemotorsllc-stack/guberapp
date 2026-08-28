@@ -167,6 +167,7 @@ const GrowthLeaderboard = lazy(() => import("@/pages/leaderboard"));
 const AdminGrowthEngine = lazy(() => import("@/pages/admin-growth-engine"));
 const AdminLocalBusinesses = lazy(() => import("@/pages/admin-local-businesses"));
 const AdminServiceOffers = lazy(() => import("@/pages/admin-service-offers"));
+const AdminBusinessReferrals = lazy(() => import("@/pages/admin-business-referrals"));
 const OgAdvantage = lazy(() => import("@/pages/og-advantage"));
 const CreditsPage = lazy(() => import("@/pages/credits"));
 const EarningOpportunities = lazy(() => import("@/pages/earning-opportunities"));
@@ -422,6 +423,7 @@ function Router() {
       <Route path="/admin/growth-engine" component={() => <AdminRoute component={AdminGrowthEngine} />} />
       <Route path="/admin/local-businesses" component={() => <AdminRoute component={AdminLocalBusinesses} />} />
       <Route path="/admin/service-offers" component={() => <AdminRoute component={AdminServiceOffers} />} />
+      <Route path="/admin/business-referrals" component={() => <AdminRoute component={AdminBusinessReferrals} />} />
       <Route path="/og-advantage" component={() => <Suspense fallback={<PageLoader />}><OgAdvantage /></Suspense>} />
        <Route path="/services" component={() => <Suspense fallback={<PageLoader />}><BrowseServices /></Suspense>} />
        <Route path="/offer-service" component={() => <ProtectedRoute component={OfferService} />} />

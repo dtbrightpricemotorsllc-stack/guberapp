@@ -7161,6 +7161,9 @@ return (
 <div className="flex items-center justify-between mb-4">
 <h1 className="text-xl font-display font-bold">Admin Panel</h1>
  <div className="flex flex-wrap justify-end gap-2">
+ <Button asChild variant="outline" size="sm" data-testid="link-admin-business-referrals">
+ <a href="/admin/business-referrals"><DollarSign className="h-3 w-3 mr-1" />Distributor codes</a>
+ </Button>
  <Button asChild variant="outline" size="sm" data-testid="link-admin-service-offers">
  <a href="/admin/service-offers"><ShieldAlert className="h-3 w-3 mr-1" />Services moderation</a>
  </Button>

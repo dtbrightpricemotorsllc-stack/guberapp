@@ -444,12 +444,15 @@ app.use((req, res, next) => {
     ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS business_account_id INTEGER;
     CREATE TABLE IF NOT EXISTS business_referral_codes (
       code TEXT PRIMARY KEY,
+      label TEXT,
       owner_user_id INTEGER,
-      owner_label TEXT NOT NULL,
+      owner_label TEXT,
       active BOOLEAN NOT NULL DEFAULT true,
       expires_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT NOW()
     );
+    ALTER TABLE business_referral_codes ADD COLUMN IF NOT EXISTS label TEXT;
+    ALTER TABLE business_referral_codes ALTER COLUMN owner_label DROP NOT NULL;
     CREATE TABLE IF NOT EXISTS business_referral_attributions (
       id SERIAL PRIMARY KEY,
       business_account_id INTEGER NOT NULL UNIQUE,
@@ -478,9 +481,20 @@ app.use((req, res, next) => {
       updated_at TIMESTAMP DEFAULT NOW(),
       UNIQUE (business_account_id, requirement_key)
     );
+    CREATE TABLE IF NOT EXISTS business_referral_code_owner_history (
+      id SERIAL PRIMARY KEY,
+      invitation_code TEXT NOT NULL REFERENCES business_referral_codes(code),
+      previous_owner_user_id INTEGER,
+      previous_owner_label TEXT,
+      new_owner_user_id INTEGER,
+      new_owner_label TEXT,
+      changed_by INTEGER NOT NULL,
+      changed_at TIMESTAMP DEFAULT NOW()
+    );
     CREATE INDEX IF NOT EXISTS idx_biz_referrals_distributor ON business_referral_attributions(distributor_user_id);
     CREATE INDEX IF NOT EXISTS idx_biz_verification_evidence_account ON business_verification_evidence(business_account_id);
-    INSERT INTO business_referral_codes (code, owner_label) VALUES
+    CREATE INDEX IF NOT EXISTS idx_biz_referral_owner_history_code ON business_referral_code_owner_history(invitation_code, changed_at DESC);
+    INSERT INTO business_referral_codes (code, label) VALUES
       ('TG-HKH94G', 'Team GUBER distributor 1'),
       ('TG-AD8P7S', 'Team GUBER distributor 2'),
       ('TG-DY2WKH', 'Team GUBER distributor 3'),
@@ -491,6 +505,13 @@ app.use((req, res, next) => {
       ('TG-5ZSKQA', 'Team GUBER distributor 8'),
       ('TG-D6WAWA', 'Team GUBER distributor 9')
     ON CONFLICT (code) DO NOTHING;
+    UPDATE business_referral_codes
+       SET label = owner_label
+     WHERE label IS NULL AND owner_label IS NOT NULL;
+    ALTER TABLE business_referral_codes ALTER COLUMN label SET NOT NULL;
+    UPDATE business_referral_codes
+       SET owner_label = NULL
+     WHERE owner_user_id IS NULL AND owner_label = label;
     ALTER TABLE business_referral_attributions ADD COLUMN IF NOT EXISTS cashout_request_id INTEGER;
   `).catch(e => console.error("[migration] business tables error:", e));
 
@@ -940,6 +961,8 @@ app.use((req, res, next) => {
       status            TEXT NOT NULL DEFAULT 'pending',
       payout_method     TEXT,
       payout_details    TEXT,
+      payout_destination_account_id TEXT,
+      payout_reference  TEXT,
       admin_note        TEXT,
       created_at        TIMESTAMP DEFAULT NOW(),
       reviewed_at       TIMESTAMP,
@@ -949,6 +972,8 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_cashout_requests_status ON cashout_requests(status);
     ALTER TABLE cashout_requests ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT 'credits';
     ALTER TABLE cashout_requests ADD COLUMN IF NOT EXISTS business_referral_id INTEGER;
+    ALTER TABLE cashout_requests ADD COLUMN IF NOT EXISTS payout_destination_account_id TEXT;
+    ALTER TABLE cashout_requests ADD COLUMN IF NOT EXISTS payout_reference TEXT;
   `).catch(e => console.error("[migration] credit ledger / cashout tables error:", e));
 
   // ── Mission Instances + Proofs tables ─────────────────────────────────────

@@ -154,6 +154,41 @@ function requirementsFor(industry: string | null | undefined) {
   );
 }
 
+export function resolveBusinessReferralPayoutOwner(
+  attribution: { distributor_user_id?: number | null; distributor_label?: string | null },
+  codeOwner: { owner_user_id?: number | null; owner_label?: string | null },
+) {
+  const snapshottedOwnerId = attribution.distributor_user_id == null
+    ? null
+    : Number(attribution.distributor_user_id);
+  if (snapshottedOwnerId != null) {
+    return {
+      ownerUserId: snapshottedOwnerId,
+      ownerLabel: attribution.distributor_label || null,
+      source: "attribution" as const,
+    };
+  }
+  const currentOwnerId = codeOwner.owner_user_id == null ? null : Number(codeOwner.owner_user_id);
+  if (currentOwnerId == null) return null;
+  return {
+    ownerUserId: currentOwnerId,
+    ownerLabel: codeOwner.owner_label || null,
+    source: "code" as const,
+  };
+}
+
+export function getBusinessReferralCashoutBlock(user: {
+  idVerified?: boolean | null;
+  stripeAccountId?: string | null;
+  stripeAccountStatus?: string | null;
+} | null | undefined) {
+  if (!user?.idVerified) return "ID verification is required before cashing out referral earnings";
+  if (!user.stripeAccountId || user.stripeAccountStatus !== "active") {
+    return "An active Stripe Connect payout account is required before cashing out referral earnings";
+  }
+  return null;
+}
+
 export function getBusinessRequirementsForIndustry(industry: string | null | undefined) {
   return requirementsFor(industry);
 }
@@ -193,6 +228,10 @@ async function accountFor(req: Request) {
   return storage.getBusinessAccount(req.session.userId);
 }
 
+async function lockBusinessReferralCode(client: { query: (sql: string, params?: unknown[]) => Promise<any> }, code: string) {
+  await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [code]);
+}
+
 async function maybeQualifyReferral(businessAccountId: number, adminId?: number) {
   const client = await pool.connect();
   let attribution: any;
@@ -202,6 +241,17 @@ async function maybeQualifyReferral(businessAccountId: number, adminId?: number)
     // Serialize qualification by business account. The unique attribution and
     // conditional reward update then make retries harmless.
     await client.query("SELECT pg_advisory_xact_lock($1)", [businessAccountId]);
+    const codeResult = await client.query(
+      `SELECT invitation_code
+         FROM business_referral_attributions
+        WHERE business_account_id = $1`,
+      [businessAccountId],
+    );
+    if (!codeResult.rows[0]) {
+      await client.query("COMMIT");
+      return null;
+    }
+    await lockBusinessReferralCode(client, codeResult.rows[0].invitation_code);
     const result = await client.query(
       `SELECT a.*, c.owner_user_id, c.owner_label, b.owner_user_id AS business_owner_id
          FROM business_referral_attributions a
@@ -216,11 +266,16 @@ async function maybeQualifyReferral(businessAccountId: number, adminId?: number)
       await client.query("COMMIT");
       return attribution || null;
     }
-    if (attribution.status === "rejected" || !attribution.owner_user_id) {
+    if (attribution.status === "rejected") {
       await client.query("COMMIT");
       return attribution;
     }
-    if (Number(attribution.owner_user_id) === Number(attribution.business_owner_id)) {
+    const payoutOwner = resolveBusinessReferralPayoutOwner(attribution, attribution);
+    if (!payoutOwner) {
+      await client.query("COMMIT");
+      return attribution;
+    }
+    if (payoutOwner.ownerUserId === Number(attribution.business_owner_id)) {
       await client.query(
         `UPDATE business_referral_attributions SET status = 'rejected', reward_status = 'reversed' WHERE id = $1`,
         [attribution.id],
@@ -230,12 +285,14 @@ async function maybeQualifyReferral(businessAccountId: number, adminId?: number)
     }
     const updated = await client.query(
       `UPDATE business_referral_attributions
-          SET status = 'qualified', reward_status = 'approved', qualified_at = NOW(), distributor_user_id = $2
+          SET status = 'qualified', reward_status = 'approved', qualified_at = NOW(),
+              distributor_user_id = $2, distributor_label = $3
         WHERE id = $1 AND reward_status = 'pending'
         RETURNING *`,
-      [attribution.id, attribution.owner_user_id],
+      [attribution.id, payoutOwner.ownerUserId, payoutOwner.ownerLabel],
     );
     qualified = updated.rowCount === 1;
+    if (updated.rows[0]) attribution = { ...attribution, ...updated.rows[0] };
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
@@ -247,10 +304,10 @@ async function maybeQualifyReferral(businessAccountId: number, adminId?: number)
   await storage.createAuditLog({
     userId: adminId ?? null,
     action: "business_referral_cash_reward_qualified",
-    details: `$5 cash reward approved for distributor ${attribution.owner_user_id} from business account ${businessAccountId}.`,
+    details: `$5 cash reward approved for distributor ${attribution.distributor_user_id} from business account ${businessAccountId}.`,
   });
   await storage.createNotification({
-    userId: attribution.owner_user_id,
+    userId: attribution.distributor_user_id,
     title: "$5 business referral reward approved",
     body: "A business you referred completed official verification. Your $5 cash reward is ready for cash-out review.",
     type: "business_referral_reward",
@@ -354,7 +411,7 @@ export async function registerBusinessExperienceRoutes(
     if (!account) return res.status(404).json({ message: "No business account found" });
     const result = await pool.query(
       `SELECT a.invitation_code, a.status, a.reward_status, a.reward_amount_cents,
-              a.qualified_at, c.owner_label
+              a.qualified_at, a.distributor_label AS owner_label
          FROM business_referral_attributions a
          LEFT JOIN business_referral_codes c ON c.code = a.invitation_code
         WHERE a.business_account_id = $1`,
@@ -364,8 +421,13 @@ export async function registerBusinessExperienceRoutes(
   });
 
   app.post("/api/business/referral/cashout", requireAuth, async (req, res) => {
-    const payoutMethod = String(req.body.payoutMethod || "stripe_connect").slice(0, 80);
-    const payoutDetails = req.body.payoutDetails ? String(req.body.payoutDetails).slice(0, 1000) : null;
+    const payoutUser = await storage.getUser(req.session.userId!);
+    const cashoutBlock = getBusinessReferralCashoutBlock(payoutUser ? {
+      idVerified: payoutUser.idVerified,
+      stripeAccountId: payoutUser.stripeAccountId,
+      stripeAccountStatus: payoutUser.stripeAccountStatus,
+    } : null);
+    if (cashoutBlock) return res.status(409).json({ message: cashoutBlock });
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -383,10 +445,16 @@ export async function registerBusinessExperienceRoutes(
       }
       const inserted = await client.query(
         `INSERT INTO cashout_requests
-          (user_id, credits_requested, dollar_amount, status, payout_method, payout_details, source_type, business_referral_id)
-         VALUES ($1, 0, $2, 'pending', $3, $4, 'business_referral', $5)
+          (user_id, credits_requested, dollar_amount, status, payout_method, payout_details,
+           payout_destination_account_id, source_type, business_referral_id)
+         VALUES ($1, 0, $2, 'pending', 'stripe_connect', NULL, $3, 'business_referral', $4)
          RETURNING *`,
-        [req.session.userId, Number(reward.rows[0].reward_amount_cents) / 100, payoutMethod, payoutDetails, reward.rows[0].id],
+        [
+          req.session.userId,
+          Number(reward.rows[0].reward_amount_cents) / 100,
+          payoutUser!.stripeAccountId,
+          reward.rows[0].id,
+        ],
       );
       await client.query(
         `UPDATE business_referral_attributions SET cashout_request_id = $1 WHERE id = $2`,
@@ -540,25 +608,130 @@ export async function registerBusinessExperienceRoutes(
     res.json(result.rows);
   });
 
+  app.get("/api/admin/business-referral-codes", requireAdmin, async (_req, res) => {
+    const result = await pool.query(
+      `SELECT c.code, c.label, c.owner_user_id, c.owner_label, c.active, c.expires_at,
+              u.username AS owner_username, u.full_name AS owner_full_name,
+              u.email AS owner_email, u.stripe_account_status, u.id_verified,
+              COUNT(a.id)::int AS signup_count,
+              COUNT(a.id) FILTER (WHERE a.status = 'qualified')::int AS verified_signups,
+              COUNT(a.id) FILTER (
+                WHERE a.status = 'qualified' AND a.distributor_user_id = c.owner_user_id
+              )::int AS current_owner_verified_signups,
+              COALESCE(SUM(a.reward_amount_cents) FILTER (
+                WHERE a.reward_status = 'approved' AND a.cashout_request_id IS NULL
+                  AND a.distributor_user_id = c.owner_user_id
+              ), 0)::int AS cash_balance_cents,
+              COALESCE(SUM(a.reward_amount_cents) FILTER (
+                WHERE a.reward_status = 'approved' AND a.cashout_request_id IS NOT NULL
+                  AND a.distributor_user_id = c.owner_user_id
+              ), 0)::int AS pending_cashout_cents,
+              COALESCE(SUM(a.reward_amount_cents) FILTER (
+                WHERE a.reward_status = 'paid' AND a.distributor_user_id = c.owner_user_id
+              ), 0)::int AS paid_cash_cents
+         FROM business_referral_codes c
+         LEFT JOIN users u ON u.id = c.owner_user_id
+         LEFT JOIN business_referral_attributions a ON a.invitation_code = c.code
+        GROUP BY c.code, c.label, c.owner_user_id, c.owner_label, c.active, c.expires_at,
+                 u.username, u.full_name, u.email, u.stripe_account_status, u.id_verified
+        ORDER BY c.created_at ASC, c.code ASC`,
+    );
+    res.json(result.rows);
+  });
+
+  app.get("/api/admin/business-referral-owners", requireAdmin, async (_req, res) => {
+    const result = await pool.query(
+      `SELECT id, username, full_name, email, stripe_account_status, id_verified
+         FROM users
+        WHERE deleted_at IS NULL
+        ORDER BY LOWER(full_name) ASC, id ASC`,
+    );
+    res.json(result.rows);
+  });
+
   app.patch("/api/admin/business-referral-codes/:code", requireAdmin, async (req, res) => {
     const code = String(req.params.code || "").trim().toUpperCase();
     const ownerUserId = req.body.ownerUserId == null || req.body.ownerUserId === "" ? null : Number(req.body.ownerUserId);
-    const ownerLabel = String(req.body.ownerLabel || "").trim().slice(0, 200);
-    if (!ownerLabel) return res.status(400).json({ message: "An explicit distributor label is required" });
-    if (ownerUserId != null && (!Number.isInteger(ownerUserId) || !(await storage.getUser(ownerUserId)))) {
+    if (ownerUserId != null && !Number.isInteger(ownerUserId)) {
       return res.status(400).json({ message: "Distributor user was not found" });
     }
-    const result = await pool.query(
-      `UPDATE business_referral_codes SET owner_user_id = $1, owner_label = $2 WHERE code = $3 RETURNING *`,
-      [ownerUserId, ownerLabel, code],
-    );
-    if (!result.rows[0]) return res.status(404).json({ message: "Invitation code not found" });
+    const owner = ownerUserId == null ? null : await storage.getUser(ownerUserId);
+    if (ownerUserId != null && !owner) {
+      return res.status(400).json({ message: "Distributor user was not found" });
+    }
+    const ownerLabel = owner ? String(owner.fullName || owner.username).trim().slice(0, 200) : null;
+    const client = await pool.connect();
+    let updated: any;
+    let previous: any;
+    try {
+      await client.query("BEGIN");
+      await lockBusinessReferralCode(client, code);
+      const current = await client.query(
+        `SELECT code, label, owner_user_id, owner_label
+           FROM business_referral_codes
+          WHERE code = $1
+          FOR UPDATE`,
+        [code],
+      );
+      previous = current.rows[0];
+      if (!previous) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Invitation code not found" });
+      }
+      const result = await client.query(
+        `UPDATE business_referral_codes
+            SET owner_user_id = $1, owner_label = $2
+          WHERE code = $3
+          RETURNING *`,
+        [ownerUserId, ownerLabel, code],
+      );
+      updated = result.rows[0];
+      if (Number(previous.owner_user_id || 0) !== Number(ownerUserId || 0) ||
+          String(previous.owner_label || "") !== String(ownerLabel || "")) {
+        await client.query(
+          `INSERT INTO business_referral_code_owner_history
+            (invitation_code, previous_owner_user_id, previous_owner_label,
+             new_owner_user_id, new_owner_label, changed_by)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            code,
+            previous.owner_user_id,
+            previous.owner_label,
+            ownerUserId,
+            ownerLabel,
+            req.session.userId,
+          ],
+        );
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
     await storage.createAuditLog({
       userId: req.session.userId!,
       action: "business_referral_code_owner_changed",
-      details: `Invitation code ${code} assigned to ${ownerLabel}${ownerUserId ? ` (user ${ownerUserId})` : " (unassigned)"}.`,
+      details: `Invitation code ${code} changed from ${previous.owner_label || "unassigned"}${previous.owner_user_id ? ` (user ${previous.owner_user_id})` : ""} to ${ownerLabel || "unassigned"}${ownerUserId ? ` (user ${ownerUserId})` : ""}.`,
     });
-    res.json(result.rows[0]);
+    if (ownerUserId != null) {
+      const eligiblePending = await pool.query(
+        `SELECT a.business_account_id
+           FROM business_referral_attributions a
+           JOIN business_accounts b ON b.id = a.business_account_id
+          WHERE a.invitation_code = $1
+            AND a.distributor_user_id IS NULL
+            AND a.reward_status = 'pending'
+            AND b.status = 'verified_business'
+          ORDER BY a.created_at ASC`,
+        [code],
+      );
+      for (const row of eligiblePending.rows) {
+        await maybeQualifyReferral(Number(row.business_account_id), req.session.userId);
+      }
+    }
+    res.json(updated);
   });
 
   app.patch("/api/admin/business-referrals/:id", requireAdmin, async (req, res) => {
@@ -587,28 +760,40 @@ export async function recordBusinessReferral(
 ) {
   const code = String(invitationCode || "").trim().toUpperCase();
   if (!code) return null;
-  const result = await pool.query(
-    `SELECT code, owner_user_id, owner_label, active, expires_at
-       FROM business_referral_codes WHERE code = $1`,
-    [code],
-  );
-  const row = result.rows[0];
-  if (!row || !row.active || (row.expires_at && new Date(row.expires_at) <= new Date())) {
-    throw new Error("Invalid or expired invitation code");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await lockBusinessReferralCode(client, code);
+    const result = await client.query(
+      `SELECT code, owner_user_id, owner_label, active, expires_at
+         FROM business_referral_codes
+        WHERE code = $1`,
+      [code],
+    );
+    const row = result.rows[0];
+    if (!row || !row.active || (row.expires_at && new Date(row.expires_at) <= new Date())) {
+      throw new Error("Invalid or expired invitation code");
+    }
+    if (row.owner_user_id && Number(row.owner_user_id) === ownerUserIdForSelfCheck) {
+      throw new Error("You cannot use your own distributor code");
+    }
+    const inserted = await client.query(
+      `INSERT INTO business_referral_attributions
+        (business_account_id, invitation_code, distributor_user_id, distributor_label)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (business_account_id) DO NOTHING
+       RETURNING *`,
+      [businessAccountId, code, row.owner_user_id || null, row.owner_user_id ? row.owner_label : null],
+    );
+    if (!inserted.rows[0]) throw new Error("This business already has referral attribution");
+    await client.query("COMMIT");
+    return inserted.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
   }
-  if (row.owner_user_id && Number(row.owner_user_id) === ownerUserIdForSelfCheck) {
-    throw new Error("You cannot use your own distributor code");
-  }
-  const inserted = await pool.query(
-    `INSERT INTO business_referral_attributions
-      (business_account_id, invitation_code, distributor_user_id, distributor_label)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (business_account_id) DO NOTHING
-     RETURNING *`,
-    [businessAccountId, code, row.owner_user_id || null, row.owner_label],
-  );
-  if (!inserted.rows[0]) throw new Error("This business already has referral attribution");
-  return inserted.rows[0];
 }
 
 export async function qualifyBusinessReferral(businessAccountId: number, adminId?: number) {

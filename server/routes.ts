@@ -34811,9 +34811,31 @@ OUTPUT STYLE:
   // POST /api/admin/credits/cashout-requests/:id/approve
   app.post("/api/admin/credits/cashout-requests/:id/approve", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(String(req.params.id), 10);
       const { adminNote } = req.body;
-      await reviewCashoutRequest(id, req.session.userId!, "approved", adminNote);
+      await reviewCashoutRequest(
+        id,
+        req.session.userId!,
+        "approved",
+        adminNote,
+        async ({ requestId, userId, amountCents, destinationAccountId }) => {
+          const transfer = await stripe.transfers.create(
+            {
+              amount: amountCents,
+              currency: "usd",
+              destination: destinationAccountId,
+              description: `GUBER business referral cash-out #${requestId}`,
+              metadata: {
+                type: "business_referral_cashout",
+                cashoutRequestId: String(requestId),
+                userId: String(userId),
+              },
+            },
+            { idempotencyKey: `business-referral-cashout-${requestId}` },
+          );
+          return { id: transfer.id };
+        },
+      );
       res.json({ ok: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -34823,7 +34845,7 @@ OUTPUT STYLE:
   // POST /api/admin/credits/cashout-requests/:id/deny
   app.post("/api/admin/credits/cashout-requests/:id/deny", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(String(req.params.id), 10);
       const { adminNote } = req.body;
       await reviewCashoutRequest(id, req.session.userId!, "denied", adminNote);
       res.json({ ok: true });

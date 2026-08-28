@@ -1176,17 +1176,30 @@ export const businessReferralAttributions = pgTable("business_referral_attributi
   status: text("status").notNull().default("pending"),
   rewardStatus: text("reward_status").notNull().default("pending"),
   rewardAmountCents: integer("reward_amount_cents").notNull().default(500),
+  cashoutRequestId: integer("cashout_request_id"),
   qualifiedAt: timestamp("qualified_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const businessReferralCodes = pgTable("business_referral_codes", {
   code: text("code").primaryKey(),
+  label: text("label").notNull(),
   ownerUserId: integer("owner_user_id"),
-  ownerLabel: text("owner_label").notNull(),
+  ownerLabel: text("owner_label"),
   active: boolean("active").notNull().default(true),
   expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const businessReferralCodeOwnerHistory = pgTable("business_referral_code_owner_history", {
+  id: serial("id").primaryKey(),
+  invitationCode: text("invitation_code").notNull().references(() => businessReferralCodes.code),
+  previousOwnerUserId: integer("previous_owner_user_id"),
+  previousOwnerLabel: text("previous_owner_label"),
+  newOwnerUserId: integer("new_owner_user_id"),
+  newOwnerLabel: text("new_owner_label"),
+  changedBy: integer("changed_by").notNull(),
+  changedAt: timestamp("changed_at").defaultNow(),
 });
 
 export const businessVerificationEvidence = pgTable("business_verification_evidence", {
@@ -1209,6 +1222,7 @@ export const businessVerificationEvidence = pgTable("business_verification_evide
 
 export type BusinessReferralAttribution = typeof businessReferralAttributions.$inferSelect;
 export type BusinessReferralCode = typeof businessReferralCodes.$inferSelect;
+export type BusinessReferralCodeOwnerHistory = typeof businessReferralCodeOwnerHistory.$inferSelect;
 export type BusinessVerificationEvidence = typeof businessVerificationEvidence.$inferSelect;
 
 export type User = typeof users.$inferSelect;
@@ -2831,6 +2845,8 @@ export const cashoutRequests = pgTable("cashout_requests", {
   // pending | approved | denied | paid
   payoutMethod: text("payout_method"), // stripe | cash_app | venmo | other
   payoutDetails: text("payout_details"),
+  payoutDestinationAccountId: text("payout_destination_account_id"),
+  payoutReference: text("payout_reference"),
   adminNote: text("admin_note"),
   createdAt: timestamp("created_at").defaultNow(),
   reviewedAt: timestamp("reviewed_at"),
