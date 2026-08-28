@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useRoute, useSearch } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { GuberLogo } from "@/components/guber-logo";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,9 @@ function PasswordStrength({ password }: { password: string }) {
 
 export default function BusinessSignup() {
   const [, setLocation] = useLocation();
+  const [, joinParams] = useRoute("/business-join/:code");
+  const search = useSearch();
+  const invitationFromJoin = joinParams?.code || new URLSearchParams(search).get("invite") || "";
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -90,6 +93,7 @@ export default function BusinessSignup() {
     businessAddress: "",
     website: "",
     ein: "",
+    invitationCode: invitationFromJoin.toUpperCase(),
   });
   const [showPassword, setShowPassword] = useState(false);
   const [termsAgreed, setTermsAgreed] = useState(false);
@@ -211,6 +215,25 @@ export default function BusinessSignup() {
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-display tracking-[0.12em] uppercase" style={{ color: "#6B6B6B" }}>EIN / TAX ID <span style={{ color: "#4B4B4B" }}>(optional)</span></Label>
                 <Input value={form.ein} onChange={updateForm("ein")} type="text" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }} placeholder="XX-XXXXXXX" data-testid="input-ein" />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-display tracking-[0.12em] uppercase" style={{ color: "#6B6B6B" }}>
+                  INVITATION CODE <span style={{ color: "#4B4B4B" }}>(optional)</span>
+                </Label>
+                <Input
+                  value={form.invitationCode}
+                  onChange={updateForm("invitationCode")}
+                  type="text"
+                  className="rounded-xl h-11 text-sm px-4 border-0 uppercase"
+                  style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }}
+                  placeholder="TG-XXXXXX"
+                  maxLength={32}
+                  data-testid="input-business-invitation-code"
+                />
+                <p className="text-[10px] leading-relaxed" style={{ color: "#777" }}>
+                  Have a Team GUBER distributor code? Add it here so attribution follows your business setup. Leave blank if you do not have one.
+                </p>
               </div>
 
               <div className="space-y-1.5">

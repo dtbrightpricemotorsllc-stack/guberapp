@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Shield, Lock, CheckCircle2, CreditCard, Loader2, ShieldCheck, ArrowRight } from "lucide-react";
+import { Shield, Lock, CheckCircle2, CreditCard, Loader2, ShieldCheck, ArrowRight, ExternalLink, FileCheck2 } from "lucide-react";
 
 const GOLD = "#C6A85C";
 const GOLD_DK = "#A88A43";
@@ -28,6 +28,10 @@ export default function BizVerification() {
   const { data: account, isLoading } = useQuery<any>({
     queryKey: ["/api/business/account"],
   });
+  const { data: requirements } = useQuery<any>({
+    queryKey: ["/api/business/verification-requirements"],
+    enabled: Boolean(account),
+  });
 
   const [form, setForm] = useState({
     ein: "",
@@ -35,6 +39,7 @@ export default function BizVerification() {
     billingEmail: "",
     authorizedContactName: "",
   });
+  const [requirementDrafts, setRequirementDrafts] = useState<Record<string, { evidenceUrl: string; note: string }>>({});
 
   const payMutation = useMutation({
     mutationFn: async () => {
@@ -56,8 +61,9 @@ export default function BizVerification() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Business Verified", description: "Your business is now fully verified." });
+      toast({ title: "Verification submitted", description: "Your business details are ready for official review." });
       queryClient.invalidateQueries({ queryKey: ["/api/business/account"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/business/verification-requirements"] });
     },
     onError: (err: any) => {
       toast({ title: "Verification Failed", description: err.message, variant: "destructive" });
@@ -66,6 +72,24 @@ export default function BizVerification() {
 
   const update = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [field]: e.target.value }));
+
+  const submitEvidence = async (requirementKey: string) => {
+    const draft = requirementDrafts[requirementKey] || { evidenceUrl: "", note: "" };
+    try {
+      await apiRequest("POST", "/api/business/verification-evidence", { requirementKey, ...draft });
+      toast({ title: "Evidence submitted", description: "An authorized reviewer will check this requirement." });
+      queryClient.invalidateQueries({ queryKey: ["/api/business/verification-requirements"] });
+      setRequirementDrafts((current) => ({ ...current, [requirementKey]: { evidenceUrl: "", note: "" } }));
+    } catch (err: any) {
+      toast({ title: "Could not submit evidence", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const updateRequirementDraft = (key: string, field: "evidenceUrl" | "note", value: string) =>
+    setRequirementDrafts((current) => ({
+      ...current,
+      [key]: { ...(current[key] || { evidenceUrl: "", note: "" }), [field]: value },
+    }));
 
   if (isLoading) {
     return (
@@ -89,6 +113,49 @@ export default function BizVerification() {
             Required to unlock full candidate visibility and direct outreach through GUBER Business
           </p>
         </div>
+
+        {requirements?.requirements?.length > 0 && !isVerified && (
+          <div className="mb-5 rounded-2xl p-6" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+            <div className="mb-5 flex items-start gap-3">
+              <FileCheck2 className="mt-0.5 h-5 w-5" style={{ color: GOLD }} />
+              <div>
+                <h2 className="text-sm font-bold text-foreground">Requirements for {requirements.businessType}</h2>
+                <p className="mt-1 text-[11px] leading-relaxed" style={{ color: TEXT_MUTED }}>{requirements.officialGuidance}</p>
+              </div>
+            </div>
+            <div className="space-y-4">
+              {requirements.requirements.map((requirement: any) => {
+                const draft = requirementDrafts[requirement.key] || { evidenceUrl: "", note: "" };
+                const complete = requirement.status === "approved";
+                return (
+                  <div key={requirement.key} className="rounded-xl p-4" style={{ background: SURFACE2, border: `1px solid ${complete ? `${SUCCESS}30` : BORDER}` }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-bold text-foreground">{requirement.label}</p>
+                        <p className="mt-1 text-[11px] leading-relaxed" style={{ color: TEXT_SEC }}>{requirement.description}</p>
+                      </div>
+                      <span className="whitespace-nowrap text-[10px] font-bold uppercase tracking-wide" style={{ color: complete ? SUCCESS : requirement.status === "submitted" ? GOLD : TEXT_SEC }}>
+                        {requirement.isAdminOverride ? "Approved by admin" : requirement.status}
+                      </span>
+                    </div>
+                    <a href={requirement.sourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold" style={{ color: GOLD }}>
+                      Official source <ExternalLink className="h-3 w-3" />
+                    </a>
+                    {!complete && (
+                      <div className="mt-3 space-y-2">
+                        <Input value={draft.evidenceUrl} onChange={(event) => updateRequirementDraft(requirement.key, "evidenceUrl", event.target.value)} placeholder="Link to official document or registry result" className="h-9 text-xs" />
+                        <div className="flex gap-2">
+                          <Input value={draft.note} onChange={(event) => updateRequirementDraft(requirement.key, "note", event.target.value)} placeholder="Anything D.D. should explain to the reviewer?" className="h-9 text-xs" />
+                          <Button type="button" size="sm" className="h-9 whitespace-nowrap" onClick={() => submitEvidence(requirement.key)} disabled={!draft.evidenceUrl && !draft.note}>Submit</Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {isVerified ? (
           <div className="rounded-2xl overflow-hidden" style={{ background: SURFACE, border: `1px solid ${SUCCESS}20` }}>

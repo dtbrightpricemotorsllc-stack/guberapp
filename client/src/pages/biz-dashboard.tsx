@@ -120,6 +120,14 @@ export default function BizDashboard() {
     queryKey: ["/api/business/account"],
     retry: false,
   });
+  const { data: dashboardConfig } = useQuery<any>({
+    queryKey: ["/api/business/dashboard-config"],
+    retry: false,
+  });
+  const { data: businessPlans } = useQuery<any>({
+    queryKey: ["/api/business/plans"],
+    retry: false,
+  });
 
   const { data: profile, isLoading: profileLoading, isFetching: profileFetching } = useQuery<BusinessProfile>({
     queryKey: ["/api/business/profile"],
@@ -233,6 +241,40 @@ export default function BizDashboard() {
             </div>
           </div>
         </div>
+
+        {dashboardConfig && (
+          <section className="mb-8 rounded-2xl p-5" style={{ background: SURFACE, border: `1px solid ${BORDER}` }} data-testid="section-business-modules">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: GOLD_DK }}>Business workspace</p>
+                <h2 className="mt-1 text-base font-bold" style={{ color: TEXT_PRIMARY }}>{dashboardConfig.businessType} tools for {companyName}</h2>
+                <p className="mt-1 text-xs" style={{ color: TEXT_MUTED }}>Your dashboard is focused by business type. Explore keeps the rest of GUBER one click away.</p>
+              </div>
+              <Link href={dashboardConfig.explore.href} className="text-xs font-semibold" style={{ color: GOLD }}>Explore GUBER →</Link>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {dashboardConfig.modules.map((module: any) => (
+                <Link key={module.key} href={module.href}>
+                  <div className="h-full rounded-xl p-3 transition-colors hover:bg-white/[0.03]" style={{ border: `1px solid ${BORDER}` }}>
+                    <p className="text-sm font-semibold" style={{ color: TEXT_PRIMARY }}>{module.label}</p>
+                    <p className="mt-1 text-[11px] leading-relaxed" style={{ color: TEXT_MUTED }}>{module.description}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+            {businessPlans && (
+              <div className="mt-4 flex flex-col gap-2 rounded-xl p-3 sm:flex-row sm:items-center sm:justify-between" style={{ background: "rgba(198,168,92,0.05)", border: `1px solid ${GOLD_BORDER}` }}>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: GOLD_DK }}>Current plan</p>
+                  <p className="mt-1 text-sm font-semibold" style={{ color: TEXT_PRIMARY }}>{businessPlans.current?.planType === "business_pro" ? "Business Pro" : businessPlans.current?.planType === "business_plus" ? "Business+" : "Business"} <span className="text-xs font-normal" style={{ color: TEXT_MUTED }}>· {businessPlans.current?.status || "active"}</span></p>
+                </div>
+                <p className="max-w-sm text-[10px] leading-relaxed sm:text-right" style={{ color: TEXT_MUTED }}>
+                  {businessPlans.foundingOffer?.eligible ? `Founding Local Business Offer: $${(businessPlans.foundingOffer.monthlyPriceCents / 100).toFixed(2)}/month through September 30, 2026.` : "Plan access and billing status are managed from your business account."}
+                </p>
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Separation notes */}
         <p className="text-[10px] leading-relaxed -mt-6" style={{ color: TEXT_MUTED }} data-testid="text-biz-separation-note">

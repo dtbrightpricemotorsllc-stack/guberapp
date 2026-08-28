@@ -495,6 +495,12 @@ export interface BusinessSignupDeps {
   runTransaction?: (fn: () => Promise<void>) => Promise<void>;
   sendWelcomeNotification?: (userId: number) => Promise<void>;
   runBackgroundCheck?: (userId: number, fullName: string) => void;
+  recordBusinessSignupAttribution?: (userId: number, data: {
+    invitationCode?: string;
+    legalBusinessName: string;
+    email: string;
+    industry: string;
+  }) => Promise<void>;
 }
 
 /**
@@ -713,6 +719,7 @@ export function handleBusinessSignup(storage: BusinessSignupStorage, deps: Busin
         contactPhone,
         billingEmail,
         description,
+        invitationCode,
       } = parsed.data;
 
       const pwError = validatePasswordStrength(password);
@@ -794,6 +801,15 @@ export function handleBusinessSignup(storage: BusinessSignupStorage, deps: Busin
       }
 
       if (!user) return res.status(500).json({ message: "User creation failed" });
+
+      if (invitationCode && deps.recordBusinessSignupAttribution) {
+        await deps.recordBusinessSignupAttribution(user.id, {
+          invitationCode,
+          legalBusinessName,
+          email,
+          industry: industry || "",
+        });
+      }
 
       if (deps.sendWelcomeNotification) {
         await deps.sendWelcomeNotification(user.id);

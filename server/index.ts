@@ -340,6 +340,7 @@ app.use((req, res, next) => {
       verification_submitted_at TIMESTAMP,
       verified_at TIMESTAMP,
       company_logo TEXT,
+      invitation_code TEXT,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     );
@@ -439,6 +440,58 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_biz_offers_user ON business_offers(user_id);
     CREATE INDEX IF NOT EXISTS idx_worker_proj_user ON worker_business_projections(user_id);
     CREATE INDEX IF NOT EXISTS idx_bg_check_user ON background_check_eligibility(user_id);
+    ALTER TABLE business_accounts ADD COLUMN IF NOT EXISTS invitation_code TEXT;
+    ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS business_account_id INTEGER;
+    CREATE TABLE IF NOT EXISTS business_referral_codes (
+      code TEXT PRIMARY KEY,
+      owner_user_id INTEGER,
+      owner_label TEXT NOT NULL,
+      active BOOLEAN NOT NULL DEFAULT true,
+      expires_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS business_referral_attributions (
+      id SERIAL PRIMARY KEY,
+      business_account_id INTEGER NOT NULL UNIQUE,
+      invitation_code TEXT NOT NULL,
+      distributor_user_id INTEGER,
+      distributor_label TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      reward_status TEXT NOT NULL DEFAULT 'pending',
+      reward_amount_cents INTEGER NOT NULL DEFAULT 500,
+      cashout_request_id INTEGER,
+      qualified_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS business_verification_evidence (
+      id SERIAL PRIMARY KEY,
+      business_account_id INTEGER NOT NULL,
+      requirement_key TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'submitted',
+      evidence_url TEXT,
+      note TEXT,
+      is_admin_override BOOLEAN NOT NULL DEFAULT false,
+      reviewed_by INTEGER,
+      reviewed_at TIMESTAMP,
+      override_reason TEXT,
+      submitted_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE (business_account_id, requirement_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_biz_referrals_distributor ON business_referral_attributions(distributor_user_id);
+    CREATE INDEX IF NOT EXISTS idx_biz_verification_evidence_account ON business_verification_evidence(business_account_id);
+    INSERT INTO business_referral_codes (code, owner_label) VALUES
+      ('TG-HKH94G', 'Team GUBER distributor 1'),
+      ('TG-AD8P7S', 'Team GUBER distributor 2'),
+      ('TG-DY2WKH', 'Team GUBER distributor 3'),
+      ('TG-39LMPV', 'Team GUBER distributor 4'),
+      ('TG-ANQGYQ', 'Team GUBER distributor 5'),
+      ('TG-FLEXET', 'Team GUBER distributor 6'),
+      ('TG-E4WRT5', 'Team GUBER distributor 7'),
+      ('TG-5ZSKQA', 'Team GUBER distributor 8'),
+      ('TG-D6WAWA', 'Team GUBER distributor 9')
+    ON CONFLICT (code) DO NOTHING;
+    ALTER TABLE business_referral_attributions ADD COLUMN IF NOT EXISTS cashout_request_id INTEGER;
   `).catch(e => console.error("[migration] business tables error:", e));
 
   await pool.query(`
@@ -894,6 +947,8 @@ app.use((req, res, next) => {
     );
     CREATE INDEX IF NOT EXISTS idx_cashout_requests_user   ON cashout_requests(user_id);
     CREATE INDEX IF NOT EXISTS idx_cashout_requests_status ON cashout_requests(status);
+    ALTER TABLE cashout_requests ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT 'credits';
+    ALTER TABLE cashout_requests ADD COLUMN IF NOT EXISTS business_referral_id INTEGER;
   `).catch(e => console.error("[migration] credit ledger / cashout tables error:", e));
 
   // ── Mission Instances + Proofs tables ─────────────────────────────────────

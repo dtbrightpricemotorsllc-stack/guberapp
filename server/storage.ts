@@ -1304,11 +1304,12 @@ export class DatabaseStorage implements IStorage {
     await db.update(passwordResetTokens).set({ used: true }).where(eq(passwordResetTokens.token, token));
   }
 
-  async getMarketplaceItems(filters?: { category?: string; status?: string; search?: string; priceMin?: number; priceMax?: number; verifiedOnly?: boolean; makeOfferEnabled?: boolean; sellerAvailability?: string; sort?: string }): Promise<MarketplaceItem[]> {
+  async getMarketplaceItems(filters?: { category?: string; status?: string; search?: string; priceMin?: number; priceMax?: number; verifiedOnly?: boolean; makeOfferEnabled?: boolean; sellerAvailability?: string; sort?: string; businessAccountId?: number }): Promise<MarketplaceItem[]> {
     const activeStatuses = ["available", "active"];
     const statusFilter = filters?.status ? [filters.status] : activeStatuses;
     const allItems = await db.select().from(marketplaceItems);
     let items = allItems.filter(i => statusFilter.includes(i.status || "available"));
+    if (filters?.businessAccountId !== undefined) items = items.filter(i => i.businessAccountId === filters.businessAccountId);
     if (filters?.category) items = items.filter(i => i.category === filters.category);
     if (filters?.search) {
       const q = filters.search.toLowerCase();

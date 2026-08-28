@@ -71,6 +71,7 @@ import { DAY1_OG_PROMOTION_ENDS_AT, DAY1_OG_PROMOTION_END_LABEL, canCreateDay1Og
 import { evaluatePayoutMultiFactor } from "./payout-guard";
 import { calculateStandardJobPayment } from "./job-payment-accounting";
 import { settleStandardDestinationCharge } from "./job-payment-settlement";
+import { registerBusinessExperienceRoutes, recordBusinessReferral, qualifyBusinessReferral, submitBusinessRegistrationEvidence, businessPlatformFeeRate } from "./business-experience";
 import * as assetCustody from "./asset-custody";
 import {
   PROTECTION_PACKAGES,
@@ -973,6 +974,7 @@ export async function registerRoutes(
   }
 
   registerServiceOfferRoutes(app, { requireAuth, requireAdmin, checkSuspended });
+  registerBusinessExperienceRoutes(app, { requireAuth, requireAdmin });
 
   app.get("/api/config", (_req: Request, res: Response) => {
     res.json({ googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "" });
@@ -2879,6 +2881,17 @@ export async function registerRoutes(
         throw txErr;
       }
     },
+    recordBusinessSignupAttribution: async (userId, data) => {
+      const account = await storage.createBusinessAccount({
+        ownerUserId: userId,
+        businessName: data.legalBusinessName.trim(),
+        workEmail: data.email,
+        industry: data.industry,
+        status: "pending_business",
+        invitationCode: data.invitationCode?.trim().toUpperCase() || null,
+      });
+      await recordBusinessReferral(account.id, data.invitationCode, userId);
+    },
     sendWelcomeNotification: async (userId) => {
       await storage.createNotification({
         userId,
@@ -2898,7 +2911,7 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
       }
-      const { businessName, workEmail, phone, industry, companyNeedsSummary, fullName, username, password, businessAddress, website, ein } = parsed.data;
+      const { businessName, workEmail, phone, industry, companyNeedsSummary, fullName, username, password, businessAddress, website, ein, invitationCode } = parsed.data;
 
       const pwError = validatePasswordStrength(password);
       if (pwError) return res.status(400).json({ message: pwError });
@@ -2950,8 +2963,13 @@ export async function registerRoutes(
           phone: phone || null,
           industry,
           companyNeedsSummary: companyNeedsSummary || null,
+            invitationCode: invitationCode?.trim().toUpperCase() || null,
           status: "pending_business",
         });
+
+          if (invitationCode?.trim()) {
+            await recordBusinessReferral(bizAccount.id, invitationCode, user.id);
+          }
 
         await storage.createBusinessProfile({
           userId: user.id,
@@ -3032,13 +3050,14 @@ export async function registerRoutes(
       billingEmail,
       authorizedContactName,
       verificationSubmittedAt: new Date(),
-      status: "verified_business",
-      verifiedAt: new Date(),
+      status: "approved_limited",
+      verifiedAt: null,
     });
+    await submitBusinessRegistrationEvidence(acct.id, ein, businessAddress);
 
     await notify(req.session.userId, {
-      title: "Business Verified",
-      body: "Your business has been verified. You now have full access to the Talent Explorer.",
+      title: "Verification submitted",
+      body: "Your EIN and business details were submitted. D.D. will show any additional requirements and an authorized reviewer will confirm full business access.",
       type: "system",
     });
 
@@ -5681,9 +5700,14 @@ export async function registerRoutes(
           if (offer && (offer.status === "agreed_payment_pending" || offer.status === "payment_pending" || offer.status === "expired_unpaid" || offer.status === "funded")) {
             if (!offer.fundedAt) {
               const feeConfig = await getActiveFeeConfig();
+              const offerBusinessAccount = await storage.getBusinessAccount(offer.hirerUserId);
+              const offerBusinessPlan = offerBusinessAccount ? await storage.getBusinessPlan(offerBusinessAccount.id) : null;
+              const effectiveOfferFeeRate = offerBusinessAccount
+                ? businessPlatformFeeRate(offerBusinessPlan?.planType)
+                : feeConfig.platformFeeRate;
               const offerAmount = offer.currentOfferAmount;
-              const workerShare = Math.round(offerAmount * (1 - feeConfig.platformFeeRate) * 100) / 100;
-              const platformFee = Math.round(offerAmount * feeConfig.platformFeeRate * 100) / 100;
+              const workerShare = Math.round(offerAmount * (1 - effectiveOfferFeeRate) * 100) / 100;
+              const platformFee = Math.round(offerAmount * effectiveOfferFeeRate * 100) / 100;
               const { gross: grossCharge, stripeFee } = grossUpForStripe(offerAmount);
 
               let webhookChargeId: string | null = null;
@@ -7060,6 +7084,7 @@ export async function registerRoutes(
         makeOfferEnabled: req.query.makeOfferEnabled === "true",
         sellerAvailability: req.query.sellerAvailability as string | undefined,
         sort: req.query.sort as string | undefined,
+         businessAccountId: req.query.businessAccountId ? parseInt(req.query.businessAccountId as string) : undefined,
         status: "available",
       });
       res.json(items);
@@ -7154,6 +7179,7 @@ export async function registerRoutes(
       const userId = req.session.userId!;
       const user = await storage.getUser(userId);
       if (!user) return res.status(401).json({ message: "User not found" });
+      const businessAccount = await storage.getBusinessAccount(userId);
       const {
         title, description, category, condition, price, askingType, priceType, makeOfferEnabled,
         minOfferThreshold, brand, model, year, city, state, photos, zipcode, locationApprox,
@@ -7216,6 +7242,7 @@ export async function registerRoutes(
 
       const item = await storage.createMarketplaceItem({
         sellerId: userId,
+        businessAccountId: businessAccount?.id || null,
         sellerName: user.fullName,
         title,
         description,
@@ -11080,6 +11107,11 @@ export async function registerRoutes(
       const baseUrl = `${protocol}://${host}`;
 
       const feeConfig = await getActiveFeeConfig();
+      const posterBusinessAccount = await storage.getBusinessAccount(poster.id);
+      const posterBusinessPlan = posterBusinessAccount ? await storage.getBusinessPlan(posterBusinessAccount.id) : null;
+      const effectivePlatformFeeRate = posterBusinessAccount
+        ? businessPlatformFeeRate(posterBusinessPlan?.planType)
+        : feeConfig.platformFeeRate;
 
       // Snapshot one cents-based calculation. A standard job is a Stripe
       // destination charge: capture automatically moves the worker share, so
@@ -11087,7 +11119,7 @@ export async function registerRoutes(
       const accounting = calculateStandardJobPayment({
         budget,
         urgentFee,
-        platformFeeRate: feeConfig.platformFeeRate,
+        platformFeeRate: effectivePlatformFeeRate,
       });
       const {
         workerShare,
@@ -11168,7 +11200,7 @@ export async function registerRoutes(
 
       await storage.updateJob(jobId, {
         stripeSessionId: stripeSession.id,
-        platformFeeRate: feeConfig.platformFeeRate,
+        platformFeeRate: effectivePlatformFeeRate,
         workerGrossShare: workerShare,
         helperPayout: workerShare,
         platformFee,
@@ -18230,6 +18262,7 @@ First, if the person hasn't already been explicit about which they want, ask ONE
   "Want me to show you providers you can hire directly, or help you post an open job so any nearby worker can apply?"
   actions: [{label:"Browse providers to hire",message:"show me providers I can hire directly"},{label:"Post an open job",message:"I want to post an open job"}]
 BROWSE / HIRE A SPECIFIC PROVIDER (explicit phrasing like "show me providers", "browse services", "hire someone directly", "let me pick a provider", or after they pick "Browse providers to hire" above) → route: /services [HIGH]. This works for guests too — /services is public to browse; only sending a request needs an account. Confirm: "Here are local providers you can hire directly — pick one and send a protected request."
+OFFICIAL BUSINESS / STOREFRONT REQUESTS (phrasing like "find a business", "find a dealer", "find a salon", "find a store", "shop inventory", or a named company) → prefer /businesses and official business profiles. Do not present an individual provider as an official business. If the user clearly asks for an individual person/provider, use /services instead.
   When routing to /services, preserve known context in the URL: /services?q=<short service search term>&category=<one of On-Demand Help|General Labor|Skilled Labor|Verify & Inspect>&availableNow=true. Include q when a useful service term is known, category when the parent category is clear, and availableNow=true only when the user clearly needs someone immediately or urgently. Omit unknown parameters and never add availableNow=false.
 POST AN OPEN JOB (explicit phrasing like "post an open job", "post a job for anyone", or after they pick "Post an open job" above) → continue with the JOB INTAKE PROTOCOL below.
   General labor → route: /signup?intent=hirer&service=general_labor&from=jac [HIGH]
@@ -30144,9 +30177,14 @@ OUTPUT STYLE:
       const baseUrl = `${protocol}://${host}`;
 
       const feeConfig = await getActiveFeeConfig();
+      const offerBusinessAccount = await storage.getBusinessAccount(offer.hirerUserId);
+      const offerBusinessPlan = offerBusinessAccount ? await storage.getBusinessPlan(offerBusinessAccount.id) : null;
+      const effectiveOfferFeeRate = offerBusinessAccount
+        ? businessPlatformFeeRate(offerBusinessPlan?.planType)
+        : feeConfig.platformFeeRate;
 
       const offerAmount = offer.currentOfferAmount;
-      const workerShare = Math.round(offerAmount * (1 - feeConfig.platformFeeRate) * 100) / 100;
+      const workerShare = Math.round(offerAmount * (1 - effectiveOfferFeeRate) * 100) / 100;
       const workerShareCents = Math.round(workerShare * 100);
 
       const { gross: grossCharge, stripeFee } = grossUpForStripe(offerAmount);
@@ -30265,9 +30303,14 @@ OUTPUT STYLE:
       }
 
       const feeConfig = await getActiveFeeConfig();
+      const offerBusinessAccount = await storage.getBusinessAccount(offer.hirerUserId);
+      const offerBusinessPlan = offerBusinessAccount ? await storage.getBusinessPlan(offerBusinessAccount.id) : null;
+      const effectiveOfferFeeRate = offerBusinessAccount
+        ? businessPlatformFeeRate(offerBusinessPlan?.planType)
+        : feeConfig.platformFeeRate;
       const offerAmount = offer.currentOfferAmount;
-      const workerShare = Math.round(offerAmount * (1 - feeConfig.platformFeeRate) * 100) / 100;
-      const platformFee = Math.round(offerAmount * feeConfig.platformFeeRate * 100) / 100;
+      const workerShare = Math.round(offerAmount * (1 - effectiveOfferFeeRate) * 100) / 100;
+      const platformFee = Math.round(offerAmount * effectiveOfferFeeRate * 100) / 100;
       const { gross: grossCharge, stripeFee } = grossUpForStripe(offerAmount);
 
       const now = new Date();

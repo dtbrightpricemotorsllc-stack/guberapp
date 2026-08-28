@@ -136,6 +136,7 @@ const BusinessProposalRequest = lazy(() => import("@/pages/business-proposal-req
 const BusinessOnboarding = lazy(() => import("@/pages/business-onboarding"));
 const BusinessSignup = lazy(() => import("@/pages/business-signup"));
 const BusinessNextSteps = lazy(() => import("@/pages/business-next-steps"));
+const BusinessDiscovery = lazy(() => import("@/pages/business-discovery"));
 
 // Business portal pages — lazy loaded
 const BizDashboard = lazy(() => import("@/pages/biz-dashboard"));
@@ -361,9 +362,12 @@ function Router() {
       <Route path="/business/promotion" component={() => <Suspense fallback={<PageLoader />}><BusinessPromoRequest /></Suspense>} />
       <Route path="/business/proposal" component={() => <Suspense fallback={<PageLoader />}><BusinessProposalRequest /></Suspense>} />
       <Route path="/business/next-steps" component={() => <Suspense fallback={<PageLoader />}><BusinessNextSteps /></Suspense>} />
+      <Route path="/businesses" component={() => <Suspense fallback={<PageLoader />}><BusinessDiscovery /></Suspense>} />
+      <Route path="/businesses/:id" component={() => <Suspense fallback={<PageLoader />}><BusinessDiscovery /></Suspense>} />
       <Route path="/login" component={() => <PublicOnly component={Login} />} />
       <Route path="/signup" component={() => <PublicOnly component={Signup} />} />
       <Route path="/business-signup" component={() => <PublicOnly component={BusinessSignup} />} />
+      <Route path="/business-join/:code" component={() => <PublicOnly component={BusinessSignup} />} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/oauth-landing" component={() => {

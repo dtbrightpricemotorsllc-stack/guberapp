@@ -581,6 +581,7 @@ export async function reviewCashoutRequest(
   const req = reqRow.rows[0];
   if (!req) throw new Error("Request not found");
   if (req.status !== "pending") throw new Error("Request already reviewed");
+  const isBusinessReferral = req.source_type === "business_referral";
 
   const creditsPerDollar = await getRewardConfigValue("credits_per_dollar", 1000);
 
@@ -594,34 +595,46 @@ export async function reviewCashoutRequest(
     );
 
     if (decision === "denied") {
+      if (isBusinessReferral) {
+        await pool.query(
+          `UPDATE business_referral_attributions
+              SET reward_status = 'failed'
+            WHERE id = $1 AND cashout_request_id = $2`,
+          [req.business_referral_id, req.id],
+        );
+      }
       // Refund credits back to user
-      await pool.query(
-        `UPDATE users
-         SET growth_credits = COALESCE(growth_credits,0) + $1
-         WHERE id = $2`,
-        [req.credits_requested, req.user_id]
-      );
-      await pool.query(
-        `INSERT INTO credit_ledger (user_id, amount, dollar_equivalent, source_type, status, approved_at, reason)
-         VALUES ($1, $2, $3, 'cashout', 'denied', NOW(), $4)`,
-        [req.user_id, req.credits_requested, (req.credits_requested / creditsPerDollar).toFixed(4),
-         `Cashout denied by admin: ${adminNote ?? "no reason"}`]
-      );
+      if (!isBusinessReferral) {
+        await pool.query(
+          `UPDATE users SET growth_credits = COALESCE(growth_credits,0) + $1 WHERE id = $2`,
+          [req.credits_requested, req.user_id]
+        );
+        await pool.query(
+          `INSERT INTO credit_ledger (user_id, amount, dollar_equivalent, source_type, status, approved_at, reason)
+           VALUES ($1, $2, $3, 'cashout', 'denied', NOW(), $4)`,
+          [req.user_id, req.credits_requested, (req.credits_requested / creditsPerDollar).toFixed(4),
+           `Cashout denied by admin: ${adminNote ?? "no reason"}`]
+        );
+      }
     } else {
       // approved — admin will pay out manually; mark ledger redeemed
-      await pool.query(
-        `UPDATE users
-         SET lifetime_credits_redeemed = COALESCE(lifetime_credits_redeemed,0) + $1
-         WHERE id = $2`,
-        [req.credits_requested, req.user_id]
-      );
-      await pool.query(
-        `UPDATE credit_ledger
-         SET status = 'redeemed', redeemed_at = NOW()
-         WHERE user_id = $1 AND source_type = 'cashout' AND status = 'pending'
-           AND amount = -$2`,
-        [req.user_id, req.credits_requested]
-      );
+      if (isBusinessReferral) {
+        await pool.query(
+          `UPDATE business_referral_attributions SET reward_status = 'paid'
+            WHERE id = $1 AND cashout_request_id = $2`,
+          [req.business_referral_id, req.id],
+        );
+      } else {
+        await pool.query(
+          `UPDATE users SET lifetime_credits_redeemed = COALESCE(lifetime_credits_redeemed,0) + $1 WHERE id = $2`,
+          [req.credits_requested, req.user_id]
+        );
+        await pool.query(
+          `UPDATE credit_ledger SET status = 'redeemed', redeemed_at = NOW()
+           WHERE user_id = $1 AND source_type = 'cashout' AND status = 'pending' AND amount = -$2`,
+          [req.user_id, req.credits_requested]
+        );
+      }
     }
     await pool.query("COMMIT");
   } catch (e) {

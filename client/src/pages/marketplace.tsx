@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { InfoHint } from "@/components/info-hint";
 import { BuyerOrderDetailsForm, EMPTY_BO_DETAILS } from "@/components/buyer-order-details-form";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -1463,6 +1463,8 @@ function MyListingsTab({ onSelectItem }: { onSelectItem: (item: MarketplaceItem)
 
 export default function Marketplace() {
   const { user } = useAuth();
+  const searchStr = useSearch();
+  const businessScope = new URLSearchParams(searchStr).get("business");
   const [tab, setTab] = useState<"browse" | "my" | "deals">("browse");
   const [activeCategory, setActiveCategory] = useState("All");
   const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
@@ -1492,12 +1494,13 @@ export default function Marketplace() {
     if (filters.makeOfferEnabled) params.set("makeOfferEnabled", "true");
     if (filters.listingType) params.set("listingType", filters.listingType);
     if (filters.sort !== "default") params.set("sort", filters.sort);
+    if (businessScope && businessScope !== "mine") params.set("businessAccountId", businessScope);
     return `/api/marketplace?${params.toString()}`;
   };
 
   const { data: rawItems, isLoading } = useQuery<MarketplaceItem[]>({
-    queryKey: ["/api/marketplace", activeCategory, search, filters],
-    queryFn: () => fetch(buildUrl()).then(r => r.json()),
+    queryKey: ["/api/marketplace", activeCategory, search, filters, businessScope],
+    queryFn: () => fetch(businessScope === "mine" ? "/api/business/storefront" : buildUrl()).then(r => r.json()),
   });
   const items: MarketplaceItem[] = Array.isArray(rawItems) ? rawItems : [];
 
@@ -1514,7 +1517,7 @@ export default function Marketplace() {
             <h1 className="text-2xl font-display font-extrabold tracking-tight">
               Marketplace
             </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">List items free · Find local deals · Verify before you buy</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{businessScope ? "Business storefront · scoped listings only" : "List items free · Find local deals · Verify before you buy"}</p>
           </div>
           {user && (
             <Button size="sm" onClick={() => setShowWizard(true)}

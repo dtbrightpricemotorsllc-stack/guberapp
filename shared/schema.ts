@@ -809,6 +809,7 @@ export type InsertJobLocationPing = z.infer<typeof insertJobLocationPingSchema>;
 export const marketplaceItems = pgTable("marketplace_items", {
   id: serial("id").primaryKey(),
   sellerId: integer("seller_id").notNull(),
+  businessAccountId: integer("business_account_id"),
   title: text("title").notNull(),
   description: text("description"),
   category: text("category").notNull(),
@@ -1046,6 +1047,7 @@ export const businessSignupSchema = z.object({
   contactPhone: z.string().optional(),
   billingEmail: z.string().email().optional().or(z.literal("")),
   description: z.string().optional(),
+  invitationCode: z.string().trim().max(32).optional().or(z.literal("")),
 });
 
 export const insertJobSchema = createInsertSchema(jobs).omit({
@@ -1163,6 +1165,52 @@ export const referrals = pgTable("referrals", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Business referrals are separate from personal referrals because attribution
+// is immutable and the qualifying reward is a cash obligation, not credits.
+export const businessReferralAttributions = pgTable("business_referral_attributions", {
+  id: serial("id").primaryKey(),
+  businessAccountId: integer("business_account_id").notNull().unique(),
+  invitationCode: text("invitation_code").notNull(),
+  distributorUserId: integer("distributor_user_id"),
+  distributorLabel: text("distributor_label"),
+  status: text("status").notNull().default("pending"),
+  rewardStatus: text("reward_status").notNull().default("pending"),
+  rewardAmountCents: integer("reward_amount_cents").notNull().default(500),
+  qualifiedAt: timestamp("qualified_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const businessReferralCodes = pgTable("business_referral_codes", {
+  code: text("code").primaryKey(),
+  ownerUserId: integer("owner_user_id"),
+  ownerLabel: text("owner_label").notNull(),
+  active: boolean("active").notNull().default(true),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const businessVerificationEvidence = pgTable("business_verification_evidence", {
+  id: serial("id").primaryKey(),
+  businessAccountId: integer("business_account_id").notNull(),
+  requirementKey: text("requirement_key").notNull(),
+  status: text("status").notNull().default("submitted"),
+  evidenceUrl: text("evidence_url"),
+  note: text("note"),
+  isAdminOverride: boolean("is_admin_override").notNull().default(false),
+  reviewedBy: integer("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at"),
+  overrideReason: text("override_reason"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  accountRequirementUnique: uniqueIndex("business_verification_evidence_account_requirement_idx")
+    .on(table.businessAccountId, table.requirementKey),
+}));
+
+export type BusinessReferralAttribution = typeof businessReferralAttributions.$inferSelect;
+export type BusinessReferralCode = typeof businessReferralCodes.$inferSelect;
+export type BusinessVerificationEvidence = typeof businessVerificationEvidence.$inferSelect;
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Job = typeof jobs.$inferSelect;
@@ -1253,6 +1301,7 @@ export const businessAccounts = pgTable("business_accounts", {
   verificationSubmittedAt: timestamp("verification_submitted_at"),
   verifiedAt: timestamp("verified_at"),
   companyLogo: text("company_logo"),
+  invitationCode: text("invitation_code"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1604,6 +1653,7 @@ export const businessAccessRequestSchema = z.object({
   businessAddress: z.string().min(5, "Business address is required"),
   website: z.string().optional(),
   ein: z.string().optional(),
+  invitationCode: z.string().trim().max(32).optional().or(z.literal("")),
 });
 
 export const businessVerificationSchema = z.object({
