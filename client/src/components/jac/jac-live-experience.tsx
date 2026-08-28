@@ -993,7 +993,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
                 }}
                 data-testid="button-jac-live-reconnect"
               >
-                <RefreshCw className="w-3 h-3" /> Reconnect voice
+                <Mic className="w-3 h-3" /> Start voice
               </button>
             ) : voiceStartAttempted && !isTerminal ? (
               <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs" style={{ color: "hsl(0 0% 35%)" }}>

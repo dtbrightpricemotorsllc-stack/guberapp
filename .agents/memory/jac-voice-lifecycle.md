@@ -29,9 +29,12 @@ homepage appear stuck or drop immediately from Listening to Ended. Voice failure
 must not delay or disable the core JAC experience.
 
 **How to apply:** Keep document-level gesture listeners removed. Treat voice as a
-single-flight optional attachment with bounded reconnect attempts. Preserve the
-shared transcript, campaign context, and greeting claim across voice disconnects;
-never substitute browser speech or static audio for the approved JAC voice.
+single-flight optional attachment. A failed initial start must return to the
+single Start voice control without automatic retries. Only a session that
+previously connected may use the bounded recovery budget, and successful
+reconnects must not reset that budget. Preserve the shared transcript, campaign
+context, and greeting claim across voice disconnects; never substitute browser
+speech or static audio for the approved JAC voice.
 
 ### 3. handleConvaiError replayed the greeting via TTS
 Any voice failure called `jacSpeak(GREETING_TTS)` — the greeting text spoken aloud.

@@ -179,6 +179,23 @@ describe("JacLiveExperience auth handoff", () => {
       .toBe("/signup?intent=worker&returnTo=%2Foffer-service&from=jac");
   });
 
+  it("does not turn an initial voice failure into an automatic reconnect loop", async () => {
+    const view = render(<JacLiveExperience />);
+    fireEvent.click(view.getByRole("button", { name: /start voice/i }));
+    await waitFor(() => expect(startSessionSpy).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      convaiCallbacks.current.onError("Voice connection lost.");
+    });
+
+    expect(view.getByTestId("jac-live-voice-error").textContent)
+      .toContain("Voice is unavailable right now. JAC text is still ready.");
+    expect(view.getByRole("button", { name: "Start voice" })).toBeTruthy();
+    await new Promise(resolve => setTimeout(resolve, 1800));
+    expect(startSessionSpy).toHaveBeenCalledTimes(1);
+    expect(view.getByLabelText("Message JAC").hasAttribute("disabled")).toBe(false);
+  });
+
   it("recovers an unexpected mobile disconnect without losing voice/text history", async () => {
     const view = render(<JacLiveExperience />);
     fireEvent.click(view.getByRole("button", { name: /start voice/i }));
