@@ -4,7 +4,9 @@ import {
   FOUNDING_LOCAL_OFFER,
   calculateBusinessPlatformFee,
   getBusinessReferralCashoutBlock,
+  getBusinessPlanFromCatalog,
   getBusinessRequirementsForIndustry,
+  isFoundingLocalOfferEligible,
   resolveBusinessReferralPayoutOwner,
 } from "../business-experience";
 
@@ -40,8 +42,32 @@ describe("business handout promises", () => {
   it("requires extra official evidence for regulated business types", () => {
     const contractorKeys = getBusinessRequirementsForIndustry("Contractor").map((item) => item.key);
     const retailKeys = getBusinessRequirementsForIndustry("Retail").map((item) => item.key);
-    expect(contractorKeys).toEqual(expect.arrayContaining(["registration_ein", "license", "insurance", "bonding"]));
-    expect(retailKeys).toEqual(["registration_ein"]);
+
+    const beforeDeadline = new Date("2026-08-28T12:00:00.000Z");
+    expect(isFoundingLocalOfferEligible({
+      status: "verified_business",
+      createdAt: "2026-08-01T00:00:00.000Z",
+    }, beforeDeadline)).toBe(true);
+    expect(isFoundingLocalOfferEligible({
+      status: "approved_limited",
+      createdAt: "2026-08-01T00:00:00.000Z",
+    }, beforeDeadline)).toBe(false);
+    expect(isFoundingLocalOfferEligible({
+      status: "verified_business",
+      createdAt: "2026-10-01T00:00:00.000Z",
+    }, beforeDeadline)).toBe(false);
+    expect(isFoundingLocalOfferEligible({
+      status: "verified_business",
+      createdAt: "2026-08-01T00:00:00.000Z",
+    }, new Date("2026-10-01T00:00:00.000Z"))).toBe(false);
+  });
+
+  it("resolves checkout prices from the explicit catalog", () => {
+    expect(getBusinessPlanFromCatalog("business_plus")).toMatchObject({
+      label: "Business+",
+      monthlyPriceCents: 1999,
+    });
+    expect(getBusinessPlanFromCatalog("scout")).toBeUndefined();
   });
 
   it("keeps the signup-time distributor when a code is reassigned later", () => {

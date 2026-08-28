@@ -352,6 +352,9 @@ app.use((req, res, next) => {
       included_unlocks_per_month INTEGER NOT NULL DEFAULT 20,
       current_unlock_balance INTEGER NOT NULL DEFAULT 20,
       renews_at TIMESTAMP,
+      stripe_subscription_id TEXT,
+      cancel_at_period_end BOOLEAN DEFAULT false,
+      offer_key TEXT,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     );
@@ -441,6 +444,10 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_worker_proj_user ON worker_business_projections(user_id);
     CREATE INDEX IF NOT EXISTS idx_bg_check_user ON background_check_eligibility(user_id);
     ALTER TABLE business_accounts ADD COLUMN IF NOT EXISTS invitation_code TEXT;
+    ALTER TABLE business_plans ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
+    ALTER TABLE business_plans ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN DEFAULT false;
+    ALTER TABLE business_plans ADD COLUMN IF NOT EXISTS offer_key TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_business_plans_account_unique ON business_plans(business_account_id);
     ALTER TABLE marketplace_items ADD COLUMN IF NOT EXISTS business_account_id INTEGER;
     CREATE TABLE IF NOT EXISTS business_referral_codes (
       code TEXT PRIMARY KEY,

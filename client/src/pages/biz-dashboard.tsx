@@ -142,6 +142,47 @@ export default function BizDashboard() {
   const { toast } = useToast();
   const isLoading = accountLoading || profileLoading;
 
+  const planSelection = useMutation({
+    mutationFn: async ({ planType, foundingOffer = false }: { planType: string; foundingOffer?: boolean }) => {
+      const response = await apiRequest("POST", "/api/business/create-plan-subscription", { planType, foundingOffer });
+      return response.json();
+    },
+    onSuccess: (result) => {
+      if (result.url) {
+        window.location.assign(result.url);
+        return;
+      }
+      void queryClient.invalidateQueries({ queryKey: ["/api/business/plans"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/business/account"] });
+      toast({ title: "Business plan updated", description: "Your Business plan is active." });
+    },
+    onError: (error: Error) => toast({ title: "Unable to update plan", description: error.message, variant: "destructive" }),
+  });
+
+  const billingPortal = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/business/billing-portal");
+      return response.json();
+    },
+    onSuccess: (result) => {
+      if (result.url) window.location.assign(result.url);
+    },
+    onError: (error: Error) => toast({ title: "Unable to open billing", description: error.message, variant: "destructive" }),
+  });
+
+  const cancelSubscription = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/business/cancel-subscription");
+      return response.json();
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/business/plans"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/business/account"] });
+      toast({ title: "Subscription cancellation scheduled", description: "Your paid access remains active through the current billing period." });
+    },
+    onError: (error: Error) => toast({ title: "Unable to cancel subscription", description: error.message, variant: "destructive" }),
+  });
+
   // Redirect to onboarding if the profile is a stub (no company name set yet).
   // Guard on profileFetching too so we don't redirect during background refetch
   // of stale cache immediately after onboarding save navigates here.
@@ -203,6 +244,9 @@ export default function BizDashboard() {
   const totalSpend = jobs?.filter((j) => j.status === "completion_submitted" || j.status === "completed_paid").reduce((sum, j) => sum + (j.finalPrice || j.budget || 0), 0) || 0;
 
   const isNewAccount = isPending || (isApproved && total === 0);
+  const currentPlanType = businessPlans?.current?.planType || "business";
+  const currentOfferKey = businessPlans?.current?.offerKey || null;
+  const paidPlanActive = Boolean(currentOfferKey || ["business_plus", "business_pro"].includes(currentPlanType));
 
   return (
     <BizLayout>
@@ -235,7 +279,7 @@ export default function BizDashboard() {
               {hasPlan && (
                 <span className="text-[9px] px-2.5 py-0.5 rounded-full font-bold tracking-[0.15em] uppercase"
                   style={{ background: `${PURPLE}0D`, color: PURPLE, border: `1px solid ${PURPLE}20` }}>
-                  Scout Plan
+                  {currentOfferKey ? "Founding Offer" : currentPlanType === "business_pro" ? "Business Pro" : currentPlanType === "business_plus" ? "Business+" : "Business"}
                 </span>
               )}
             </div>
@@ -263,14 +307,103 @@ export default function BizDashboard() {
               ))}
             </div>
             {businessPlans && (
-              <div className="mt-4 flex flex-col gap-2 rounded-xl p-3 sm:flex-row sm:items-center sm:justify-between" style={{ background: "rgba(198,168,92,0.05)", border: `1px solid ${GOLD_BORDER}` }}>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: GOLD_DK }}>Current plan</p>
-                  <p className="mt-1 text-sm font-semibold" style={{ color: TEXT_PRIMARY }}>{businessPlans.current?.planType === "business_pro" ? "Business Pro" : businessPlans.current?.planType === "business_plus" ? "Business+" : "Business"} <span className="text-xs font-normal" style={{ color: TEXT_MUTED }}>· {businessPlans.current?.status || "active"}</span></p>
+              <div className="mt-4 rounded-xl p-3" style={{ background: "rgba(198,168,92,0.05)", border: `1px solid ${GOLD_BORDER}` }}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: GOLD_DK }}>Current plan</p>
+                    <p className="mt-1 text-sm font-semibold" style={{ color: TEXT_PRIMARY }}>
+                      {currentOfferKey ? businessPlans.foundingOffer?.label : currentPlanType === "business_pro" ? "Business Pro" : currentPlanType === "business_plus" ? "Business+" : "Business"}
+                      <span className="text-xs font-normal" style={{ color: TEXT_MUTED }}> · {businessPlans.current?.status || "active"}</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 sm:justify-end">
+                    {paidPlanActive && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 rounded-lg text-[10px] font-bold"
+                          onClick={() => billingPortal.mutate()}
+                          disabled={billingPortal.isPending}
+                          data-testid="button-business-manage-billing"
+                        >
+                          MANAGE BILLING
+                        </Button>
+                        {!businessPlans.current?.cancelAtPeriodEnd && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 rounded-lg text-[10px] font-bold"
+                            onClick={() => cancelSubscription.mutate()}
+                            disabled={cancelSubscription.isPending}
+                            style={{ color: TEXT_MUTED }}
+                            data-testid="button-business-cancel-subscription"
+                          >
+                            CANCEL
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
-                <p className="max-w-sm text-[10px] leading-relaxed sm:text-right" style={{ color: TEXT_MUTED }}>
-                  {businessPlans.foundingOffer?.eligible ? `Founding Local Business Offer: $${(businessPlans.foundingOffer.monthlyPriceCents / 100).toFixed(2)}/month through September 30, 2026.` : "Plan access and billing status are managed from your business account."}
+                <p className="mt-2 text-[10px] leading-relaxed" style={{ color: TEXT_MUTED }}>
+                  {businessPlans.current?.cancelAtPeriodEnd
+                    ? `Scheduled to end after ${businessPlans.current?.renewsAt ? new Date(businessPlans.current.renewsAt).toLocaleDateString() : "the current billing period"}.`
+                    : businessPlans.foundingOffer?.eligible
+                      ? `Founding Local Business Offer: $${(businessPlans.foundingOffer.monthlyPriceCents / 100).toFixed(2)}/month through September 30, 2026.`
+                      : "Plan access and billing status are managed from your business account."}
                 </p>
+                {businessPlans.canPurchase && (
+                  <div className="mt-4 grid gap-2 md:grid-cols-3">
+                    {businessPlans.catalog.map((plan: any) => {
+                      const isCurrent = !currentOfferKey && currentPlanType === plan.planType;
+                      return (
+                        <div key={plan.planType} className="rounded-lg p-3" style={{ background: SURFACE, border: `1px solid ${isCurrent ? GOLD_BORDER : BORDER}` }}>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-bold" style={{ color: TEXT_PRIMARY }}>{plan.label}</p>
+                            {isCurrent && <CheckCircle2 className="h-3.5 w-3.5" style={{ color: SUCCESS }} />}
+                          </div>
+                          <p className="mt-1 text-base font-black" style={{ color: GOLD }}>
+                            {plan.monthlyPriceCents === 0 ? "Free" : `$${(plan.monthlyPriceCents / 100).toFixed(2)}/mo`}
+                          </p>
+                          <p className="mt-1 min-h-8 text-[10px] leading-relaxed" style={{ color: TEXT_MUTED }}>
+                            {plan.entitlements.slice(-2).map((entitlement: string) => entitlement.replace(/_/g, " ")).join(" · ")}
+                          </p>
+                          <Button
+                            size="sm"
+                            className="mt-3 h-8 w-full rounded-lg text-[10px] font-bold"
+                            variant={isCurrent ? "outline" : "default"}
+                            disabled={isCurrent || Boolean(paidPlanActive) || planSelection.isPending}
+                            onClick={() => planSelection.mutate({ planType: plan.planType })}
+                            data-testid={`button-business-plan-${plan.planType}`}
+                          >
+                            {isCurrent ? "CURRENT PLAN" : plan.monthlyPriceCents === 0 ? "CHOOSE BUSINESS" : "CHOOSE PLAN"}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                    {businessPlans.foundingOffer?.eligible && !paidPlanActive && (
+                      <div className="rounded-lg p-3 md:col-span-3" style={{ background: "rgba(198,168,92,0.04)", border: `1px solid ${GOLD_BORDER}` }}>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-sm font-bold" style={{ color: TEXT_PRIMARY }}>{businessPlans.foundingOffer.label}</p>
+                            <p className="mt-1 text-[10px]" style={{ color: TEXT_MUTED }}>Lock in $9.99/month while eligible. Renews monthly until cancelled.</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            className="h-8 rounded-lg text-[10px] font-bold"
+                            onClick={() => planSelection.mutate({ planType: "business", foundingOffer: true })}
+                            disabled={planSelection.isPending}
+                            style={{ background: `linear-gradient(135deg, ${GOLD}, ${GOLD_DK})`, color: "#000", border: "none" }}
+                            data-testid="button-business-founding-offer"
+                          >
+                            CHOOSE FOUNDING OFFER
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </section>

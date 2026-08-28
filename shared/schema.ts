@@ -1328,6 +1328,9 @@ export const businessPlans = pgTable("business_plans", {
   includedUnlocksPerMonth: integer("included_unlocks_per_month").notNull().default(20),
   currentUnlockBalance: integer("current_unlock_balance").notNull().default(20),
   renewsAt: timestamp("renews_at"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false),
+  offerKey: text("offer_key"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

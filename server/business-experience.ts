@@ -26,6 +26,7 @@ export const BUSINESS_PLAN_CATALOG = [
   },
 ] as const;
 
+export type BusinessPlanType = typeof BUSINESS_PLAN_CATALOG[number]["planType"];
 export const FOUNDING_LOCAL_OFFER = {
   offerKey: "founding_local_business",
   label: "Founding Local Business Offer",
@@ -36,6 +37,9 @@ export const FOUNDING_LOCAL_OFFER = {
   terms: "Availability and terms may change. This offer is separate from Founder, Day-1 OG, and Studio products.",
 } as const;
 
+export function getBusinessPlanFromCatalog(planType: string | null | undefined) {
+  return BUSINESS_PLAN_CATALOG.find((plan) => plan.planType === planType);
+}
 export function businessPlatformFeeRate(planType: string | null | undefined) {
   return planType === "business_pro" ? 0.15 : 0.2;
 }
@@ -342,17 +346,20 @@ export async function registerBusinessExperienceRoutes(
     const account = await accountFor(req);
     if (!account) return res.status(404).json({ message: "No business account found" });
     const current = await storage.getBusinessPlan(account.id);
-    const foundingEligible = new Date() <= new Date(FOUNDING_LOCAL_OFFER.eligibleUntil) &&
-      new Date(account.createdAt || Date.now()) <= new Date(FOUNDING_LOCAL_OFFER.eligibleUntil);
+    const currentHasAccess = Boolean(current && ["active", "trialing", "past_due"].includes(current.status));
+    const effectiveCurrent = currentHasAccess ? current : null;
     res.json({
-      current: current ? {
-        planType: current.planType,
-        status: current.status,
-        renewsAt: current.renewsAt,
-        entitlements: BUSINESS_PLAN_CATALOG.find((plan) => plan.planType === current.planType)?.entitlements || [],
-      } : { planType: "business", status: "active", renewsAt: null, entitlements: BUSINESS_PLAN_CATALOG[0].entitlements },
+      current: effectiveCurrent ? {
+        planType: effectiveCurrent.planType,
+        status: effectiveCurrent.status,
+        renewsAt: effectiveCurrent.renewsAt,
+        cancelAtPeriodEnd: Boolean(effectiveCurrent.cancelAtPeriodEnd),
+        offerKey: effectiveCurrent.offerKey,
+        entitlements: getBusinessPlanFromCatalog(effectiveCurrent.planType)?.entitlements || BUSINESS_PLAN_CATALOG[0].entitlements,
+      } : { planType: "business", status: "active", renewsAt: null, cancelAtPeriodEnd: false, offerKey: null, entitlements: BUSINESS_PLAN_CATALOG[0].entitlements },
       catalog: BUSINESS_PLAN_CATALOG,
-      foundingOffer: { ...FOUNDING_LOCAL_OFFER, eligible: foundingEligible },
+      foundingOffer: { ...FOUNDING_LOCAL_OFFER, eligible: isFoundingLocalOfferEligible(account) },
+      canPurchase: account.status !== "pending_business",
     });
   });
 
@@ -798,4 +805,17 @@ export async function recordBusinessReferral(
 
 export async function qualifyBusinessReferral(businessAccountId: number, adminId?: number) {
   return maybeQualifyReferral(businessAccountId, adminId);
+}
+
+export function businessPlanHasAccess(status: string | null | undefined) {
+  return ["active", "trialing", "past_due"].includes(status || "");
+}
+
+export function isFoundingLocalOfferEligible(
+  account: { status?: string | null; createdAt?: Date | string | null } | null | undefined,
+  now = new Date(),
+) {
+  if (!account || account.status !== "verified_business") return false;
+  if (now > new Date(FOUNDING_LOCAL_OFFER.eligibleUntil)) return false;
+  return !account.createdAt || new Date(account.createdAt) <= new Date(FOUNDING_LOCAL_OFFER.eligibleUntil);
 }

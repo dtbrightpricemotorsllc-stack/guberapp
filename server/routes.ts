@@ -71,7 +71,17 @@ import { DAY1_OG_PROMOTION_ENDS_AT, DAY1_OG_PROMOTION_END_LABEL, canCreateDay1Og
 import { evaluatePayoutMultiFactor } from "./payout-guard";
 import { calculateStandardJobPayment } from "./job-payment-accounting";
 import { settleStandardDestinationCharge } from "./job-payment-settlement";
-import { registerBusinessExperienceRoutes, recordBusinessReferral, qualifyBusinessReferral, submitBusinessRegistrationEvidence, businessPlatformFeeRate } from "./business-experience";
+import {
+  registerBusinessExperienceRoutes,
+  recordBusinessReferral,
+  qualifyBusinessReferral,
+  submitBusinessRegistrationEvidence,
+  businessPlatformFeeRate,
+  FOUNDING_LOCAL_OFFER,
+  businessPlanHasAccess,
+  getBusinessPlanFromCatalog,
+  isFoundingLocalOfferEligible,
+} from "./business-experience";
 import * as assetCustody from "./asset-custody";
 import {
   PROTECTION_PACKAGES,
@@ -3015,11 +3025,12 @@ export async function registerRoutes(
     const acct = await storage.getBusinessAccount(req.session.userId);
     if (!acct) return res.status(404).json({ message: "No business account found" });
     const plan = await storage.getBusinessPlan(acct.id);
+    const planHasAccess = plan && businessPlanHasAccess(plan.status);
     res.json({
       ...acct,
-      planActive: plan?.status === "active",
-      unlockBalance: plan?.currentUnlockBalance || 0,
-      planType: plan?.planType || null,
+      planActive: Boolean(planHasAccess),
+      unlockBalance: planHasAccess ? (plan?.currentUnlockBalance || 0) : 0,
+      planType: planHasAccess ? (plan?.planType || "business") : "business",
     });
   });
 
@@ -3099,10 +3110,115 @@ export async function registerRoutes(
     res.json({ url: session.url });
   });
 
-  app.post("/api/business/create-scout-subscription", requireFullCommerce, async (req: Request, res: Response) => {
+  const syncBusinessSubscription = async (input: {
+    businessAccountId: number;
+    subscriptionId: string | null;
+    planType: string;
+    offerKey?: string | null;
+    status: string;
+    renewsAt?: Date | null;
+    cancelAtPeriodEnd?: boolean;
+    stripeEventId?: string;
+    eventType: string;
+    rawReference?: string;
+  }) => {
+    const catalogPlan = getBusinessPlanFromCatalog(input.planType);
+    if (!catalogPlan) return null;
+    if (input.offerKey && input.offerKey !== FOUNDING_LOCAL_OFFER.offerKey) return null;
+    const account = await storage.getBusinessAccountById(input.businessAccountId);
+    if (!account) return null;
+
+    if (input.stripeEventId) {
+      const priorEvents = await storage.getBillingEvents(account.id);
+      if (priorEvents.some((event) => event.stripeEventId === input.stripeEventId)) {
+        const priorPlan = await storage.getBusinessPlan(account.id);
+        return { account, plan: priorPlan, catalogPlan, duplicate: true };
+      }
+    }
+
+    const plan = await storage.getBusinessPlan(account.id);
+    const planData = {
+      planType: catalogPlan.planType,
+      status: input.status,
+      includedUnlocksPerMonth: 0,
+      currentUnlockBalance: 0,
+      renewsAt: input.renewsAt ?? null,
+      stripeSubscriptionId: input.subscriptionId,
+      cancelAtPeriodEnd: Boolean(input.cancelAtPeriodEnd),
+      offerKey: input.offerKey || null,
+    };
+    const savedPlan = plan
+      ? await storage.updateBusinessPlan(plan.id, planData)
+      : await storage.createBusinessPlan({ businessAccountId: account.id, ...planData });
+
+    if (input.subscriptionId) {
+      await storage.updateBusinessAccount(account.id, { stripeSubscriptionId: input.subscriptionId });
+    }
+    if (input.stripeEventId) {
+      await storage.createBillingEvent({
+        businessAccountId: account.id,
+        stripeEventId: input.stripeEventId,
+        eventType: input.eventType,
+        rawReference: input.rawReference || input.subscriptionId,
+      }).catch((error: any) => {
+        // Stripe may retry an already fulfilled event. The unique event id
+        // makes this harmless, while the fulfillment above remains current.
+        if (!String(error?.message || "").toLowerCase().includes("unique")) throw error;
+      });
+    }
+    return { account, plan: savedPlan, catalogPlan, duplicate: false };
+  };
+
+  const createBusinessPlanCheckout = async (req: Request, res: Response) => {
     if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
     const acct = await storage.getBusinessAccount(req.session.userId);
     if (!acct) return res.status(404).json({ message: "No business account found" });
+    if (acct.status === "pending_business") {
+      return res.status(403).json({ message: "Your business access request must be approved before choosing a plan" });
+    }
+
+    const requestedPlanType = String(req.body?.planType || "business");
+    const selectedPlan = getBusinessPlanFromCatalog(requestedPlanType);
+    if (!selectedPlan) return res.status(400).json({ message: "Choose a valid Business plan" });
+    const useFoundingOffer = req.body?.foundingOffer === true || req.body?.offerKey === FOUNDING_LOCAL_OFFER.offerKey;
+    if (useFoundingOffer && selectedPlan.planType !== "business") {
+      return res.status(400).json({ message: "The Founding Local Business Offer applies to the Business tier only" });
+    }
+    if (useFoundingOffer && !isFoundingLocalOfferEligible(acct)) {
+      return res.status(403).json({ message: "The Founding Local Business Offer is only available to verified early businesses while the offer is open" });
+    }
+
+    const existingPlan = await storage.getBusinessPlan(acct.id);
+    const existingPaidSubscription = acct.stripeSubscriptionId ||
+      (existingPlan && ["active", "trialing", "past_due", "incomplete"].includes(existingPlan.status) && existingPlan.stripeSubscriptionId);
+    if (existingPaidSubscription) {
+      return res.status(409).json({ message: "Your business already has a subscription. Use Manage billing to change or cancel it." });
+    }
+
+    if (!useFoundingOffer && selectedPlan.planType === "business") {
+      const updated = existingPlan
+        ? await storage.updateBusinessPlan(existingPlan.id, {
+          planType: selectedPlan.planType,
+          status: "active",
+          stripeSubscriptionId: null,
+          cancelAtPeriodEnd: false,
+          offerKey: null,
+          renewsAt: null,
+        })
+        : await storage.createBusinessPlan({
+          businessAccountId: acct.id,
+          planType: selectedPlan.planType,
+          status: "active",
+          includedUnlocksPerMonth: 0,
+          currentUnlockBalance: 0,
+        });
+      await storage.createBillingEvent({
+        businessAccountId: acct.id,
+        eventType: "business_plan_activated",
+        rawReference: "business_free_tier",
+      }).catch(() => {});
+      return res.json({ active: true, planType: selectedPlan.planType, plan: updated });
+    }
 
     let customerId = acct.stripeCustomerId;
     if (!customerId) {
@@ -3121,18 +3237,83 @@ export async function registerRoutes(
       line_items: [{
         price_data: {
           currency: "usd",
-          product_data: { name: "GUBER Business Scout Plan", description: "Full Talent Explorer access, 20 profile unlocks/month, offer sending" },
-          unit_amount: 9900,
+          product_data: {
+            name: useFoundingOffer ? FOUNDING_LOCAL_OFFER.label : `GUBER ${selectedPlan.label}`,
+            description: useFoundingOffer
+              ? FOUNDING_LOCAL_OFFER.duration
+              : `${selectedPlan.label} business access and entitlements`,
+          },
+          unit_amount: useFoundingOffer ? FOUNDING_LOCAL_OFFER.monthlyPriceCents : selectedPlan.monthlyPriceCents,
           recurring: { interval: "month" },
         },
         quantity: 1,
       }],
-      metadata: { type: "business_scout_plan", businessAccountId: String(acct.id) },
+      metadata: {
+        type: "business_plan_subscription",
+        businessAccountId: String(acct.id),
+        planType: useFoundingOffer ? "business" : selectedPlan.planType,
+        offerKey: useFoundingOffer ? FOUNDING_LOCAL_OFFER.offerKey : "",
+      },
+      subscription_data: {
+        metadata: {
+          type: "business_plan_subscription",
+          businessAccountId: String(acct.id),
+          planType: useFoundingOffer ? "business" : selectedPlan.planType,
+          offerKey: useFoundingOffer ? FOUNDING_LOCAL_OFFER.offerKey : "",
+        },
+      },
       success_url: `${req.headers.origin || req.protocol + "://" + req.get("host")}/biz/dashboard?subscribed=true`,
       cancel_url: `${req.headers.origin || req.protocol + "://" + req.get("host")}/biz/dashboard`,
     });
 
     res.json({ url: session.url });
+  };
+
+  app.post("/api/business/create-plan-subscription", requireFullCommerce, createBusinessPlanCheckout);
+  // Kept as a compatibility alias for older clients. It now uses the
+  // catalog-backed Business+ plan rather than the retired Scout product.
+  app.post("/api/business/create-scout-subscription", requireFullCommerce, createBusinessPlanCheckout);
+
+  app.post("/api/business/billing-portal", requireFullCommerce, async (req: Request, res: Response) => {
+    if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
+    const acct = await storage.getBusinessAccount(req.session.userId);
+    if (!acct) return res.status(404).json({ message: "No business account found" });
+    if (!acct.stripeCustomerId) return res.status(400).json({ message: "No billing account is set up yet" });
+    const returnUrl = `${req.headers.origin || req.protocol + "://" + req.get("host")}/biz/dashboard`;
+    const portal = await stripeMain.billingPortal.sessions.create({
+      customer: acct.stripeCustomerId,
+      return_url: returnUrl,
+    });
+    res.json({ url: portal.url });
+  });
+
+  app.post("/api/business/cancel-subscription", requireFullCommerce, async (req: Request, res: Response) => {
+    if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
+    const acct = await storage.getBusinessAccount(req.session.userId);
+    if (!acct) return res.status(404).json({ message: "No business account found" });
+    if (!acct.stripeSubscriptionId) return res.status(400).json({ message: "No active business subscription" });
+
+    const subscription = await stripeMain.subscriptions.update(acct.stripeSubscriptionId, {
+      cancel_at_period_end: true,
+    }) as any;
+    const subscriptionPeriodEnd = subscription.current_period_end
+      ? new Date(subscription.current_period_end * 1000)
+      : null;
+    const plan = await storage.getBusinessPlan(acct.id);
+    if (plan) {
+      await storage.updateBusinessPlan(plan.id, {
+        status: subscription.status,
+        cancelAtPeriodEnd: true,
+        renewsAt: subscriptionPeriodEnd || plan.renewsAt,
+      });
+    }
+    await storage.createBillingEvent({
+      businessAccountId: acct.id,
+      stripeEventId: `cancel_${subscription.id}_${Date.now()}`,
+      eventType: "business_subscription_cancelled",
+      rawReference: subscription.id,
+    }).catch(() => {});
+    res.json({ cancelAtPeriodEnd: true, renewsAt: subscriptionPeriodEnd });
   });
 
   app.post("/api/business/purchase-unlocks", requireFullCommerce, async (req: Request, res: Response) => {
@@ -3252,7 +3433,7 @@ export async function registerRoutes(
       candidates,
       totalUnlocks: unlocks.length,
       unlockBalance: plan?.currentUnlockBalance || 0,
-      planActive: plan?.status === "active",
+      planActive: businessPlanHasAccess(plan?.status),
       accountStatus: acct.status,
     });
   });
@@ -3267,8 +3448,8 @@ export async function registerRoutes(
     }
 
     const plan = await storage.getBusinessPlan(acct.id);
-    if (!plan || plan.status !== "active") {
-      return res.status(403).json({ message: "Active Scout Plan required to unlock profiles" });
+    if (!plan || !businessPlanHasAccess(plan.status)) {
+      return res.status(403).json({ message: "An active Business plan is required to unlock profiles" });
     }
 
     const targetUserId = parseInt(req.body.userId);
@@ -3346,7 +3527,7 @@ export async function registerRoutes(
     if (acct.status !== "verified_business") return res.status(403).json({ message: "Business verification required" });
 
     const plan = await storage.getBusinessPlan(acct.id);
-    if (!plan || plan.status !== "active") return res.status(403).json({ message: "Active Scout Plan required" });
+    if (!plan || !businessPlanHasAccess(plan.status)) return res.status(403).json({ message: "An active Business plan is required" });
 
     const parsed = businessOfferSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
@@ -5181,36 +5362,67 @@ export async function registerRoutes(
             console.log(`[GUBER][webhook/main] business_verification: biz ${bizId} fee paid`);
           }
 
-        } else if (metadata?.type === "business_scout_plan" && metadata?.businessAccountId) {
-          const bizId = parseInt(metadata.businessAccountId);
-          const bizAcct = await storage.getBusinessAccountById(bizId);
-          if (bizAcct) {
-            const subscriptionId = session.subscription as string | undefined;
-            if (subscriptionId) {
-              await storage.updateBusinessAccount(bizId, { stripeSubscriptionId: subscriptionId });
-            }
-            const renewsAt = new Date();
-            renewsAt.setMonth(renewsAt.getMonth() + 1);
-            await storage.createBusinessPlan({
-              businessAccountId: bizId,
-              planType: "scout",
-              status: "active",
-              includedUnlocksPerMonth: 20,
-              currentUnlockBalance: 20,
-              renewsAt,
+        } else if (metadata?.type === "business_plan_subscription" && metadata?.businessAccountId) {
+          if (session.payment_status !== "paid") {
+            console.log(`[GUBER][webhook/main] business_plan_subscription: session ${session.id} payment_status=${session.payment_status} — skipping (not paid)`);
+            return res.json({ received: true });
+          }
+          const businessAccountId = parseInt(metadata.businessAccountId);
+          const planType = String(metadata.planType || "");
+          const offerKey = metadata.offerKey || null;
+          const subscriptionId = typeof session.subscription === "string" ? session.subscription : null;
+          const synced = await syncBusinessSubscription({
+            businessAccountId,
+            subscriptionId,
+            planType,
+            offerKey,
+            status: "active",
+            eventType: offerKey === FOUNDING_LOCAL_OFFER.offerKey
+              ? "founding_offer_activated"
+              : "business_plan_activated",
+            stripeEventId: event.id,
+            rawReference: session.id,
+          });
+          if (synced && !synced.duplicate) {
+            const label = offerKey === FOUNDING_LOCAL_OFFER.offerKey
+              ? FOUNDING_LOCAL_OFFER.label
+              : synced.catalogPlan.label;
+            await storage.createAuditLog({
+              userId: synced.account.ownerUserId,
+              action: "business_subscription_activated",
+              details: `Business ${label} subscription activated. Session: ${session.id}. Sub: ${subscriptionId || "n/a"}.`,
             });
-            await storage.createBillingEvent({
-              businessAccountId: bizId,
-              stripeEventId: event.id,
-              eventType: "scout_plan_activated",
-              rawReference: session.id,
-            });
-            await notify(bizAcct.ownerUserId, {
-              title: "Scout Plan Active",
-              body: "Your $99/month Business Scout Plan is now active. You have 20 profile unlocks this month.",
+            await storage.createNotification({
+              userId: synced.account.ownerUserId,
+              title: `${label} active`,
+              body: `Your ${label} subscription is active. Your business entitlements are now available.`,
               type: "system",
             });
-            console.log(`[GUBER][webhook/main] business_scout_plan: biz ${bizId} plan activated`);
+            console.log(`[GUBER][webhook/main] business_plan_subscription: biz ${businessAccountId} plan=${planType} offer=${offerKey || "none"} activated`);
+          }
+
+        } else if (metadata?.type === "business_scout_plan" && metadata?.businessAccountId) {
+          if (session.payment_status !== "paid") {
+            return res.json({ received: true });
+          }
+          const bizId = parseInt(metadata.businessAccountId);
+          const subscriptionId = typeof session.subscription === "string" ? session.subscription : null;
+          const synced = await syncBusinessSubscription({
+            businessAccountId: bizId,
+            subscriptionId,
+            planType: "business_plus",
+            status: "active",
+            eventType: "business_plan_legacy_activated",
+            stripeEventId: event.id,
+            rawReference: session.id,
+          });
+          if (synced && !synced.duplicate) {
+            await notify(synced.account.ownerUserId, {
+              title: "Business+ Active",
+              body: "Your legacy business subscription has been moved onto the current Business+ entitlements.",
+              type: "system",
+            });
+            console.log(`[GUBER][webhook/main] business_scout_plan: biz ${bizId} mapped to catalog Business+`);
           }
 
         } else if (metadata?.type === "business_extra_unlocks" && metadata?.businessAccountId) {
@@ -5466,7 +5678,29 @@ export async function registerRoutes(
       } else if (event.type === "customer.subscription.updated") {
         const sub = event.data.object as Stripe.Subscription;
         const subMeta = sub.metadata;
-        if (subMeta?.type === "trust_box" && subMeta?.userId) {
+        if (subMeta?.type === "business_plan_subscription" && subMeta?.businessAccountId) {
+          const businessAccountId = parseInt(subMeta.businessAccountId);
+          const renewsAt = (sub as any).current_period_end ? new Date((sub as any).current_period_end * 1000) : null;
+          const synced = await syncBusinessSubscription({
+            businessAccountId,
+            subscriptionId: sub.id,
+            planType: String(subMeta.planType || "business"),
+            offerKey: subMeta.offerKey || null,
+            status: sub.status,
+            renewsAt,
+            cancelAtPeriodEnd: !!sub.cancel_at_period_end,
+            stripeEventId: event.id,
+            eventType: "business_subscription_updated",
+            rawReference: sub.id,
+          });
+          if (synced && !synced.duplicate) {
+            await storage.createAuditLog({
+              userId: synced.account.ownerUserId,
+              action: "business_subscription_updated",
+              details: `Business subscription ${sub.id} updated: status=${sub.status}, cancelAtPeriodEnd=${!!sub.cancel_at_period_end}.`,
+            });
+          }
+        } else if (subMeta?.type === "trust_box" && subMeta?.userId) {
           const userId = parseInt(subMeta.userId);
           const isActive = sub.status === "active" || sub.status === "trialing";
           await storage.updateUser(userId, {
@@ -5488,7 +5722,45 @@ export async function registerRoutes(
       } else if (event.type === "customer.subscription.deleted") {
         const sub = event.data.object as Stripe.Subscription;
         const subMeta = sub.metadata;
-        if (subMeta?.type === "trust_box" && subMeta?.userId) {
+        if (subMeta?.type === "business_plan_subscription" && subMeta?.businessAccountId) {
+          const businessAccountId = parseInt(subMeta.businessAccountId);
+          const account = await storage.getBusinessAccountById(businessAccountId);
+          const plan = await storage.getBusinessPlan(businessAccountId);
+          if (plan && (!plan.stripeSubscriptionId || plan.stripeSubscriptionId === sub.id)) {
+            await storage.updateBusinessPlan(plan.id, {
+              planType: "business",
+              status: "active",
+              stripeSubscriptionId: null,
+              cancelAtPeriodEnd: false,
+              offerKey: null,
+              renewsAt: null,
+              includedUnlocksPerMonth: 0,
+              currentUnlockBalance: 0,
+            });
+          }
+          if (account && (!account.stripeSubscriptionId || account.stripeSubscriptionId === sub.id)) {
+            await storage.updateBusinessAccount(account.id, { stripeSubscriptionId: null });
+            await storage.createBillingEvent({
+              businessAccountId,
+              stripeEventId: event.id,
+              eventType: subMeta.offerKey === FOUNDING_LOCAL_OFFER.offerKey
+                ? "founding_offer_ended"
+                : "business_subscription_ended",
+              rawReference: sub.id,
+            }).catch(() => {});
+            await storage.createAuditLog({
+              userId: account.ownerUserId,
+              action: "business_subscription_ended",
+              details: `Business subscription ended. Sub: ${sub.id}. Business tier restored.`,
+            });
+            await storage.createNotification({
+              userId: account.ownerUserId,
+              title: "Business subscription ended",
+              body: "Your paid business subscription has ended. Your account is on the free Business tier; you can subscribe again anytime.",
+              type: "system",
+            });
+          }
+        } else if (subMeta?.type === "trust_box" && subMeta?.userId) {
           const userId = parseInt(subMeta.userId);
           await storage.updateUser(userId, { trustBoxPurchased: false, trustBoxSubscriptionId: null });
           await storage.createAuditLog({
@@ -5529,13 +5801,46 @@ export async function registerRoutes(
 
       } else if (event.type === "invoice.paid") {
         const invoice = event.data.object as Stripe.Invoice;
-        const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : (invoice.subscription as any)?.id;
+        const invoiceSubscription = (invoice as any).subscription;
+        const subscriptionId = typeof invoiceSubscription === "string" ? invoiceSubscription : invoiceSubscription?.id;
         const billingReason = invoice.billing_reason ?? undefined;
         if (subscriptionId) {
           try {
             const sub = await stripeMain.subscriptions.retrieve(subscriptionId);
             const subMeta = sub.metadata;
-            if (subMeta?.type === "trust_box" && subMeta?.userId) {
+            if (subMeta?.type === "business_plan_subscription" && subMeta?.businessAccountId) {
+              const businessAccountId = parseInt(subMeta.businessAccountId);
+              const isRenewal = billingReason === "subscription_cycle";
+              const synced = await syncBusinessSubscription({
+                businessAccountId,
+                subscriptionId: sub.id,
+                planType: String(subMeta.planType || "business"),
+                offerKey: subMeta.offerKey || null,
+                status: "active",
+                renewsAt: (sub as any).current_period_end ? new Date((sub as any).current_period_end * 1000) : null,
+                cancelAtPeriodEnd: !!sub.cancel_at_period_end,
+                stripeEventId: event.id,
+                eventType: subMeta.offerKey === FOUNDING_LOCAL_OFFER.offerKey
+                  ? (isRenewal ? "founding_offer_renewed" : "founding_offer_paid")
+                  : (isRenewal ? "business_plan_renewed" : "business_plan_paid"),
+                rawReference: invoice.id,
+              });
+              if (synced && !synced.duplicate) {
+                await storage.createAuditLog({
+                  userId: synced.account.ownerUserId,
+                  action: isRenewal ? "business_subscription_renewed" : "business_subscription_paid",
+                  details: `Business ${synced.catalogPlan.label} ${isRenewal ? "renewal" : "payment"} received. Invoice: ${invoice.id}. Sub: ${sub.id}.`,
+                });
+                if (isRenewal) {
+                  await storage.createNotification({
+                    userId: synced.account.ownerUserId,
+                    title: "Business subscription renewed",
+                    body: `Your ${synced.catalogPlan.label} subscription renewed successfully.`,
+                    type: "system",
+                  });
+                }
+              }
+            } else if (subMeta?.type === "trust_box" && subMeta?.userId) {
               const userId = parseInt(subMeta.userId);
               await storage.updateUser(userId, { trustBoxPurchased: true, trustBoxSubscriptionId: sub.id });
               await storage.createAuditLog({
@@ -5596,6 +5901,40 @@ export async function registerRoutes(
           console.log(`[GUBER][webhook/main] invoice.paid: no subscription on invoice ${invoice.id} — ignored`);
         }
 
+      } else if (event.type === "invoice.payment_failed") {
+        const invoice = event.data.object as Stripe.Invoice;
+        const invoiceSubscription = (invoice as any).subscription;
+        const subscriptionId = typeof invoiceSubscription === "string"
+          ? invoiceSubscription
+          : invoiceSubscription?.id;
+        if (subscriptionId) {
+          const sub = await stripeMain.subscriptions.retrieve(subscriptionId);
+          const subMeta = sub.metadata;
+          if (subMeta?.type === "business_plan_subscription" && subMeta?.businessAccountId) {
+            const synced = await syncBusinessSubscription({
+              businessAccountId: parseInt(subMeta.businessAccountId),
+              subscriptionId: sub.id,
+              planType: String(subMeta.planType || "business"),
+              offerKey: subMeta.offerKey || null,
+              status: sub.status === "active" ? "past_due" : sub.status,
+              renewsAt: (sub as any).current_period_end ? new Date((sub as any).current_period_end * 1000) : null,
+              cancelAtPeriodEnd: !!sub.cancel_at_period_end,
+              stripeEventId: event.id,
+              eventType: subMeta.offerKey === FOUNDING_LOCAL_OFFER.offerKey
+                ? "founding_offer_payment_failed"
+                : "business_subscription_payment_failed",
+              rawReference: invoice.id,
+            });
+            if (synced && !synced.duplicate) {
+              await storage.createNotification({
+                userId: synced.account.ownerUserId,
+                title: "Business subscription payment needs attention",
+                body: "Your business subscription payment failed. Update your payment method in Manage billing to keep your paid entitlements active.",
+                type: "system",
+              });
+            }
+          }
+        }
       } else {
         console.log(`[GUBER][webhook/main] Unhandled event type: ${event.type}`);
       }
@@ -13929,6 +14268,24 @@ export async function registerRoutes(
       } else if (product === "business_scout") {
         const acct = await storage.getBusinessAccount(userId);
         if (!acct) return res.redirect(`${APP_BASE}/biz/dashboard?error=no_account`);
+        if (acct.status === "pending_business") {
+          return res.redirect(`${APP_BASE}/biz/dashboard?error=business_pending`);
+        }
+        const requestedPlanType = String(options.planType || "business_plus");
+        const selectedPlan = getBusinessPlanFromCatalog(requestedPlanType);
+        const useFoundingOffer = options.foundingOffer === true || options.offerKey === FOUNDING_LOCAL_OFFER.offerKey;
+        if (!selectedPlan || (selectedPlan.planType === "business" && !useFoundingOffer)) {
+          return res.redirect(`${APP_BASE}/biz/dashboard?error=invalid_business_plan`);
+        }
+        if (useFoundingOffer && selectedPlan.planType !== "business") {
+          return res.redirect(`${APP_BASE}/biz/dashboard?error=invalid_founding_plan`);
+        }
+        if (useFoundingOffer && !isFoundingLocalOfferEligible(acct)) {
+          return res.redirect(`${APP_BASE}/biz/dashboard?error=founding_offer_unavailable`);
+        }
+        if (acct.stripeSubscriptionId) {
+          return res.redirect(`${APP_BASE}/biz/dashboard?error=already_subscribed`);
+        }
         let customerId = acct.stripeCustomerId;
         if (!customerId) {
           const customer = await stripeMain.customers.create({
@@ -13945,13 +14302,29 @@ export async function registerRoutes(
           line_items: [{
             price_data: {
               currency: "usd",
-              product_data: { name: "GUBER Business Scout Plan", description: "Full Talent Explorer access, 20 profile unlocks/month, offer sending" },
-              unit_amount: 9900,
+              product_data: {
+                name: useFoundingOffer ? FOUNDING_LOCAL_OFFER.label : `GUBER ${selectedPlan.label}`,
+                description: useFoundingOffer ? FOUNDING_LOCAL_OFFER.duration : `${selectedPlan.label} business access and entitlements`,
+              },
+              unit_amount: useFoundingOffer ? FOUNDING_LOCAL_OFFER.monthlyPriceCents : selectedPlan.monthlyPriceCents,
               recurring: { interval: "month" },
             },
             quantity: 1,
           }],
-          metadata: { type: "business_scout_plan", businessAccountId: String(acct.id) },
+          metadata: {
+            type: "business_plan_subscription",
+            businessAccountId: String(acct.id),
+            planType: useFoundingOffer ? "business" : selectedPlan.planType,
+            offerKey: useFoundingOffer ? FOUNDING_LOCAL_OFFER.offerKey : "",
+          },
+          subscription_data: {
+            metadata: {
+              type: "business_plan_subscription",
+              businessAccountId: String(acct.id),
+              planType: useFoundingOffer ? "business" : selectedPlan.planType,
+              offerKey: useFoundingOffer ? FOUNDING_LOCAL_OFFER.offerKey : "",
+            },
+          },
           success_url: resolveSuccessUrl(options.successUrl, `${APP_BASE}/biz/dashboard?subscribed=true&purchased=1`),
           cancel_url: `${APP_BASE}/biz/talent-explorer`,
         });
