@@ -11,18 +11,22 @@ const authState = vi.hoisted(() => ({ user: null as { id: number } | null }));
 const jacSpeakSpy = vi.hoisted(() => vi.fn());
 const saveGuestDraftSpy = vi.hoisted(() => vi.fn());
 const saveServiceOfferPrefillSpy = vi.hoisted(() => vi.fn());
+const convaiCallbacks = vi.hoisted(() => ({ current: null as any }));
 
 vi.mock("@elevenlabs/react", () => ({
   ConversationProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  useConversation: () => ({
-    startSession: startSessionSpy,
-    endSession: endSessionSpy,
-    status: "disconnected",
-    isSpeaking: false,
-    isListening: false,
-    isMuted: false,
-    setMuted: vi.fn(),
-  }),
+  useConversation: (callbacks: any) => {
+    convaiCallbacks.current = callbacks;
+    return {
+      startSession: startSessionSpy,
+      endSession: endSessionSpy,
+      status: "disconnected",
+      isSpeaking: false,
+      isListening: false,
+      isMuted: false,
+      setMuted: vi.fn(),
+    };
+  },
 }));
 
 vi.mock("@/lib/auth-context", () => ({
@@ -48,6 +52,7 @@ vi.mock("@/lib/jac-tts", () => ({
   jacSpeak: jacSpeakSpy,
   cancelAllJacAudio: vi.fn(),
   setJacConvaiActive: vi.fn(),
+  unlockAudioContext: vi.fn(),
 }));
 
 vi.mock("@/components/jac/jac-character-renderer", () => ({
@@ -72,6 +77,7 @@ function sessionResponse(mode: "app") {
     json: async () => ({
       agentId: "jac-agent",
       signedUrl: "wss://example.test/jac",
+      voiceId: "h2dQOVyUfIDqY2whPOMo",
       voiceToken: "voice-token",
       dynamicVariableName: "secret__jac_voice_token",
       userContext: {
@@ -95,6 +101,7 @@ describe("JacLiveExperience auth handoff", () => {
     jacSpeakSpy.mockReset();
     saveGuestDraftSpy.mockReset();
     saveServiceOfferPrefillSpy.mockReset();
+    convaiCallbacks.current = null;
     microphoneReady.mockResolvedValue(true);
     window.sessionStorage.clear();
     Element.prototype.scrollIntoView = vi.fn();
@@ -169,5 +176,50 @@ describe("JacLiveExperience auth handoff", () => {
     expect(saveGuestDraftSpy).toHaveBeenCalledWith("service_offer", collected);
     expect(view.getByRole("link", { name: /Publish your service/i }).getAttribute("href"))
       .toBe("/signup?intent=worker&returnTo=%2Foffer-service&from=jac");
+  });
+
+  it("recovers an unexpected mobile disconnect without losing voice/text history", async () => {
+    const view = render(<JacLiveExperience />);
+    fireEvent.click(view.getByRole("button", { name: /start voice/i }));
+    await waitFor(() => expect(startSessionSpy).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      convaiCallbacks.current.onConnect();
+      convaiCallbacks.current.onMessage({ source: "user", message: "Find me work nearby" });
+      convaiCallbacks.current.onMessage({ source: "ai", message: "I can help you find nearby jobs." });
+      convaiCallbacks.current.onDisconnect({
+        reason: "error",
+        message: "network lost",
+        context: { type: "close", code: 1006, reason: "abnormal" },
+      });
+    });
+
+    expect(view.getByText("Reconnecting…")).toBeTruthy();
+    await waitFor(() => expect(startSessionSpy).toHaveBeenCalledTimes(2), { timeout: 2500 });
+
+    fireEvent.click(view.getByRole("button", { name: "Chat" }));
+    expect(view.getByText("Find me work nearby")).toBeTruthy();
+    expect(view.getByText("I can help you find nearby jobs.")).toBeTruthy();
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        reply: "Here are the next steps.",
+        route: "/jobs",
+      }),
+    } as Response);
+    fireEvent.change(view.getByLabelText("Message JAC"), {
+      target: { value: "Show me those jobs" },
+    });
+    fireEvent.click(view.getByLabelText("Send"));
+
+    await waitFor(() => expect(view.getByText("Here are the next steps.")).toBeTruthy());
+    const onboardCall = vi.mocked(fetch).mock.calls.find(([url]) => url === "/api/jac/onboard");
+    const body = JSON.parse(String((onboardCall?.[1] as RequestInit)?.body));
+    expect(body.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: "user", content: "Find me work nearby" }),
+      expect.objectContaining({ role: "assistant", content: "I can help you find nearby jobs." }),
+      expect.objectContaining({ role: "user", content: "Show me those jobs" }),
+    ]));
   });
 });
