@@ -1,19 +1,14 @@
 /**
- * JAC Realtime — OpenAI Realtime API (WebRTC) session management.
+ * JAC concierge prompt and tool definitions.
  *
- * Responsibilities:
- *  1. Create ephemeral session tokens (server-side; API key never leaves server)
- *  2. Define JAC's system prompt + tool schemas
- *  3. Execute GUBER tool calls forwarded from the client's data channel
+ * The former OpenAI Realtime transport was retired. Audio sessions now use the
+ * canonical ElevenLabs ConvAI path; this module only retains the prompt/tool
+ * helpers that are still useful to server-side tests and shared behavior.
  */
 
 import type { Pool } from "pg";
 import { buildDdFormationSteps } from "./dd-formation";
 import { JAC_MAIN_APP_CONCIERGE_POLICY, JAC_GUEST_HANDOFF_POLICY } from "./jac-team-guber-concierge";
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-export const JAC_REALTIME_MODEL = "gpt-4o-realtime-preview-2024-12-17";
-export const JAC_REALTIME_VOICE = "verse"; // warm, natural
 
 // ── System Prompt ─────────────────────────────────────────────────────────────
 export function buildJacSystemPrompt(user?: {
@@ -312,71 +307,6 @@ export const JAC_TOOLS = [
     },
   },
 ];
-
-// ── Session Creation ──────────────────────────────────────────────────────────
-export interface RealtimeSessionOptions {
-  user?: Parameters<typeof buildJacSystemPrompt>[0];
-}
-
-export async function createJacRealtimeSession(opts: RealtimeSessionOptions = {}): Promise<{
-  ephemeralKey: string;
-  sessionId: string;
-  model: string;
-  voice: string;
-  expiresAt: number;
-}> {
-  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OpenAI API key not configured");
-
-  const instructions = buildJacSystemPrompt(opts.user);
-
-  const body = {
-    model: JAC_REALTIME_MODEL,
-    voice: JAC_REALTIME_VOICE,
-    instructions,
-    tools: JAC_TOOLS,
-    tool_choice: "auto",
-    input_audio_format: "pcm16",
-    output_audio_format: "pcm16",
-    turn_detection: {
-      type: "server_vad",
-      threshold: 0.5,
-      prefix_padding_ms: 300,
-      silence_duration_ms: 500,
-      create_response: true,
-    },
-    input_audio_transcription: {
-      model: "whisper-1",
-    },
-    temperature: 0.8,
-    max_response_output_tokens: 4096,
-  };
-
-  // Use standard OpenAI endpoint — bypass Replit proxy for Realtime API
-  const baseURL = "https://api.openai.com/v1";
-  const res = await fetch(`${baseURL}/realtime/sessions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`OpenAI Realtime session failed: ${res.status} ${err}`);
-  }
-
-  const data = await res.json() as any;
-  return {
-    ephemeralKey: data.client_secret?.value ?? "",
-    sessionId: data.id ?? "",
-    model: data.model ?? JAC_REALTIME_MODEL,
-    voice: data.voice ?? JAC_REALTIME_VOICE,
-    expiresAt: data.client_secret?.expires_at ?? Math.floor(Date.now() / 1000) + 60,
-  };
-}
 
 // ── Tool Execution ────────────────────────────────────────────────────────────
 export async function executeJacTool(
