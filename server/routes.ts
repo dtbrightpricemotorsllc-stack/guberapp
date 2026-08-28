@@ -34,7 +34,6 @@ import {
 import { sendPushToUser } from "./push";
 import { tryLocalAnswer, promoteToCache, getJacBrainStats, getMultiSourceContext } from "./jac-brain";
 import { syncJacProfile, buildJacProfileContext, buildMorningBriefing, scanOpportunities } from "./jac-profile";
-import { createJacRealtimeSession, executeJacTool } from "./jac-realtime";
 import { buildDdFormationSteps } from "./dd-formation";
 import { reportIssue as recordSystemIssue, escalateCriticalIssue, tryAdminMonitoringAnswer, shouldDiagnose } from "./system-issues";
 import { maybeDiagnoseIssue } from "./ai-diagnosis";
@@ -82,6 +81,11 @@ import {
   getBusinessPlanFromCatalog,
   isFoundingLocalOfferEligible,
 } from "./business-experience";
+import {
+  getCampaignSession,
+  claimCampaignSession,
+  registerCampaignOnboardingRoutes,
+} from "./campaign-onboarding";
 import * as assetCustody from "./asset-custody";
 import {
   PROTECTION_PACKAGES,
@@ -985,6 +989,7 @@ export async function registerRoutes(
 
   registerServiceOfferRoutes(app, { requireAuth, requireAdmin, checkSuspended });
   registerBusinessExperienceRoutes(app, { requireAuth, requireAdmin });
+  registerCampaignOnboardingRoutes(app, { requireAuth });
 
   app.get("/api/config", (_req: Request, res: Response) => {
     res.json({ googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "" });
@@ -20022,6 +20027,7 @@ CRITICAL — respond with JSON ONLY, no other text:
       return res.json({
         agentId,
         ...(signedUrl ? { signedUrl } : {}),
+        voiceId: JAC_ELEVENLABS_VOICE_ID,
         voiceToken,
         dynamicVariableName: "secret__jac_voice_token",
         userContext: { firstName: "there", role: "anon", platform: "web", jac_mode: "investor", userId: "anon" },
@@ -20035,7 +20041,7 @@ CRITICAL — respond with JSON ONLY, no other text:
   // ── JAC voice session mint — PUBLIC homepage variant (no auth) ─────────────
   // The public homepage uses the same canonical JAC personality as the signed-in
   // app. Investor-specific identity and prompting stay isolated to the route above.
-  app.post("/api/jac/convai/public-session", async (_req: Request, res: Response) => {
+  app.post("/api/jac/convai/public-session", async (req: Request, res: Response) => {
     try {
       const agentId = process.env.ELEVENLABS_CONVAI_AGENT_ID;
       const apiKey  = process.env.ELEVENLABS_API_KEY;
@@ -20050,6 +20056,7 @@ CRITICAL — respond with JSON ONLY, no other text:
         firstName: "there",
         jacMode: "app",
       });
+      const campaign = await getCampaignSession(String(req.body?.campaignSessionId || ""));
 
       const now = Date.now();
       const agentKnownPublic = _jacSignedUrlPublicUntil > now;
@@ -20106,9 +20113,21 @@ CRITICAL — respond with JSON ONLY, no other text:
       return res.json({
         agentId,
         ...(signedUrl ? { signedUrl } : {}),
+        voiceId: JAC_ELEVENLABS_VOICE_ID,
         voiceToken,
         dynamicVariableName: "secret__jac_voice_token",
-        userContext: { firstName: "there", role: "anon", platform: "web", jac_mode: "app", userId: "anon" },
+        userContext: {
+          firstName: "there",
+          role: "anon",
+          platform: "web",
+          jac_mode: "app",
+          userId: "anon",
+          ...(campaign ? {
+            campaign_session_id: campaign.session_id,
+            campaign_kind: campaign.campaign_kind,
+            campaign_intent: campaign.current_intent || campaign.original_intent,
+          } : {}),
+        },
       });
     } catch (err: any) {
       console.error("[jac/convai/public-session]", err?.message);
@@ -20218,6 +20237,7 @@ CRITICAL — respond with JSON ONLY, no other text:
         : req.body?.mode === "business_demo" ? "business_demo"
         : "app";
       const voiceToken = signJacVoiceToken({ userId: user.id, role, platform, jacMode: convaiMode });
+      const campaign = await getCampaignSession(String(req.body?.campaignSessionId || ""));
 
       // Masked agent ID for safe logging (first 8 + last 4 chars)
       const maskedAgent = agentId.length > 12
@@ -20297,6 +20317,7 @@ CRITICAL — respond with JSON ONLY, no other text:
       return res.json({
         agentId,
         ...(signedUrl ? { signedUrl } : {}),
+        voiceId: JAC_ELEVENLABS_VOICE_ID,
         voiceToken,
         dynamicVariableName: "secret__jac_voice_token",
         // Non-secret context ElevenLabs can embed in system prompt via {{jac_mode}}, {{first_name}}, etc.
@@ -20306,6 +20327,11 @@ CRITICAL — respond with JSON ONLY, no other text:
           platform,
           jac_mode: convaiMode,
           userId: user.id,
+          ...(campaign ? {
+            campaign_session_id: campaign.session_id,
+            campaign_kind: campaign.campaign_kind,
+            campaign_intent: campaign.current_intent || campaign.original_intent,
+          } : {}),
         },
       });
     } catch (err: any) {
@@ -20832,6 +20858,11 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         ? `${SYSTEM}\n\nHINT: The listing type is already known to be "${hintType}". Do not ask about listing type.`
         : SYSTEM;
 
+      const { default: OpenAI } = await import("openai");
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
         temperature: 0.45,
@@ -20876,48 +20907,16 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
   });
 
   // ── JAC Realtime (OpenAI Realtime API / WebRTC) ──────────────────────────
-  app.post("/api/jac/realtime-session", async (req: Request, res: Response) => {
-    try {
-      const userId = (req.session as any)?.userId ?? null;
-      let userCtx: Parameters<typeof createJacRealtimeSession>[0]["user"] = null;
-      if (userId) {
-        const row = await pool.query(
-          `SELECT display_name, id_verified, is_worker, is_hirer, zipcode FROM users WHERE id=$1`,
-          [userId]
-        );
-        if (row.rows[0]) {
-          const u = row.rows[0];
-          userCtx = {
-            displayName: u.display_name ?? undefined,
-            idVerified: !!u.id_verified,
-            isWorker: !!u.is_worker,
-            isHirer: !!u.is_hirer,
-            zip: u.zipcode ?? undefined,
-          };
-        }
-      }
-      const session = await createJacRealtimeSession({ user: userCtx });
-      res.json(session);
-    } catch (err: any) {
-      console.error("[jac-realtime] session error:", err?.message);
-      res.status(503).json({ message: "JAC Realtime unavailable: " + (err?.message || "unknown error") });
-    }
+  app.post("/api/jac/realtime-session", (_req: Request, res: Response) => {
+    res.status(410).json({
+      message: "This legacy voice path is disabled. Use the canonical JAC ConvAI session.",
+    });
   });
 
-  app.post("/api/jac/realtime-tool", async (req: Request, res: Response) => {
-    try {
-      const { name, args } = req.body;
-      if (!name || typeof name !== "string") {
-        return res.status(400).json({ error: "Tool name required" });
-      }
-      // Pass authenticated userId so D.D. tools can create/advance cases on behalf of the user.
-      const userId = (req.session as any)?.userId as number | undefined;
-      const result = await executeJacTool(name, args || {}, pool, userId);
-      res.json(result);
-    } catch (err: any) {
-      console.error("[jac-realtime] tool error:", err?.message);
-      res.status(500).json({ error: "Tool execution failed: " + (err?.message || "unknown") });
-    }
+  app.post("/api/jac/realtime-tool", (_req: Request, res: Response) => {
+    res.status(410).json({
+      message: "This legacy voice path is disabled. Use the canonical JAC action flow.",
+    });
   });
 
   // ── ElevenLabs ConvAI Webhook (conversation capture → training data) ────────

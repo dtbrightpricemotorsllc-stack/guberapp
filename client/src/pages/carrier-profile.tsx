@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { isStoreBuild } from "@/lib/platform";
 import {
   Truck, ShieldCheck, Loader2, Check, Upload, Clock,
   AlertTriangle, X, Star, Zap, Crown,
@@ -222,6 +223,7 @@ export default function CarrierProfilePage() {
   // ── subscription checkout ──
   const subMutation = useMutation({
     mutationFn: async (tier: string) => {
+      if (isStoreBuild) throw new Error("Carrier subscriptions are managed on guberapp.com");
       const res = await apiRequest("POST", "/api/carrier-profile/subscription/checkout", { tier });
       return res.json();
     },
@@ -558,7 +560,9 @@ export default function CarrierProfilePage() {
             <div className="rounded-xl p-3 mb-2" style={{ background: "rgba(6,182,212,0.07)", border: "1px solid rgba(6,182,212,0.15)" }}>
               <p className="text-xs font-display font-bold text-cyan-300 mb-0.5">Carrier Plans</p>
               <p className="text-[9px] text-cyan-400/50">
-                Upgrade to unlock premium load access, GPS tracking, and the verified carrier badge. Cancel anytime.
+                {isStoreBuild
+                  ? "This app shows your carrier entitlement. Subscription management is available on guberapp.com."
+                  : "Upgrade to unlock premium load access, GPS tracking, and the verified carrier badge. Cancel anytime."}
               </p>
             </div>
 
@@ -591,9 +595,11 @@ export default function CarrierProfilePage() {
                         )}
                       </div>
                     </div>
-                    <p className={`text-xl font-display font-black shrink-0 ${isCurrent ? tier.color : "text-muted-foreground/50"}`}>
-                      {tier.priceLabel}
-                    </p>
+                     {!isStoreBuild && (
+                       <p className={`text-xl font-display font-black shrink-0 ${isCurrent ? tier.color : "text-muted-foreground/50"}`}>
+                         {tier.priceLabel}
+                       </p>
+                     )}
                   </div>
 
                   <div className="space-y-1.5 mb-4">
@@ -605,7 +611,7 @@ export default function CarrierProfilePage() {
                     ))}
                   </div>
 
-                  {!isCurrent && tier.value !== "basic" && (
+                   {!isCurrent && tier.value !== "basic" && !isStoreBuild && (
                     <Button
                       className="w-full rounded-xl h-10 font-display font-black text-sm"
                       style={tier.value === "business"
@@ -622,15 +628,21 @@ export default function CarrierProfilePage() {
                     </Button>
                   )}
 
-                  {isCurrent && tier.value !== "basic" && (
+                   {isCurrent && tier.value !== "basic" && (
                     <p className="text-center text-[10px] text-muted-foreground/40 font-display font-bold">
-                      ✓ Active — manage at stripe.com/billing
+                       ✓ Active — {isStoreBuild ? "manage on guberapp.com" : "manage at stripe.com/billing"}
                     </p>
                   )}
 
-                  {isCurrent && tier.value === "basic" && (
+                   {!isCurrent && tier.value !== "basic" && isStoreBuild && (
+                     <p className="text-center text-[10px] text-muted-foreground/40 font-display font-bold">
+                       Available on guberapp.com
+                     </p>
+                   )}
+
+                   {isCurrent && tier.value === "basic" && (
                     <p className="text-[9px] text-muted-foreground/30 text-center">
-                      Upgrade to unlock more features
+                       {isStoreBuild ? "Entitlement managed on guberapp.com" : "Upgrade to unlock more features"}
                     </p>
                   )}
                 </div>
@@ -639,9 +651,9 @@ export default function CarrierProfilePage() {
 
             <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}>
               <p className="text-[9px] text-muted-foreground/35 leading-relaxed">
-                💳 <strong className="text-muted-foreground/50">Billing</strong> — Subscriptions are processed securely via Stripe and renew monthly.
-                Cancel anytime. Premium carrier badge and priority placement activate immediately after payment.
-                No refunds for partial months.
+                 💳 <strong className="text-muted-foreground/50">Billing</strong> — {isStoreBuild
+                   ? "Subscription management is available on guberapp.com. This app only displays your current entitlement."
+                   : "Subscriptions are processed securely via Stripe and renew monthly. Cancel anytime. Premium carrier badge and priority placement activate immediately after payment. No refunds for partial months."}
               </p>
             </div>
           </div>

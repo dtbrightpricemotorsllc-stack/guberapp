@@ -5,13 +5,12 @@
 
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
-import { Loader2, ShoppingCart, Sparkles, ArrowLeft, Coins, ExternalLink, Trophy } from "lucide-react";
+import { Loader2, ShoppingCart, Sparkles, ArrowLeft, Coins, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isStoreBuild } from "@/lib/platform";
-import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
 import { MobileReturnBanner } from "@/components/mobile-return-banner";
 import { useCommerceMode } from "@/lib/commerce-mode";
 
@@ -41,6 +40,7 @@ function perCreditDollars(priceCents: number, credits: number) {
 export default function StudioCreditsPage() {
   const { toast } = useToast();
   const { canPurchase } = useCommerceMode();
+  const webPurchasesEnabled = canPurchase && !isStoreBuild;
   const searchStr = useSearch();
   const searchParams = new URLSearchParams(searchStr);
   const purchaseSuccess =
@@ -53,6 +53,7 @@ export default function StudioCreditsPage() {
 
   const buyPack = useMutation({
     mutationFn: async (packId: string) => {
+      if (isStoreBuild) throw new Error("Studio purchases are available on guberapp.com");
       const res = await apiRequest("POST", "/api/stripe/studio-credits-checkout", { packId });
       return res.json();
     },
@@ -64,6 +65,7 @@ export default function StudioCreditsPage() {
 
   const subscribe = useMutation({
     mutationFn: async (tier: string) => {
+      if (isStoreBuild) throw new Error("Studio subscriptions are managed on guberapp.com");
       const res = await apiRequest("POST", "/api/stripe/studio-subscription-checkout", { tier });
       return res.json();
     },
@@ -75,6 +77,7 @@ export default function StudioCreditsPage() {
 
   const cancel = useMutation({
     mutationFn: async () => {
+      if (isStoreBuild) throw new Error("Studio subscriptions are managed on guberapp.com");
       const res = await apiRequest("POST", "/api/stripe/cancel-studio-subscription", {});
       return res.json();
     },
@@ -110,25 +113,21 @@ export default function StudioCreditsPage() {
             </div>
           )}
         </div>
-        {canPurchase ? (
+        {webPurchasesEnabled ? (
           <>
             <p className="text-white/60 text-sm mb-2">
               Pick a pack for one-time credits, or subscribe for a monthly drop. Credits never expire.
             </p>
-            {isStoreBuild && (
-              <p className="text-xs text-amber-300/80 mb-6 flex items-center gap-1.5" data-testid="text-store-external-notice">
-                <ExternalLink className="w-3 h-3 shrink-0" />
-                Purchases open in Safari — your credits sync back to the app automatically.
-              </p>
-            )}
-            {!isStoreBuild && <div className="mb-6" />}
+            <div className="mb-6" />
           </>
         ) : (
           <div className="mb-6">
             <p className="text-white/60 text-sm mb-4">
-              Studio credits are earned through eligible GUBER activities. Complete jobs and missions to unlock AI generation tools.
+              {isStoreBuild
+                ? "This app shows your Studio entitlements and credit balance. Subscription and purchase management is available on guberapp.com."
+                : "Studio credits are earned through eligible GUBER activities. Complete jobs and missions to unlock AI generation tools."}
             </p>
-            <Link href="/earning-opportunities">
+            {!isStoreBuild && <Link href="/earning-opportunities">
               <Button
                 variant="outline"
                 className="flex items-center gap-2 rounded-xl font-display tracking-wider text-xs border-emerald-400/40 text-emerald-300 hover:bg-emerald-400/10"
@@ -137,7 +136,7 @@ export default function StudioCreditsPage() {
                 <Trophy className="w-4 h-4" />
                 View Earning Opportunities
               </Button>
-            </Link>
+            </Link>}
           </div>
         )}
 
@@ -158,11 +157,11 @@ export default function StudioCreditsPage() {
                   data-testid={`card-pack-${p.id}`}
                 >
                   <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300/80">{p.label}</p>
-                  {canPurchase && <p className="text-2xl font-black">{dollars(p.priceCents)}</p>}
+                  {webPurchasesEnabled && <p className="text-2xl font-black">{dollars(p.priceCents)}</p>}
                   <p className="text-sm text-white/80">
                     <span className="font-bold tabular-nums">{p.credits.toLocaleString()}</span> credits
                   </p>
-                  {canPurchase && <p className="text-[10px] text-white/40">≈ {perCreditDollars(p.priceCents, p.credits)} / cr</p>}
+                  {webPurchasesEnabled && <p className="text-[10px] text-white/40">≈ {perCreditDollars(p.priceCents, p.credits)} / cr</p>}
                   {!canPurchase ? (
                     <Link href="/earning-opportunities">
                       <Button size="sm" variant="outline" className="mt-2 w-full text-emerald-300 border-emerald-400/30 hover:bg-emerald-400/10" data-testid={`button-earn-for-${p.id}`}>
@@ -170,19 +169,7 @@ export default function StudioCreditsPage() {
                       </Button>
                     </Link>
                   ) : isStoreBuild ? (
-                    <ExternalPurchaseSheet product="studio_credits" options={{ packId: p.id }}>
-                      {({ onPress, loading: btnLoading }) => (
-                        <Button
-                          size="sm"
-                          className="mt-2"
-                          disabled={btnLoading}
-                          onClick={onPress}
-                          data-testid={`button-buy-${p.id}`}
-                        >
-                          {btnLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ExternalLink className="w-4 h-4 mr-2" /> Buy</>}
-                        </Button>
-                      )}
-                    </ExternalPurchaseSheet>
+                    <p className="mt-2 text-xs text-white/45">Purchase management on guberapp.com</p>
                   ) : (
                     <Button
                       size="sm"
@@ -198,7 +185,7 @@ export default function StudioCreditsPage() {
               ))}
             </div>
 
-            <h2 className="text-xs uppercase tracking-[0.25em] text-white/50 mb-3">{canPurchase ? "Monthly Subscriptions" : "Credit Tiers"}</h2>
+            <h2 className="text-xs uppercase tracking-[0.25em] text-white/50 mb-3">{webPurchasesEnabled ? "Monthly Subscriptions" : "Credit Tiers"}</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {tiers.map((t) => {
                 const isCurrent = me?.tier === t.id && !!me?.subscription;
@@ -212,7 +199,7 @@ export default function StudioCreditsPage() {
                       <p className="text-base font-bold">{t.label}</p>
                       {isCurrent && <Badge variant="outline" className="text-[10px]">CURRENT</Badge>}
                     </div>
-                    {canPurchase && (
+                    {webPurchasesEnabled && (
                       <p className="text-2xl font-black">
                         {dollars(t.priceCents)}
                         <span className="text-xs font-normal text-white/50"> / mo</span>
@@ -230,7 +217,11 @@ export default function StudioCreditsPage() {
                       ))}
                     </ul>
                     {isCurrent ? (
-                      me?.subscription?.cancelAtPeriodEnd ? (
+                      isStoreBuild ? (
+                        <Button size="sm" variant="outline" disabled data-testid={`button-managed-${t.id}`}>
+                          Managed on guberapp.com
+                        </Button>
+                      ) : me?.subscription?.cancelAtPeriodEnd ? (
                         <Button size="sm" variant="outline" disabled data-testid={`button-cancelled-${t.id}`}>
                           Cancels at period end
                         </Button>
@@ -252,18 +243,7 @@ export default function StudioCreditsPage() {
                         </Button>
                       </Link>
                     ) : isStoreBuild ? (
-                      <ExternalPurchaseSheet product="studio_subscription" options={{ tier: t.id }}>
-                        {({ onPress, loading: btnLoading }) => (
-                          <Button
-                            size="sm"
-                            disabled={btnLoading}
-                            onClick={onPress}
-                            data-testid={`button-subscribe-${t.id}`}
-                          >
-                            {btnLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ExternalLink className="w-4 h-4 mr-2" /> Subscribe</>}
-                          </Button>
-                        )}
-                      </ExternalPurchaseSheet>
+                      <p className="text-xs text-white/45">Subscription management on guberapp.com</p>
                     ) : (
                       <Button
                         size="sm"

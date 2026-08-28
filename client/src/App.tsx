@@ -47,7 +47,6 @@ import JoinPage from "@/pages/join";
 import GpsTest from "@/pages/gps-test";
 import BgLocationDemo from "@/pages/bg-location-demo";
 import JacVoiceTest from "@/pages/jac-voice-test";
-const JacRealtimeTest = lazy(() => import("@/pages/jac-realtime-test"));
 import { LoadingSplash } from "@/components/loading-splash";
 
 // Authenticated consumer pages — lazy loaded
@@ -368,7 +367,7 @@ function Router() {
       <Route path="/login" component={() => <PublicOnly component={Login} />} />
       <Route path="/signup" component={() => <PublicOnly component={Signup} />} />
       <Route path="/business-signup" component={() => <PublicOnly component={BusinessSignup} />} />
-      <Route path="/business-join/:code" component={() => <PublicOnly component={BusinessSignup} />} />
+      <Route path="/business-join/:code" component={() => <JoinPage kind="business" />} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/oauth-landing" component={() => {
@@ -497,11 +496,10 @@ function Router() {
       <Route path="/founders" component={() => <ProtectedRoute component={FoundersClub} />} />
       <Route path="/carrier-profile" component={() => <ProtectedRoute component={CarrierProfilePage} />} />
       <Route path="/auth-success" component={AuthSuccess} />
-      <Route path="/join/:code" component={JoinPage} />
+      <Route path="/join/:code" component={() => <JoinPage />} />
       <Route path="/gps-test" component={GpsTest} />
       <Route path="/bg-location-demo" component={BgLocationDemo} />
       <Route path="/jac-voice-test" component={() => <ProtectedRoute component={JacVoiceTest} />} />
-      <Route path="/jac-realtime-test" component={() => <ProtectedRoute component={JacRealtimeTest} />} />
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/acceptable-use" component={AcceptableUse} />

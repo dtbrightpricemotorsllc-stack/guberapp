@@ -5,7 +5,6 @@ import { GuberLayout } from "@/components/guber-layout";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
 import { MobileReturnBanner } from "@/components/mobile-return-banner";
 import { isStoreBuild } from "@/lib/platform";
 import { ShieldCheck, Loader2, Check, Sparkles, Lock } from "lucide-react";
@@ -56,6 +55,10 @@ export default function FoundersClub() {
   }, [toast]);
 
   const startWebCheckout = async () => {
+    if (isStoreBuild) {
+      toast({ title: "Manage on guberapp.com", description: "Founders Club enrollment is managed on the web." });
+      return;
+    }
     try {
       const res = await apiRequest("POST", "/api/asset-protection/founders/checkout", {});
       const data = await res.json();
@@ -124,12 +127,18 @@ export default function FoundersClub() {
               <div className="flex items-end justify-between">
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground/50 font-display font-bold">Founder price</p>
-                  <p className="text-3xl font-display font-black text-emerald-400" data-testid="text-founder-price">
-                    {fmtUsd(status.currentPriceCents)}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground/50 mt-0.5">
-                    one-time · rises to {fmtUsd(status.standardPriceCents)} after the cap
-                  </p>
+                   {!isStoreBuild ? (
+                     <>
+                       <p className="text-3xl font-display font-black text-emerald-400" data-testid="text-founder-price">
+                         {fmtUsd(status.currentPriceCents)}
+                       </p>
+                       <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                         one-time · rises to {fmtUsd(status.standardPriceCents)} after the cap
+                       </p>
+                     </>
+                   ) : (
+                     <p className="text-sm text-emerald-400/80 mt-2">Founding entitlement status</p>
+                   )}
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground/50 font-display font-bold">Spots left</p>
@@ -189,19 +198,13 @@ export default function FoundersClub() {
                 </p>
               </div>
             ) : isStoreBuild ? (
-              <ExternalPurchaseSheet product="asset_protection_founders">
-                {({ onPress, loading }) => (
-                  <Button
-                    onClick={onPress}
-                    disabled={loading}
-                    className="w-full h-12 rounded-2xl font-display font-black bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-500 hover:to-teal-500"
-                    data-testid="button-enroll-founders"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <ShieldCheck className="w-4 h-4 mr-1.5" />}
-                    Become a Founding Member — {fmtUsd(status.currentPriceCents)}
-                  </Button>
-                )}
-              </ExternalPurchaseSheet>
+              <div
+                className="rounded-2xl p-4 text-center text-sm text-muted-foreground/70"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)" }}
+                data-testid="text-founders-web-managed"
+              >
+                Founders Club enrollment and account management are available on guberapp.com.
+              </div>
             ) : (
               <Button
                 onClick={startWebCheckout}
@@ -214,7 +217,9 @@ export default function FoundersClub() {
             )}
 
             <p className="text-[10px] text-muted-foreground/40 text-center leading-relaxed px-2">
-              One-time enrollment via secure Stripe checkout. U.S. customers only. Founding Member status is lifetime and non-transferable.
+              {isStoreBuild
+                ? "This app displays your founding entitlement. Enrollment and billing actions stay on guberapp.com."
+                : "One-time enrollment via secure Stripe checkout. U.S. customers only. Founding Member status is lifetime and non-transferable."}
             </p>
           </>
         )}

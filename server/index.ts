@@ -1096,6 +1096,44 @@ app.use((req, res, next) => {
   `).catch(e => console.error("[migration] jac tables error:", e));
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_onboarding_sessions (
+      session_id          TEXT PRIMARY KEY,
+      campaign_kind       TEXT NOT NULL CHECK (campaign_kind IN ('consumer', 'business')),
+      source              TEXT NOT NULL DEFAULT 'flyer',
+      referral_code       TEXT,
+      invitation_code     TEXT,
+      original_intent     TEXT,
+      current_intent      TEXT,
+      resume_path         TEXT NOT NULL DEFAULT '/dashboard',
+      context             JSONB NOT NULL DEFAULT '{}',
+      guest_session_id    TEXT,
+      user_id             INTEGER REFERENCES users(id),
+      business_account_id INTEGER REFERENCES business_accounts(id),
+      status              TEXT NOT NULL DEFAULT 'active',
+      expires_at          TIMESTAMP NOT NULL,
+      claimed_at          TIMESTAMP,
+      created_at          TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at          TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_campaign_onboarding_user
+      ON campaign_onboarding_sessions(user_id, status);
+    CREATE INDEX IF NOT EXISTS idx_campaign_onboarding_code
+      ON campaign_onboarding_sessions(invitation_code, referral_code);
+
+    CREATE TABLE IF NOT EXISTS campaign_onboarding_events (
+      id         SERIAL PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES campaign_onboarding_sessions(session_id) ON DELETE CASCADE,
+      event_key  TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      payload    JSONB NOT NULL DEFAULT '{}',
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      UNIQUE (session_id, event_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_campaign_onboarding_events_type
+      ON campaign_onboarding_events(event_type, created_at DESC);
+  `).catch(e => console.error("[migration] campaign onboarding error:", e));
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS jac_memory (
       id         SERIAL PRIMARY KEY,
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

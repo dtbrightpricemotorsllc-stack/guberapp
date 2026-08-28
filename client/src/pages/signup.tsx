@@ -14,6 +14,12 @@ import { isIOS } from "@/lib/platform";
 import { nativeGoogleSignIn, browserGoogleSignIn } from "@/lib/native-google-sign-in";
 import { nativeAppleSignIn } from "@/lib/native-apple-sign-in";
 import { setGoogleAuthPhase } from "@/components/google-auth-overlay";
+import {
+  claimAndResolveCampaignPath,
+  getActiveCampaignSessionId,
+  recordCampaignEvent,
+  withCampaignSession,
+} from "@/lib/campaign-onboarding";
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
@@ -40,6 +46,7 @@ export default function Signup() {
   const search = useSearch();
   const rawReturnTo = new URLSearchParams(search).get("returnTo") || "";
   const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "";
+  const campaignSessionId = getActiveCampaignSessionId();
   const { toast } = useToast();
   const [form, setForm] = useState(() => {
     try {
@@ -98,9 +105,12 @@ export default function Signup() {
     }
     setLoading(true);
     try {
+      if (campaignSessionId) {
+        void recordCampaignEvent(campaignSessionId, "auth_started", "auth_started:signup");
+      }
       await signup({ ...form, referralCode: refCode || undefined } as any);
       localStorage.removeItem("guber_ref");
-      setLocation(returnTo || "/dashboard");
+      setLocation(await claimAndResolveCampaignPath(returnTo || "/dashboard"));
     } catch (err: any) {
       toast({ title: "Signup Failed", description: err.message || "Please try again", variant: "destructive" });
     } finally {
@@ -151,7 +161,7 @@ export default function Signup() {
           // client ID) is surfaced as an error toast instead of silently
           // bouncing the user into the browser flow.
           const browserResult = await browserGoogleSignIn({
-            returnTo: returnTo || undefined,
+            returnTo: withCampaignSession(returnTo || "/dashboard", campaignSessionId) || undefined,
             onPhaseChange: (phase) => {
               if (phase === "completing") setGoogleAuthPhase("completing");
             },

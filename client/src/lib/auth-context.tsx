@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useMemo } from "react";
+import { createContext, useContext, useCallback, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "./queryClient";
 import { getToken, setToken, clearToken } from "./token-storage";
@@ -6,6 +6,7 @@ import { signOutFromGoogle } from "./native-google-sign-in";
 import { Capacitor } from "@capacitor/core";
 import type { User } from "@shared/schema";
 import { getGuestSessionId, clearGuestSessionId } from "@/hooks/use-guest-jac-session";
+import { claimAndResolveCampaignPath } from "./campaign-onboarding";
 
 /** Fire-and-forget: transfer any JAC guest drafts to the newly authenticated user. */
 async function transferJacGuestSession(): Promise<void> {
@@ -79,6 +80,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       transferJacGuestSession().catch(() => {});
     },
   });
+
+  useEffect(() => {
+    if (!user?.id) return;
+    void transferJacGuestSession();
+    void (async () => {
+      const authPaths = new Set(["/login", "/signup", "/business-signup", "/auth-success"]);
+      const fallback = user.accountType === "business" ? "/biz/dashboard" : "/dashboard";
+      const destination = await claimAndResolveCampaignPath(fallback);
+      if (destination !== fallback && authPaths.has(window.location.pathname)) {
+        window.location.replace(destination);
+      }
+    })();
+  }, [user?.id, user?.accountType]);
 
   const signupMutation = useMutation({
     mutationFn: async (data: { email: string; username: string; fullName: string; password: string; zipcode?: string }) => {

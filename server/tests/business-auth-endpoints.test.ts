@@ -123,6 +123,7 @@ const mockState = vi.hoisted<MockState>(() => {
 
 const mockPool = vi.hoisted(() => ({
   query: vi.fn(),
+  connect: vi.fn(),
 }));
 
 vi.mock("../db", () => {
@@ -295,6 +296,21 @@ const stubFetch = (): MockFetchResponse => ({
 beforeEach(() => {
   globalThis.fetch = vi.fn<typeof fetch>(async () => stubFetch() as unknown as Response);
   mockPool.query.mockReset();
+  mockPool.connect.mockReset();
+  mockPool.connect.mockImplementation(async () => ({
+    query: vi.fn(async (statement: string, params?: unknown[]) => {
+      if (
+        statement === "BEGIN" ||
+        statement === "COMMIT" ||
+        statement === "ROLLBACK" ||
+        statement.includes("pg_advisory_xact_lock")
+      ) {
+        return { rows: [] };
+      }
+      return mockPool.query(statement, params);
+    }),
+    release: vi.fn(),
+  }));
 });
 
 let appInstance: Express | null = null;

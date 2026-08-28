@@ -16,6 +16,12 @@ import { nativeGoogleSignIn, browserGoogleSignIn } from "@/lib/native-google-sig
 import { nativeAppleSignIn } from "@/lib/native-apple-sign-in";
 import { getToken } from "@/lib/token-storage";
 import { setGoogleAuthPhase } from "@/components/google-auth-overlay";
+import {
+  claimAndResolveCampaignPath,
+  getActiveCampaignSessionId,
+  recordCampaignEvent,
+  withCampaignSession,
+} from "@/lib/campaign-onboarding";
 
 export default function Login() {
   const { login } = useAuth();
@@ -30,6 +36,7 @@ export default function Login() {
   const [appleLoading, setAppleLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState<"consumer" | "business" | null>(null);
   const isNative = Capacitor.isNativePlatform();
+  const campaignSessionId = getActiveCampaignSessionId();
 
   // Synchronous in-flight lock for the Google sign-in handler — see comment in handler below.
   const googleInFlightRef = useRef(false);
@@ -84,14 +91,12 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
-      const loggedInUser = await login(email, password);
-      if (returnTo) {
-        setLocation(returnTo);
-      } else if (loggedInUser?.accountType === "business") {
-        setLocation("/biz/dashboard");
-      } else {
-        setLocation("/dashboard");
+      if (campaignSessionId) {
+        void recordCampaignEvent(campaignSessionId, "auth_started", "auth_started:login");
       }
+      const loggedInUser = await login(email, password);
+      const fallback = returnTo || (loggedInUser?.accountType === "business" ? "/biz/dashboard" : "/dashboard");
+      setLocation(await claimAndResolveCampaignPath(fallback));
     } catch (err: any) {
       toast({ title: "Login Failed", description: err.message || "Invalid credentials", variant: "destructive" });
       // Only report system failures (network / 5xx) — wrong credentials (401/403)

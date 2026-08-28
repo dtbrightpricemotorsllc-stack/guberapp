@@ -15,6 +15,7 @@ import {
   Flame, Sparkles, ArrowRight, Clock, Target, X, ScanSearch
 } from "lucide-react";
 import type { Job, BusinessProfile } from "@shared/schema";
+import { isStoreBuild } from "@/lib/platform";
 
 const GOLD = "#C6A85C";
 const GOLD_DK = "#A88A43";
@@ -144,6 +145,7 @@ export default function BizDashboard() {
 
   const planSelection = useMutation({
     mutationFn: async ({ planType, foundingOffer = false }: { planType: string; foundingOffer?: boolean }) => {
+      if (isStoreBuild) throw new Error("Business subscriptions are managed on guberapp.com");
       const response = await apiRequest("POST", "/api/business/create-plan-subscription", { planType, foundingOffer });
       return response.json();
     },
@@ -161,6 +163,7 @@ export default function BizDashboard() {
 
   const billingPortal = useMutation({
     mutationFn: async () => {
+      if (isStoreBuild) throw new Error("Business billing is managed on guberapp.com");
       const response = await apiRequest("POST", "/api/business/billing-portal");
       return response.json();
     },
@@ -172,6 +175,7 @@ export default function BizDashboard() {
 
   const cancelSubscription = useMutation({
     mutationFn: async () => {
+      if (isStoreBuild) throw new Error("Business subscriptions are managed on guberapp.com");
       const response = await apiRequest("POST", "/api/business/cancel-subscription");
       return response.json();
     },
@@ -317,7 +321,7 @@ export default function BizDashboard() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2 sm:justify-end">
-                    {paidPlanActive && (
+                    {paidPlanActive && !isStoreBuild && (
                       <>
                         <Button
                           size="sm"
@@ -349,11 +353,13 @@ export default function BizDashboard() {
                 <p className="mt-2 text-[10px] leading-relaxed" style={{ color: TEXT_MUTED }}>
                   {businessPlans.current?.cancelAtPeriodEnd
                     ? `Scheduled to end after ${businessPlans.current?.renewsAt ? new Date(businessPlans.current.renewsAt).toLocaleDateString() : "the current billing period"}.`
-                    : businessPlans.foundingOffer?.eligible
-                      ? `Founding Local Business Offer: $${(businessPlans.foundingOffer.monthlyPriceCents / 100).toFixed(2)}/month through September 30, 2026.`
+                    : isStoreBuild
+                      ? "Plan entitlements are shown here. Subscription and billing management is available on guberapp.com."
+                      : businessPlans.foundingOffer?.eligible
+                        ? `Founding Local Business Offer: $${(businessPlans.foundingOffer.monthlyPriceCents / 100).toFixed(2)}/month through September 30, 2026.`
                       : "Plan access and billing status are managed from your business account."}
                 </p>
-                {businessPlans.canPurchase && (
+                {businessPlans.canPurchase && !isStoreBuild && (
                   <div className="mt-4 grid gap-2 md:grid-cols-3">
                     {businessPlans.catalog.map((plan: any) => {
                       const isCurrent = !currentOfferKey && currentPlanType === plan.planType;

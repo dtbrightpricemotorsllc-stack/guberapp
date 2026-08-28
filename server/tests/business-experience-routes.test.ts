@@ -71,6 +71,8 @@ function buildApp(userId: number | null = BUSINESS_OWNER_ID) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockPool.query.mockReset();
+  mockPool.connect.mockReset();
   mockStorage.getBusinessAccount.mockResolvedValue(businessAccount);
   mockStorage.getBusinessAccountById.mockResolvedValue(businessAccount);
   mockStorage.getBusinessProfile.mockResolvedValue({ companyName: businessAccount.businessName });
@@ -96,10 +98,18 @@ describe("business referral invitation attribution", () => {
         rows: [{ code: "TG-VALID", owner_user_id: DISTRIBUTOR_ID, owner_label: "Distributor One", active: true, expires_at: null }],
       })
       .mockResolvedValueOnce({ rows: [attribution] });
+    const client = clientFor(
+      undefined,
+      undefined,
+      { rows: [{ code: "TG-VALID", owner_user_id: DISTRIBUTOR_ID, owner_label: "Distributor One", active: true, expires_at: null }] },
+      { rows: [attribution] },
+      undefined,
+    );
+    mockPool.connect.mockResolvedValueOnce(client);
 
     await expect(recordBusinessReferral(BUSINESS_ACCOUNT_ID, "  tg-valid ", BUSINESS_OWNER_ID)).resolves.toEqual(attribution);
-    expect(mockPool.query.mock.calls[0][1]).toEqual(["TG-VALID"]);
-    expect(mockPool.query.mock.calls[1][1]).toEqual([
+    expect(client.query.mock.calls[2][1]).toEqual(["TG-VALID"]);
+    expect(client.query.mock.calls[3][1]).toEqual([
       BUSINESS_ACCOUNT_ID,
       "TG-VALID",
       DISTRIBUTOR_ID,
@@ -112,33 +122,41 @@ describe("business referral invitation attribution", () => {
     ["inactive", { code: "TG-TEST", owner_user_id: DISTRIBUTOR_ID, owner_label: "Distributor One", active: false, expires_at: null }],
     ["expired", { code: "TG-TEST", owner_user_id: DISTRIBUTOR_ID, owner_label: "Distributor One", active: true, expires_at: "2020-01-01T00:00:00.000Z" }],
   ])("rejects %s invitation codes", async (_label, codeRow) => {
-    mockPool.query.mockResolvedValueOnce({ rows: codeRow ? [codeRow] : [] });
+    const client = clientFor(undefined, undefined, { rows: codeRow ? [codeRow] : [] }, undefined);
+    mockPool.connect.mockResolvedValueOnce(client);
 
     await expect(recordBusinessReferral(BUSINESS_ACCOUNT_ID, "TG-TEST", BUSINESS_OWNER_ID))
       .rejects.toThrow("Invalid or expired invitation code");
-    expect(mockPool.query).toHaveBeenCalledTimes(1);
+    expect(client.query.mock.calls[2][1]).toEqual(["TG-TEST"]);
   });
 
   it("rejects a self-referral before writing an attribution", async () => {
-    mockPool.query.mockResolvedValueOnce({
-      rows: [{ code: "TG-SELF", owner_user_id: BUSINESS_OWNER_ID, owner_label: "Owner", active: true, expires_at: null }],
-    });
+    const client = clientFor(
+      undefined,
+      undefined,
+      { rows: [{ code: "TG-SELF", owner_user_id: BUSINESS_OWNER_ID, owner_label: "Owner", active: true, expires_at: null }] },
+      undefined,
+    );
+    mockPool.connect.mockResolvedValueOnce(client);
 
     await expect(recordBusinessReferral(BUSINESS_ACCOUNT_ID, "TG-SELF", BUSINESS_OWNER_ID))
       .rejects.toThrow("You cannot use your own distributor code");
-    expect(mockPool.query).toHaveBeenCalledTimes(1);
+    expect(client.query.mock.calls[2][1]).toEqual(["TG-SELF"]);
   });
 
   it("rejects duplicate attribution for the same business account", async () => {
-    mockPool.query
-      .mockResolvedValueOnce({
-        rows: [{ code: "TG-DUP", owner_user_id: DISTRIBUTOR_ID, owner_label: "Distributor One", active: true, expires_at: null }],
-      })
-      .mockResolvedValueOnce({ rows: [] });
+    const client = clientFor(
+      undefined,
+      undefined,
+      { rows: [{ code: "TG-DUP", owner_user_id: DISTRIBUTOR_ID, owner_label: "Distributor One", active: true, expires_at: null }] },
+      { rows: [] },
+      undefined,
+    );
+    mockPool.connect.mockResolvedValueOnce(client);
 
     await expect(recordBusinessReferral(BUSINESS_ACCOUNT_ID, "TG-DUP", BUSINESS_OWNER_ID))
       .rejects.toThrow("This business already has referral attribution");
-    expect(mockPool.query.mock.calls[1][0]).toContain("ON CONFLICT (business_account_id) DO NOTHING");
+    expect(client.query.mock.calls[3][0]).toContain("ON CONFLICT (business_account_id) DO NOTHING");
   });
 });
 
@@ -261,6 +279,8 @@ describe("business evidence and administrator review", () => {
     mockPool.connect.mockResolvedValueOnce(clientFor(
       undefined,
       undefined,
+      { rows: [{ invitation_code: "TG-VALID" }] },
+      undefined,
       {
         rows: [{
           id: 12,
@@ -357,12 +377,16 @@ describe("exactly-once business referral reward and cash-out", () => {
       .mockResolvedValueOnce(clientFor(
         undefined,
         undefined,
+        { rows: [{ invitation_code: "TG-VALID" }] },
+        undefined,
         { rows: [pendingAttribution] },
         { rowCount: 1, rows: [] },
         undefined,
       ))
       .mockResolvedValueOnce(clientFor(
         undefined,
+        undefined,
+        { rows: [{ invitation_code: "TG-VALID" }] },
         undefined,
         { rows: [approvedAttribution] },
         undefined,
@@ -390,6 +414,12 @@ describe("exactly-once business referral reward and cash-out", () => {
       source_type: "business_referral",
       business_referral_id: 21,
     };
+    mockStorage.getUser.mockResolvedValue({
+      id: DISTRIBUTOR_ID,
+      idVerified: true,
+      stripeAccountId: "acct_test",
+      stripeAccountStatus: "active",
+    });
     mockPool.connect
       .mockResolvedValueOnce(clientFor(
         undefined,
@@ -425,7 +455,6 @@ describe("exactly-once business referral reward and cash-out", () => {
     expect(cashoutInsert?.[1]).toEqual([
       DISTRIBUTOR_ID,
       5,
-      "stripe_connect",
       "acct_test",
       21,
     ]);

@@ -58,3 +58,5 @@
 - [JAC mouth live amplitude](jac-mouth-live-amplitude.md) — real-audio mouth needs gesture-unlocked analyser ctx; cross-context local streams read silent in Chromium — test via WebRTC loopback.
 - [Day-1 OG limited-time campaign](day1og-limited-time-campaign.md) — offer availability is time-bound, not ZIP- or city-capped; earned status remains permanent.
 - [Business verification and referral rail](business-verification-referrals.md) — business verification is requirement-based with auditable admin review; distributor rewards stay separate cash obligations.
+- [Campaign onboarding continuity](campaign-onboarding-continuity.md) — flyer/invite entry is JAC-first and uses a server-backed session claimed across authentication with deduplicated funnel events.
+- [Native digital commerce boundary](native-digital-commerce-boundary.md) — digital purchase, subscription, founding-offer, and billing actions stay on guberapp.com; native only reads entitlements.

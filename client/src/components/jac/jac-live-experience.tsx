@@ -23,7 +23,7 @@ import { useAuth } from "@/lib/auth-context";
 import { JacCharacterRenderer, type JacState } from "@/components/jac/jac-character-renderer";
 import { Link } from "wouter";
 import { useGuestJacSession } from "@/hooks/use-guest-jac-session";
-import { jacSpeak, cancelAllJacAudio, setJacConvaiActive } from "@/lib/jac-tts";
+import { cancelAllJacAudio, setJacConvaiActive } from "@/lib/jac-tts";
 import { createJacConvaiVoiceOverride } from "@/lib/jac-convai-voice-lock";
 import {
   appendSharedJacMessage,
@@ -36,6 +36,14 @@ import {
   readSharedJacConversation,
 } from "@/lib/jac-live-coordination";
 import { saveServiceOfferPrefill } from "@/lib/jac-listing-prefill";
+import { JAC_ELEVENLABS_VOICE_ID } from "@shared/jac-voice";
+import {
+  getActiveCampaignSessionId,
+  getCampaignSession,
+  recordCampaignEvent,
+  updateCampaignSession,
+  withCampaignSession,
+} from "@/lib/campaign-onboarding";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Msg {
@@ -412,6 +420,8 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   const inputRef                = useRef<HTMLInputElement>(null);
   const textId                  = useId();
   const { guestSessionId, saveGuestDraft } = useGuestJacSession();
+  const [campaignSessionId] = useState(() => getActiveCampaignSessionId());
+  const campaignStartedRef = useRef(false);
   const automaticStartClaimRef = useRef<(() => boolean) | null>(null);
   if (!automaticStartClaimRef.current) {
     automaticStartClaimRef.current = createJacAutomaticVoiceStartClaim();
@@ -455,7 +465,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
         fetch(sessionEndpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ platform: "web" }),
+          body: JSON.stringify({ platform: "web", campaignSessionId }),
         }),
       ]);
 
@@ -471,6 +481,9 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       }
 
       const session = await sesRes.value.json();
+      if (session.voiceId !== JAC_ELEVENLABS_VOICE_ID) {
+        throw new Error("JAC voice identity check failed");
+      }
       const dynVars: Record<string, string> = {
         [session.dynamicVariableName]: session.voiceToken,
       };
@@ -479,6 +492,9 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       if (session.userContext?.platform)  dynVars["user_platform"]    = session.userContext.platform;
       if (session.userContext?.jac_mode)  dynVars["jac_mode"]         = session.userContext.jac_mode;
       if (session.userContext?.userId != null) dynVars["user_id"]     = String(session.userContext.userId);
+      if (session.userContext?.campaign_session_id) dynVars["campaign_session_id"] = session.userContext.campaign_session_id;
+      if (session.userContext?.campaign_kind) dynVars["campaign_kind"] = session.userContext.campaign_kind;
+      if (session.userContext?.campaign_intent) dynVars["campaign_intent"] = session.userContext.campaign_intent;
 
       const params: Record<string, any> = {
         dynamicVariables: dynVars,
@@ -491,11 +507,10 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     } catch (err: any) {
       setError(err?.message || "Could not connect to JAC");
     }
-  }, [sessionEndpoint, startSession]);
+  }, [campaignSessionId, sessionEndpoint, startSession]);
 
-  // Choose one welcome owner on entry: a ready live session when permission
-  // was already granted, otherwise the output-only greeting. No permission
-  // prompt is made here; manual voice remains available in the fallback state.
+  // Voice has one owner: the canonical ConvAI session. Never fall back to a
+  // separate direct-TTS or browser voice when a live session cannot start.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -507,7 +522,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
         await boot();
         return;
       }
-      if (!cancelled && claimJacWelcomeGreeting()) void jacSpeak(WELCOME_GREETING);
+      if (!cancelled) claimJacWelcomeGreeting();
     })();
     return () => {
       cancelled = true;
@@ -532,6 +547,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
         body: JSON.stringify({
           messages: history,
           mode: "homepage",
+          ...(campaignSessionId ? { campaign_session_id: campaignSessionId } : {}),
           ...(isAuthenticated ? {} : { guest_session_id: guestSessionId }),
         }),
       });
@@ -544,7 +560,21 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
         void saveGuestDraft("service_offer", collected);
       }
       if (reply) {
-        const route = typeof data.route === "string" && data.route ? data.route : null;
+        const rawRoute = typeof data.route === "string" && data.route ? data.route : null;
+        const route = withCampaignSession(rawRoute, campaignSessionId);
+        if (campaignSessionId) {
+          const intent = typeof data.intent === "string"
+            ? data.intent
+            : typeof data.tracking?.intent === "string"
+              ? data.tracking.intent
+              : undefined;
+          void updateCampaignSession(campaignSessionId, {
+            intent,
+            resumePath: rawRoute || undefined,
+            context: { lastUserMessage: trimmed.slice(0, 300) },
+            guestSessionId,
+          });
+        }
         const kind = data.guestDraft?.type === "service_offer" || route?.startsWith("/offer-service")
           ? "offer-service"
           : inferSurface(reply);
@@ -562,7 +592,26 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     } finally {
       setTextLoading(false);
     }
-  }, [guestSessionId, isAuthenticated, msgs, textLoading]);
+  }, [campaignSessionId, guestSessionId, isAuthenticated, msgs, textLoading]);
+
+  useEffect(() => {
+    if (!campaignSessionId || campaignStartedRef.current) return;
+    campaignStartedRef.current = true;
+    void recordCampaignEvent(campaignSessionId, "jac_opened", "jac_opened");
+    void (async () => {
+      const session = await getCampaignSession(campaignSessionId);
+      if (!session) return;
+      const marker = `guber_campaign_jac_started:${campaignSessionId}`;
+      try {
+        if (sessionStorage.getItem(marker)) return;
+        sessionStorage.setItem(marker, "1");
+      } catch {}
+      const prompt = session.kind === "business"
+        ? "I scanned a GUBER business invitation. Help me understand the business setup and continue."
+        : "I scanned a GUBER flyer. Help me find the right way to get started.";
+      await sendText(prompt);
+    })();
+  }, [campaignSessionId, sendText]);
 
   const handleChipClick = useCallback((msg: string) => {
     if (isServiceDiscoveryIntent(msg)) setSurface({ kind: "services" });

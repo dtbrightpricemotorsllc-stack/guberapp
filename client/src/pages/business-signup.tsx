@@ -12,6 +12,12 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Loader2, ArrowLeft, Eye, EyeOff, Check, X, ShieldCheck, Building2,
 } from "lucide-react";
+import {
+  claimAndResolveCampaignPath,
+  getActiveCampaignSessionId,
+  getCampaignSession,
+  recordCampaignEvent,
+} from "@/lib/campaign-onboarding";
 
 const INDUSTRIES = [
   "Insurance / Claims",
@@ -53,6 +59,7 @@ export default function BusinessSignup() {
   const [, joinParams] = useRoute("/business-join/:code");
   const search = useSearch();
   const invitationFromJoin = joinParams?.code || new URLSearchParams(search).get("invite") || "";
+  const campaignSessionId = getActiveCampaignSessionId();
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -98,6 +105,19 @@ export default function BusinessSignup() {
   const [showPassword, setShowPassword] = useState(false);
   const [termsAgreed, setTermsAgreed] = useState(false);
 
+  useEffect(() => {
+    if (!campaignSessionId) return;
+    void (async () => {
+      const session = await getCampaignSession(campaignSessionId);
+      if (session?.kind === "business" && session.invitationCode) {
+        setForm((current) => ({
+          ...current,
+          invitationCode: current.invitationCode || session.invitationCode || "",
+        }));
+      }
+    })();
+  }, [campaignSessionId]);
+
   const passwordValid =
     form.password.length >= 8 &&
     /[A-Z]/.test(form.password) &&
@@ -118,9 +138,12 @@ export default function BusinessSignup() {
     }
     setLoading(true);
     try {
+      if (campaignSessionId) {
+        void recordCampaignEvent(campaignSessionId, "auth_started", "auth_started:business-signup");
+      }
       await apiRequest("POST", "/api/auth/business-access-request", form);
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      setLocation("/");
+      setLocation(await claimAndResolveCampaignPath("/biz/dashboard"));
     } catch (err: any) {
       let msg = err.message || "Please try again";
       try {
