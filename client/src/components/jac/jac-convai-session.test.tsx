@@ -65,7 +65,12 @@ vi.mock("@/lib/jac-tts", () => ({
 
 // ── Import component AFTER all mocks are registered ──────────────────────────
 
-import { JacConvaiSession, _testOnlyFireMicLost, isJacEchoTranscript } from "./jac-convai-session";
+import {
+  JacConvaiSession,
+  _testOnlyFireMicLost,
+  isJacEchoTranscript,
+  type JacConvaiSessionHandle,
+} from "./jac-convai-session";
 import { JAC_ELEVENLABS_VOICE_ID } from "@shared/jac-voice";
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
@@ -603,7 +608,44 @@ describe("JacConvaiSession — mic-lost recovery", () => {
     _testOnlyFireMicLost();
 
     expect(onErrorSpy).not.toHaveBeenCalled();
-    expect(endSessionSpy).not.toHaveBeenCalled();
+    expect(endSessionSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("suppresses teardown callbacks but surfaces a replacement-session failure", async () => {
+    mockApiRequest.mockResolvedValue(makeSessionResponse());
+    const onPhaseChange = vi.fn();
+    const ref = React.createRef<JacConvaiSessionHandle>();
+    let finishTeardown!: () => void;
+    endSessionSpy.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      finishTeardown = resolve;
+    }));
+
+    render(
+      <JacConvaiSession
+        ref={ref}
+        active={true}
+        sessionEndpoint="/api/jac/convai/session"
+        onPhaseChange={onPhaseChange}
+        onUserTranscript={noop}
+        onJacResponse={noop}
+        onError={onErrorSpy}
+      />,
+    );
+    await waitFor(() => expect(startSessionSpy).toHaveBeenCalledTimes(1), { timeout: 3000, interval: 50 });
+
+    act(() => ref.current?.reconnect());
+    expect(endSessionSpy).toHaveBeenCalledTimes(1);
+    _capturedConvaiHandlers.onError?.("intentional teardown");
+    _capturedConvaiHandlers.onDisconnect?.();
+    expect(onErrorSpy).not.toHaveBeenCalled();
+
+    await act(async () => finishTeardown());
+    await waitFor(() => expect(startSessionSpy).toHaveBeenCalledTimes(2), { timeout: 3000, interval: 50 });
+    _capturedConvaiHandlers.onDisconnect?.();
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    expect(onErrorSpy).toHaveBeenCalledWith("Voice disconnected. Tap the mic to retry.");
+    expect(startSessionSpy).toHaveBeenCalledTimes(2);
+    expect(onPhaseChange).toHaveBeenCalledWith("connecting");
   });
 
   it("does not clear a second instance's mic-lost handler when the first instance unmounts", async () => {

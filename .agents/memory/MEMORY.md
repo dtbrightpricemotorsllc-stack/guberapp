@@ -49,12 +49,11 @@
 - [createAuditLog schema mismatch](createaudit-log-schema.md) — only pass userId/action/details/ipAddress; wrong field names (actorId/entityType/metadata) crash inserts with a misleading unrelated-looking error.
 - [Capacitor WKWebView black screen](capacitor-wkwebview-black-screen.md) — three bugs in ViewController.swift cause instant black screen; fix: dark bg in capacitorDidLoad(), deferred retry for NSURLErrorCancelled, anchor overlay to self.view.
 - [iPad black screen diagnosis](ipad-black-screen.md) — LoadingSplash (#000 fixed overlay) + no auth fetch timeout = permanent black on Autoscale cold starts; fix: timeout + skip splash on native.
-- [ElevenLabs API key workspace + permissions](elevenlabs-api-key-workspace.md) — key needs correct workspace (owns agent_4901kw…) AND convai_write scope; wrong workspace=404, missing scope=401; staging key sk_e36cf… must never be used.
+- [ElevenLabs API key workspace + permissions](elevenlabs-api-key-workspace.md) — JAC voice credentials need the agent-owning workspace and convai_write scope; mismatches return 404 or 401.
 - [JAC in-scene signup card](jac-inline-signup.md) — show_signup action is door-surface-only, slot-reserved before the 4-action cap, once per guest session; guest KB-shortcut bypass must stay.
 - [JAC Door Scene](jac-door-scene.md) — GuberDoorSplash is sole web entry (no mascot loader); 4 JAC states via JacAnimatedCharacter + canvas mouth overlay; _greetingHasFired guards replay; ConvAI handles continuous turns.
 - [Release check baseline](release-check-baseline.md) — keep strict checks green by quarantining only documented legacy diagnostics; new TypeScript errors must fail the gate.
-- [JAC route E2E fixtures](jac-route-e2e-fixtures.md) — assistant E2E tests must avoid listing-intent wording for ambiguous requests and dismiss GPS/alert overlays before opening chat.
-// hint: Logic changed on both sides. Requires understanding intent of each change.
+- [JAC browser E2E fixtures](jac-route-e2e-fixtures.md) — avoid listing-intent wording, dismiss overlays, and never rely on CI fake-mic availability for deterministic voice acceptance.
 - [JAC mouth live amplitude](jac-mouth-live-amplitude.md) — real-audio mouth needs gesture-unlocked analyser ctx; cross-context local streams read silent in Chromium — test via WebRTC loopback.
 - [Day-1 OG limited-time campaign](day1og-limited-time-campaign.md) — offer availability is time-bound, not ZIP- or city-capped; earned status remains permanent.
 - [Business verification and referral rail](business-verification-referrals.md) — business verification is requirement-based with auditable admin review; distributor rewards stay separate cash obligations.

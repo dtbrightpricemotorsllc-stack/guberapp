@@ -31,9 +31,11 @@ import {
   claimJacWelcomeGreeting,
   getJacQuickActions,
   isServiceDiscoveryIntent,
+  isJacE2EVoiceHarnessEnabled,
   isJacMicrophoneReady,
   JAC_WELCOME_GREETING,
   readSharedJacConversation,
+  subscribeToJacE2EVoiceEvents,
 } from "@/lib/jac-live-coordination";
 import { saveServiceOfferPrefill } from "@/lib/jac-listing-prefill";
 import { JAC_ELEVENLABS_VOICE_ID } from "@shared/jac-voice";
@@ -424,6 +426,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   const recoveryAttemptsRef = useRef(0);
   const recoveryRef = useRef<((reason: string) => void) | null>(null);
   const voiceTokenRef = useRef<string | null>(null);
+  const bootAttemptRef = useRef(0);
 
   const [msgs, setMsgs]         = useState<Msg[]>(loadMsgs);
   const [surface, setSurface]   = useState<Surface2State>({ kind: "welcome" });
@@ -435,6 +438,10 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   const [muted, setMutedLocal]  = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [e2eVoice, setE2EVoice] = useState<{
+    connected: boolean;
+    phase: "idle" | "listening" | "speaking";
+  }>({ connected: false, phase: "idle" });
   const transcriptEndRef        = useRef<HTMLDivElement>(null);
   const inputRef                = useRef<HTMLInputElement>(null);
   const textId                  = useId();
@@ -536,17 +543,65 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     });
   }
 
+  useEffect(() => subscribeToJacE2EVoiceEvents("homepage", (event) => {
+    if (!mountedRef.current) return;
+    if (event.kind === "connect") {
+      statusRef.current = "connected";
+      recoveryAttemptsRef.current = 0;
+      setE2EVoice({ connected: true, phase: "listening" });
+      setReconnecting(false);
+      setJacConvaiActive(true);
+      setError(null);
+      setEnded(false);
+      return;
+    }
+    if (event.kind === "listening" || event.kind === "speaking") {
+      setE2EVoice({ connected: true, phase: event.kind });
+      return;
+    }
+    if (event.kind === "user-transcript" && event.text?.trim()) {
+      addMsg({ id: uid(), role: "user", text: event.text.trim() });
+      return;
+    }
+    if (event.kind === "assistant-response" && event.text?.trim()) {
+      const text = event.text.trim();
+      addMsg({ id: uid(), role: "assistant", text });
+      setSurface({ kind: inferSurface(text) });
+      return;
+    }
+    if (event.kind === "error") {
+      statusRef.current = "disconnected";
+      setJacConvaiActive(false);
+      setE2EVoice({ connected: false, phase: "idle" });
+      setReconnecting(false);
+      setError(event.text?.trim() || "Connection failed");
+      setEnded(true);
+      return;
+    }
+    if (event.kind === "disconnect") {
+      statusRef.current = "disconnected";
+      setJacConvaiActive(false);
+      setE2EVoice({ connected: false, phase: "idle" });
+      setReconnecting(false);
+      setEnded(true);
+    }
+  }), []);
+
   // ── Map ConvAI → JacState ─────────────────────────────────────────────────
-  const connected = status === "connected";
+  const e2eHarnessEnabled = isJacE2EVoiceHarnessEnabled();
+  const connected = e2eHarnessEnabled ? e2eVoice.connected : status === "connected";
+  const voiceIsSpeaking = e2eHarnessEnabled ? e2eVoice.phase === "speaking" : isSpeaking;
+  const voiceIsListening = e2eHarnessEnabled ? e2eVoice.phase === "listening" : isListening;
   let jacState: JacState = "idle";
   if (error || ended || !connected || muted) jacState = "idle";
-  else if (isSpeaking)                    jacState = "speaking";
-  else if (isListening)                   jacState = "listening";
+  else if (voiceIsSpeaking)               jacState = "speaking";
+  else if (voiceIsListening)              jacState = "listening";
   else                                    jacState = "thinking";
 
   // ── Boot session ──────────────────────────────────────────────────────────
   const boot = useCallback(async ({ automatic = false }: { automatic?: boolean } = {}) => {
     if (!mountedRef.current || bootInFlightRef.current || statusRef.current === "connected") return;
+    const attempt = ++bootAttemptRef.current;
     bootInFlightRef.current = true;
     voiceRequestedRef.current = true;
     setVoiceStartAttempted(true);
@@ -562,7 +617,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
 
     let permissionStream: MediaStream | null = null;
     try {
-      if (!navigator.mediaDevices?.getUserMedia) {
+      if (!isJacE2EVoiceHarnessEnabled() && !navigator.mediaDevices?.getUserMedia) {
         throw new Error("Microphone is not supported in this browser.");
       }
 
@@ -570,9 +625,11 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       // The SDK will open its own stream, but this preserves the user gesture
       // on mobile browsers and keeps that stream alive until SDK startup has
       // completed instead of stopping it immediately and racing getUserMedia.
-      const micPromise = navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
+      const micPromise = isJacE2EVoiceHarnessEnabled()
+        ? Promise.resolve({ getTracks: () => [] } as unknown as MediaStream)
+        : navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          });
       const sessionPromise = fetch(sessionEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -582,6 +639,10 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
         micPromise,
         sessionPromise,
       ]);
+      if (!mountedRef.current || attempt !== bootAttemptRef.current) {
+        if (micRes.status === "fulfilled") micRes.value.getTracks().forEach(track => track.stop());
+        return;
+      }
 
       if (micRes.status === "rejected") {
         throw new Error(`Microphone unavailable (${micRes.reason?.name || "permission"}). Allow mic access or use text chat.`);
@@ -594,6 +655,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       }
 
       const session = await sesRes.value.json();
+      if (!mountedRef.current || attempt !== bootAttemptRef.current) return;
       if (session.voiceId !== JAC_ELEVENLABS_VOICE_ID) {
         throw new Error("JAC voice identity check failed");
       }
@@ -617,6 +679,13 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       if (session.signedUrl) params.signedUrl = session.signedUrl;
       else                   params.agentId   = session.agentId;
 
+      if (isJacE2EVoiceHarnessEnabled()) {
+        setE2EVoice({ connected: false, phase: "idle" });
+        permissionStream.getTracks().forEach(track => track.stop());
+        permissionStream = null;
+        return;
+      }
+
       console.info(`[JAC ConvAI] start platform=${getJacVoicePlatform()} transport=${session.signedUrl ? "websocket/signed" : "agent/public"}`);
       startSession(params as any);
       // The SDK's own input controller now owns the real session stream. Give
@@ -626,10 +695,15 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       setTimeout(() => streamToRelease?.getTracks().forEach(track => track.stop()), 1200);
     } catch (err: any) {
       permissionStream?.getTracks().forEach(track => track.stop());
+      if (!mountedRef.current || attempt !== bootAttemptRef.current) return;
       const message = err?.message || "Could not connect to JAC";
       console.error(`[JAC ConvAI] boot failed platform=${getJacVoicePlatform()} message=${message}`);
       reportJacVoiceTelemetry("error", `boot:${message}`, voiceTokenRef.current);
-      if (isRecoverableJacVoiceError(message) && mountedRef.current && !intentionalEndRef.current) {
+      if (isJacE2EVoiceHarnessEnabled()) {
+        setError(message);
+        setEnded(true);
+        setReconnecting(false);
+      } else if (isRecoverableJacVoiceError(message) && mountedRef.current && !intentionalEndRef.current) {
         recoveryRef.current?.(`boot:${message}`);
       } else {
         setError(message);
@@ -691,6 +765,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     return () => {
       cancelled = true;
       mountedRef.current = false;
+      bootAttemptRef.current += 1;
       voiceRequestedRef.current = false;
       intentionalEndRef.current = true;
       if (recoveryTimerRef.current) {
@@ -825,8 +900,8 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     error      ? "Connection error" :
     ended      ? "Ended" :
     muted      ? "Muted" :
-    isSpeaking ? "JAC is speaking" :
-    isListening ? "Listening…" :
+    voiceIsSpeaking ? "JAC is speaking" :
+    voiceIsListening ? "Listening…" :
     connected ? "Processing…" :
     voiceStartAttempted ? "Connecting…" : "Ready";
 
@@ -863,15 +938,15 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
               style={{
                 background: phaseColor,
                 boxShadow: `0 0 6px ${phaseColor}`,
-                animation: (connected && (isSpeaking || isListening)) ? "jac-glow-pulse 1.2s ease-in-out infinite" : "none",
+                animation: (connected && (voiceIsSpeaking || voiceIsListening)) ? "jac-glow-pulse 1.2s ease-in-out infinite" : "none",
               }}
             />
             <span className="text-[11px] font-display font-bold tracking-wide" style={{ color: phaseColor }}>
-              {phaseLabel}
+              <span data-testid="jac-live-voice-status">{phaseLabel}</span>
             </span>
             {connected && (
               <WaveformBars
-                active={isSpeaking || isListening}
+                active={voiceIsSpeaking || voiceIsListening}
                 color={phaseColor}
               />
             )}
@@ -901,6 +976,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
                   background: "linear-gradient(135deg,hsl(270 100% 65%),hsl(152 100% 44%))",
                   color: "black",
                 }}
+                data-testid="button-jac-live-reconnect"
               >
                 <RefreshCw className="w-3 h-3" /> Reconnect voice
               </button>
@@ -937,6 +1013,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
             <div
               className="w-full max-h-[160px] overflow-y-auto space-y-1.5 px-1 mb-2"
               style={{ scrollbarWidth: "none" }}
+              data-testid="jac-live-transcript"
             >
               {msgs.slice(-10).map(m => (
                 <div
@@ -1012,7 +1089,12 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
 
       {/* Mic/session failures stay inline so the character and text chat remain usable. */}
       {voiceStartAttempted && error && (
-        <p className="mt-2 text-center text-xs" role="status" style={{ color: "hsl(0 85% 68%)" }}>
+        <p
+          className="mt-2 text-center text-xs"
+          role="status"
+          style={{ color: "hsl(0 85% 68%)" }}
+          data-testid="jac-live-voice-error"
+        >
           {error} Text chat is still available.
         </p>
       )}

@@ -14,6 +14,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
   Component,
 } from "react";
 import type { ReactNode } from "react";
@@ -21,6 +22,10 @@ import { useConversation } from "@elevenlabs/react";
 import { apiRequest } from "@/lib/queryClient";
 import { unlockAudioContext, setJacConvaiActive, cancelAllJacAudio } from "@/lib/jac-tts";
 import { createJacConvaiVoiceOverride } from "@/lib/jac-convai-voice-lock";
+import {
+  isJacE2EVoiceHarnessEnabled,
+  subscribeToJacE2EVoiceEvents,
+} from "@/lib/jac-live-coordination";
 
 const JAC_MIC_CONSTRAINTS: MediaTrackConstraints = {
   echoCancellation: true,
@@ -408,6 +413,8 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
     // (active → false → true via tap) still works: cancelRef is reset at the top of
     // the active=true effect, but micLostRef is only ever set/cleared here.
     const micLostRef = useRef(false);
+    const intentionalReconnectRef = useRef(false);
+    const reconnectEpochRef = useRef(0);
 
     // Per-instance token for the _micLostRegistry.  Created when the guard is
     // armed (after startSession), removed when the session tears down.  Storing
@@ -416,6 +423,8 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
     const micLostTokenRef = useRef<MicLostToken | null>(null);
     const latestAssistantSpeechRef = useRef<{ text: string; at: number } | null>(null);
     const micConstraintLeaseRef = useRef(false);
+    const e2eHarnessEnabled = isJacE2EVoiceHarnessEnabled();
+    const [e2eConnected, setE2EConnected] = useState(false);
 
     const releaseMicConstraintLease = () => {
       if (!micConstraintLeaseRef.current) return;
@@ -433,6 +442,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
       setMuted,
     } = useConversation({
       onConnect: () => {
+        intentionalReconnectRef.current = false;
         // ElevenLabs ConvAI now owns audio — cancel any in-flight text-TTS
         // and block jacSpeak() for the duration of this session.
         console.log("[JAC ConvAI] onConnect — session established ✓ platform=" + platformRef.current);
@@ -458,6 +468,9 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         // mic-lost teardown — the caller already surfaced "Mic lost" to the
         // user, so suppress the second "Voice disconnected" bubble here.
         if (micLostRef.current) { micLostRef.current = false; return; }
+        if (intentionalReconnectRef.current) {
+          return;
+        }
         // If the session ended while active is still true (i.e. NOT because
         // the user tapped the mic button off), this is an unexpected disconnect
         // (network drop, ElevenLabs timeout, etc.).  Without this error, the
@@ -484,6 +497,9 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         // Disarm this instance's mic-lost token so a track "ended" event that
         // arrives after the ElevenLabs error callback doesn't fire redundantly.
         if (micLostTokenRef.current) { _disarmToken(micLostTokenRef.current); micLostTokenRef.current = null; }
+        if (intentionalReconnectRef.current) {
+          return;
+        }
         // Gate on activeRef so a stale SDK error that arrives after the session
         // was torn down (or before it was ever started) doesn't show an error
         // bubble to a user who never tapped the mic.
@@ -508,10 +524,42 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
       }) as any,
     });
 
-    const connected = status === "connected";
+    const connected = e2eHarnessEnabled ? e2eConnected : status === "connected";
+    useEffect(() => subscribeToJacE2EVoiceEvents("assistant", (event) => {
+      if (event.kind === "connect" || event.kind === "listening") {
+        intentionalReconnectRef.current = false;
+        setE2EConnected(true);
+        cbRef.current.onPhaseChange("listening");
+        return;
+      }
+      if (event.kind === "thinking" || event.kind === "speaking") {
+        setE2EConnected(true);
+        cbRef.current.onPhaseChange(event.kind);
+        return;
+      }
+      if (event.kind === "user-transcript" && event.text?.trim()) {
+        cbRef.current.onUserTranscript(event.text.trim());
+        return;
+      }
+      if (event.kind === "assistant-response" && event.text?.trim()) {
+        cbRef.current.onJacResponse(event.text.trim());
+        return;
+      }
+      if (event.kind === "error") {
+        setE2EConnected(false);
+        cbRef.current.onError(event.text?.trim() || "Voice connection lost.");
+        return;
+      }
+      if (event.kind === "disconnect") {
+        setE2EConnected(false);
+        cbRef.current.onError("Voice disconnected. Tap the mic to retry.");
+      }
+    }), []);
+
     // Report phase changes — never call setState during render, always via effect
     const prevPhaseRef = useRef<ConvaiPhase>("idle");
     useEffect(() => {
+      if (e2eHarnessEnabled) return;
       let phase: ConvaiPhase;
       if (!active)      phase = "idle";
       else if (!connected) phase = "connecting";
@@ -524,7 +572,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         prevPhaseRef.current = phase;
         cbRef.current.onPhaseChange(phase);
       }
-    }, [active, connected, isMuted, isSpeaking, isListening]);
+    }, [active, connected, e2eHarnessEnabled, isMuted, isSpeaking, isListening]);
 
     // Suppress ElevenLabs SDK internal WebRTC crash (error_type on undefined)
     // This is an event-handler error so React error boundaries can't catch it.
@@ -564,7 +612,28 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           platformRef.current = platform; // capture for use by onConnect/onError/onDisconnect
           const isIAB = /iab/.test(platform); // facebook_iab, instagram_iab, etc.
           if (isIAB) {
+            intentionalReconnectRef.current = false;
             cbRef.current.onError("IAB_NO_VOICE");
+            return;
+          }
+
+          if (e2eHarnessEnabled) {
+            if (cancelRef.current) return;
+            const sessionResponse = await apiRequest("POST", sessionEndpoint, { platform });
+            if (cancelRef.current) return;
+            if (!sessionResponse.ok) {
+              throw Object.assign(new Error("session_error"), { status: sessionResponse.status });
+            }
+            const session = await sessionResponse.json();
+            if (cancelRef.current) return;
+            if (!session) {
+              cbRef.current.onError("Voice session error. Try again.");
+              return;
+            }
+            voiceTokenRef.current = session.voiceToken ?? null;
+            intentionalReconnectRef.current = false;
+            setE2EConnected(false);
+            cbRef.current.onPhaseChange("connecting");
             return;
           }
 
@@ -604,6 +673,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
             console.error(
               `[JAC MIC TEST 1] getUserMedia FAILED: ${micErr?.name ?? "unknown"} — ${micErr?.message ?? "(no message)"}`
             );
+            intentionalReconnectRef.current = false;
             cbRef.current.onError(
               platform === "android_native"
                 ? `Microphone blocked on Android (${micErr?.name ?? "unknown error"}). Grant mic permission in App Settings.`
@@ -631,13 +701,18 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
 
           if (sessionResult.status === "rejected") {
             const err = sessionResult.reason as any;
+            intentionalReconnectRef.current = false;
             if (err?.status === 401) { cbRef.current.onError("Sign in to use JAC voice."); return; }
             cbRef.current.onError("Could not reach JAC voice. Try again.");
             return;
           }
 
           const session = sessionResult.value;
-          if (!session) { cbRef.current.onError("Voice session error. Try again."); return; }
+          if (!session) {
+            intentionalReconnectRef.current = false;
+            cbRef.current.onError("Voice session error. Try again.");
+            return;
+          }
           if (cancelRef.current) return;
 
           // Store the server-issued token so telemetry beacons can be verified.
@@ -738,6 +813,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           // retry state.  It is cleared by onConnect / onDisconnect / onError.
           connectTimeoutRef.current = setTimeout(() => {
             if (!cancelRef.current) {
+              intentionalReconnectRef.current = false;
               sendVoiceTelemetry("timeout", platformRef.current, `no_connect_in_${CONNECTION_TIMEOUT_MS}ms`, voiceTokenRef.current);
               try { endSession(); } catch {}
               cbRef.current.onError("Voice connection timed out. Tap the mic to retry.");
@@ -746,6 +822,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
 
         } catch (err: any) {
           clearConnectTimeout();
+          intentionalReconnectRef.current = false;
           if (!cancelRef.current) cbRef.current.onError(err?.message || "Could not start JAC voice.");
         }
       }
@@ -755,6 +832,9 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
 
       return () => {
         cancelRef.current = true;
+        reconnectEpochRef.current += 1;
+        intentionalReconnectRef.current = false;
+        try { void endSession(); } catch {}
         releaseMicConstraintLease();
         clearConnectTimeout();
         // Disarm THIS instance's mic-lost token — does not affect any other
@@ -767,8 +847,19 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
     useImperativeHandle(ref, () => ({
       toggleMute() { if (connected) setMuted(!isMuted); },
       reconnect() {
-        try { endSession(); } catch {}
-        setTimeout(() => bootRef.current?.(), 350);
+        const epoch = ++reconnectEpochRef.current;
+        intentionalReconnectRef.current = true;
+        void (async () => {
+          try {
+            await Promise.resolve(endSession());
+          } catch {}
+          // Let terminal callbacks queued by endSession flush before the
+          // replacement starts. They remain suppressed for this transition.
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          if (cancelRef.current || epoch !== reconnectEpochRef.current) return;
+          intentionalReconnectRef.current = false;
+          bootRef.current?.();
+        })();
       },
       connected,
       isMuted,

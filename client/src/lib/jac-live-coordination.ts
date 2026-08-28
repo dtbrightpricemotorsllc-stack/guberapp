@@ -16,12 +16,58 @@ export type SharedJacMessage = {
 
 const SHARED_CONVERSATION_KEY = "jac_shared_conversation_v1";
 const MAX_SHARED_MESSAGES = 40;
+const JAC_E2E_HARNESS_KEY = "jac_e2e_voice_harness";
+const JAC_E2E_EVENT = "jac:e2e-voice";
 const JAC_GREETING_KEYS = [
   "jac_welcome_greeting_spoken_v2",
   // Read the previous homepage guard so upgrading does not replay the greeting.
   "jac_homepage_greeting_spoken_v1",
 ];
 let greetingClaimedThisRuntime = false;
+
+export type JacE2EVoiceEvent = {
+  target: "homepage" | "assistant";
+  kind:
+    | "connect"
+    | "listening"
+    | "thinking"
+    | "speaking"
+    | "user-transcript"
+    | "assistant-response"
+    | "error"
+    | "disconnect";
+  text?: string;
+};
+
+/**
+ * Development-only deterministic voice harness for browser acceptance tests.
+ *
+ * The query flag is remembered in sessionStorage so a real login navigation can
+ * keep using the same harness without exposing it in production builds.
+ */
+export function isJacE2EVoiceHarnessEnabled(): boolean {
+  if (!import.meta.env.DEV || typeof window === "undefined") return false;
+  try {
+    const requested = new URLSearchParams(window.location.search).get("jac_e2e") === "1";
+    if (requested) window.sessionStorage.setItem(JAC_E2E_HARNESS_KEY, "1");
+    return requested || window.sessionStorage.getItem(JAC_E2E_HARNESS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function subscribeToJacE2EVoiceEvents(
+  target: JacE2EVoiceEvent["target"],
+  handler: (event: JacE2EVoiceEvent) => void,
+): () => void {
+  if (!isJacE2EVoiceHarnessEnabled() || typeof window === "undefined") return () => {};
+  const listener = (event: Event) => {
+    const detail = (event as CustomEvent<JacE2EVoiceEvent>).detail;
+    if (detail?.target === target) handler(detail);
+  };
+  window.addEventListener(JAC_E2E_EVENT, listener);
+  return () => window.removeEventListener(JAC_E2E_EVENT, listener);
+}
 
 export const JAC_WELCOME_GREETING =
   "Welcome to Team Guber. What brings you here?";

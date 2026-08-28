@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import React from "react";
+import { JAC_ELEVENLABS_VOICE_ID } from "@shared/jac-voice";
 
 const startSessionSpy = vi.hoisted(() => vi.fn());
 const endSessionSpy = vi.hoisted(() => vi.fn());
@@ -77,7 +78,7 @@ function sessionResponse(mode: "app") {
     json: async () => ({
       agentId: "jac-agent",
       signedUrl: "wss://example.test/jac",
-      voiceId: "h2dQOVyUfIDqY2whPOMo",
+      voiceId: JAC_ELEVENLABS_VOICE_ID,
       voiceToken: "voice-token",
       dynamicVariableName: "secret__jac_voice_token",
       userContext: {

@@ -393,7 +393,6 @@ export function GUBERAssistant() {
   const [convaiError, setConvaiError] = useState<string | null>(null);
   const convaiActiveRef = useRef(false);
   const convaiSessionRef = useRef<JacConvaiSessionHandle | null>(null);
-  const [convaiKey, setConvaiKey] = useState(0);
   const automaticStartClaimRef = useRef<(() => boolean) | null>(null);
   if (!automaticStartClaimRef.current) {
     automaticStartClaimRef.current = createJacAutomaticVoiceStartClaim();
@@ -435,10 +434,10 @@ export function GUBERAssistant() {
   }
 
   function handleConvaiReconnect() {
+    convaiActiveRef.current = true;
     setConvaiError(null);
     setConvaiPhase("connecting");
     convaiSessionRef.current?.reconnect();
-    setConvaiKey(k => k + 1);
   }
 
   // speak — text-mode TTS only; no-ops when ConvAI is handling voice
@@ -477,14 +476,14 @@ export function GUBERAssistant() {
     return () => window.removeEventListener("jac:wake", onWake);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Choose one welcome owner on main-app entry. A granted microphone starts the
-  // existing live session; every other state gets only output TTS. Neither path
-  // prompts for mic permission or prewarms an authenticated session.
+  // Choose one welcome owner on main-app entry. Only native apps may resume a
+  // previously granted session; web/PWA voice always requires the mic tap.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       if (
-        await isJacMicrophoneReady()
+        Capacitor.isNativePlatform()
+        && await isJacMicrophoneReady()
         && !cancelled
         && automaticStartClaimRef.current?.()
       ) {
@@ -900,7 +899,6 @@ export function GUBERAssistant() {
 
   const handleConvaiPhaseChange = useCallback((phase: ConvaiPhase) => {
     setConvaiPhase(phase);
-    if (phase === "error") setConvaiActive(false);
   }, []);
   const handleConvaiUserTranscript = useCallback((text: string) => {
     appendSharedJacMessage({ role: "user", content: text, source: "assistant" });
@@ -918,9 +916,9 @@ export function GUBERAssistant() {
     });
   }, []);
   const handleConvaiError = useCallback((msg: string) => {
+    convaiActiveRef.current = false;
     setConvaiError(msg);
     setConvaiPhase("error");
-    setConvaiActive(false);
   }, []);
 
   const convaiColor = CONVAI_PHASE_COLOR[convaiPhase];
@@ -934,7 +932,6 @@ export function GUBERAssistant() {
     {convaiActive && (
       <ConversationProvider>
         <JacConvaiSession
-          key={convaiKey}
           ref={convaiSessionRef}
           active={convaiActive}
           onPhaseChange={handleConvaiPhaseChange}
