@@ -50,6 +50,7 @@ interface BusinessAccountRecord {
   industry: string;
   companyNeedsSummary: string | null;
   status: string;
+  invitationCode?: string | null;
 }
 
 interface LegalAcceptanceRecord {
@@ -120,9 +121,13 @@ const mockState = vi.hoisted<MockState>(() => {
   return state;
 });
 
+const mockPool = vi.hoisted(() => ({
+  query: vi.fn(),
+}));
+
 vi.mock("../db", () => {
   return {
-    pool: {},
+    pool: mockPool,
     db: {
       execute: vi.fn(async () => ({ rows: [] as unknown[] })),
     },
@@ -289,6 +294,7 @@ const stubFetch = (): MockFetchResponse => ({
 
 beforeEach(() => {
   globalThis.fetch = vi.fn<typeof fetch>(async () => stubFetch() as unknown as Response);
+  mockPool.query.mockReset();
 });
 
 let appInstance: Express | null = null;
@@ -480,6 +486,45 @@ describe("POST /api/auth/business-access-request", () => {
     expect(ba.workEmail).toBe(VALID_ACCESS_REQUEST.workEmail);
 
     expect(mockState.businessProfiles).toHaveLength(1);
+  });
+
+  it("records a normalized invitation attribution during business onboarding", async () => {
+    mockPool.query
+      .mockResolvedValueOnce({
+        rows: [{
+          code: "TG-INVITE",
+          owner_user_id: 202,
+          owner_label: "Distributor One",
+          active: true,
+          expires_at: null,
+        }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{
+          id: 1,
+          business_account_id: 1,
+          invitation_code: "TG-INVITE",
+          distributor_user_id: 202,
+          distributor_label: "Distributor One",
+          status: "pending",
+          reward_status: "pending",
+        }],
+      });
+
+    const app = await getApp();
+    await supertest(app)
+      .post("/api/auth/business-access-request")
+      .send({ ...VALID_ACCESS_REQUEST, invitationCode: "  tg-invite " })
+      .expect(201);
+
+    expect(mockState.businessAccounts[0].invitationCode).toBe("TG-INVITE");
+    expect(mockPool.query.mock.calls[0][1]).toEqual(["TG-INVITE"]);
+    expect(mockPool.query.mock.calls[1][1]).toEqual([
+      1,
+      "TG-INVITE",
+      202,
+      "Distributor One",
+    ]);
   });
 
   it("records a legal acceptance entry", async () => {
