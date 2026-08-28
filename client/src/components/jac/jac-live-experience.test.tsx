@@ -29,6 +29,10 @@ vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ user: authState.user }),
 }));
 
+vi.mock("@/lib/platform", () => ({
+  isNativeApp: false,
+}));
+
 vi.mock("@/hooks/use-guest-jac-session", () => ({
   useGuestJacSession: () => ({
     guestSessionId: "guest-test",
@@ -101,9 +105,13 @@ describe("JacLiveExperience auth handoff", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sessionResponse("app")));
   });
 
-  it("autoboots a fresh authenticated session after tearing down the anonymous provider", async () => {
+  it("keeps web text ready and starts voice only from the explicit mic action", async () => {
     const view = render(<JacLiveExperience />);
 
+    expect(startSessionSpy).not.toHaveBeenCalled();
+    expect(view.getByRole("button", { name: /start voice/i })).toBeTruthy();
+
+    fireEvent.click(view.getByRole("button", { name: /start voice/i }));
     await waitFor(() => expect(startSessionSpy).toHaveBeenCalledTimes(1));
     expect(fetch).toHaveBeenCalledWith(
       "/api/jac/convai/public-session",
@@ -116,7 +124,10 @@ describe("JacLiveExperience auth handoff", () => {
       view.rerender(<JacLiveExperience />);
     });
 
-    await waitFor(() => expect(endSessionSpy).toHaveBeenCalled());
+    expect(endSessionSpy).toHaveBeenCalled();
+    expect(startSessionSpy).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(view.getByRole("button", { name: /start voice/i }));
     await waitFor(() => expect(startSessionSpy).toHaveBeenCalledTimes(2));
     expect(fetch).toHaveBeenCalledWith(
       "/api/jac/convai/session",
