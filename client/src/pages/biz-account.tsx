@@ -7,6 +7,12 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Upload, Shield } from "lucide-react";
 import type { BusinessProfile } from "@shared/schema";
+import {
+  BUSINESS_CAPABILITIES,
+  DEFAULT_BUSINESS_CAPABILITIES,
+  PROFESSIONAL_SERVICE_CATEGORIES,
+  type BusinessCapability,
+} from "@shared/business-capabilities";
 
 const GOLD = "#C9A84C";
 const SURFACE = "#141417";
@@ -19,8 +25,9 @@ const INDUSTRIES = [
   "Insurance", "Property Management", "Survey & Inspection", "Automotive",
   "Lending & Finance", "Real Estate", "Retail Audit", "Government & Municipal",
   "Healthcare", "Logistics & Delivery", "Construction", "Environmental Monitoring",
-  "Utilities", "Research & Data", "Other",
+  "Utilities", "Research & Data", "Other", "Professional Services", "Dental", "Accounting & Tax",
 ];
+const PROFESSIONAL_INDUSTRY_PATTERN = /\b(healthcare|medical|doctor|dental|dentist|clinic|legal|law|accounting|accountant|tax|financial advisory)\b/i;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -58,6 +65,10 @@ export default function BizAccount() {
   const [form, setForm] = useState({
     companyName: "", billingEmail: "", companyLogo: "",
     industry: "", contactPerson: "", contactPhone: "", description: "",
+    capabilities: DEFAULT_BUSINESS_CAPABILITIES,
+    professionalCategory: "",
+    specialties: [] as string[],
+    availabilityNote: "",
   });
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -73,6 +84,12 @@ export default function BizAccount() {
         contactPerson: existing.contactPerson || "",
         contactPhone: existing.contactPhone || "",
         description: existing.description || "",
+        capabilities: Array.isArray((existing as any).capabilities) && (existing as any).capabilities.length
+          ? Array.from(new Set(["public_profile", ...(existing as any).capabilities]))
+          : DEFAULT_BUSINESS_CAPABILITIES,
+        professionalCategory: (existing as any).professionalCategory || "",
+        specialties: Array.isArray((existing as any).specialties) ? (existing as any).specialties : [],
+        availabilityNote: (existing as any).availabilityNote || "",
       });
       if (existing.companyLogo) setLogoPreview(existing.companyLogo);
     }
@@ -106,6 +123,17 @@ export default function BizAccount() {
     } finally {
       setUploading(false);
     }
+  };
+
+  const isProfessionalIndustry = PROFESSIONAL_INDUSTRY_PATTERN.test(form.industry) || Boolean(form.professionalCategory);
+  const toggleCapability = (key: BusinessCapability) => {
+    if (key === "public_profile") return;
+    setForm((f) => ({
+      ...f,
+      capabilities: f.capabilities.includes(key)
+        ? f.capabilities.filter((item) => item !== key)
+        : [...f.capabilities, key],
+    }));
   };
 
   const inputProps = (key: keyof typeof form) => ({
@@ -187,6 +215,54 @@ export default function BizAccount() {
               {INDUSTRIES.map((ind) => <option key={ind} value={ind}>{ind}</option>)}
             </select>
           </Field>
+
+          <div className="rounded-xl p-4 space-y-3" style={{ background: "rgba(201,168,76,0.05)", border: "1px solid rgba(201,168,76,0.18)" }}>
+            <div>
+              <p style={{ color: TEXT_PRIMARY, fontSize: "13px", fontWeight: 700 }}>Customer-facing capabilities</p>
+              <p style={{ color: TEXT_SECONDARY, fontSize: "11px", marginTop: "3px" }}>Choose what customers can do from your verified GUBER profile.</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {BUSINESS_CAPABILITIES.map((capability) => {
+                const checked = form.capabilities.includes(capability.key);
+                return (
+                  <label key={capability.key} className="flex gap-2.5 rounded-lg p-2.5 cursor-pointer" style={{ background: checked ? "rgba(201,168,76,0.09)" : "rgba(255,255,255,0.02)", border: `1px solid ${checked ? "rgba(201,168,76,0.28)" : BORDER}` }}>
+                    <input type="checkbox" checked={checked} disabled={capability.key === "public_profile"} onChange={() => toggleCapability(capability.key)} className="mt-0.5 accent-amber-500" data-testid={`checkbox-capability-${capability.key}`} />
+                    <span>
+                      <span style={{ color: TEXT_PRIMARY, fontSize: "11px", fontWeight: 600 }}>{capability.label}{capability.key === "booking" ? " (paid)" : ""}</span>
+                      <span style={{ color: TEXT_SECONDARY, fontSize: "10px", lineHeight: 1.35, display: "block", marginTop: "2px" }}>{capability.description}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          {isProfessionalIndustry && (
+            <div className="rounded-xl p-4 space-y-3" style={{ background: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.25)" }}>
+              <div>
+                <p style={{ color: TEXT_PRIMARY, fontSize: "13px", fontWeight: 700 }}>Professional Services details</p>
+                <p style={{ color: TEXT_SECONDARY, fontSize: "11px", lineHeight: 1.45, marginTop: "3px" }}>GUBER supports discovery and initial scheduling only. It does not provide regulated advice or treatment.</p>
+              </div>
+              <select value={form.professionalCategory} onChange={(e) => setForm((f) => ({ ...f, professionalCategory: e.target.value }))} style={{ ...inputStyle, cursor: "pointer" }} data-testid="select-professional-category">
+                <option value="">Choose professional category</option>
+                {PROFESSIONAL_SERVICE_CATEGORIES.map((category) => <option key={category.key} value={category.key}>{category.label}</option>)}
+              </select>
+              <input
+                {...inputProps("availabilityNote")}
+                placeholder="Public availability note, e.g. new consultations on weekday mornings"
+                maxLength={240}
+                data-testid="input-availability-note"
+              />
+              <input
+                value={form.specialties.join(", ")}
+                onChange={(e) => setForm((f) => ({ ...f, specialties: e.target.value.split(",").map((item) => item.trim()).filter(Boolean).slice(0, 20) }))}
+                placeholder="Specialties or practice areas, separated by commas"
+                style={inputStyle}
+                data-testid="input-professional-specialties"
+              />
+              <p style={{ color: "#f59e0b", fontSize: "10px" }}>Public specialties only — never include patient, client, case, medical, legal, or financial details.</p>
+            </div>
+          )}
 
           <Field label="Company Description">
             <textarea

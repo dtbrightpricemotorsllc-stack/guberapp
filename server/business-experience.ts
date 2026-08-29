@@ -1,6 +1,14 @@
 import type { Express, Request, Response } from "express";
 import { pool } from "./db";
 import { storage } from "./storage";
+import {
+  BUSINESS_CAPABILITIES,
+  DEFAULT_BUSINESS_CAPABILITIES,
+  PROFESSIONAL_INDUSTRY_ALIASES,
+  PROFESSIONAL_SERVICE_CATEGORIES,
+  type BusinessCapability,
+  type ProfessionalServiceCategory,
+} from "@shared/business-capabilities";
 
 export const BUSINESS_PLAN_CATALOG = [
   {
@@ -25,6 +33,42 @@ export const BUSINESS_PLAN_CATALOG = [
     platformFeeRate: 0.15,
   },
 ] as const;
+
+const PROFESSIONAL_CATEGORY_KEYS = new Set(PROFESSIONAL_SERVICE_CATEGORIES.map((category) => category.key));
+
+export const PROFESSIONAL_REQUEST_WARNING =
+  "For privacy, do not include medical, legal, financial, insurance, account, or other sensitive case details. Use this form only for general scheduling and routing.";
+
+export function normalizeBusinessCapabilities(value: unknown): BusinessCapability[] {
+  const values = Array.isArray(value) ? value : [];
+  const known = new Set(BUSINESS_CAPABILITIES.map((capability) => capability.key));
+  const normalized = values.filter((item): item is BusinessCapability =>
+    typeof item === "string" && known.has(item as BusinessCapability),
+  );
+  const selected = normalized.length ? normalized : DEFAULT_BUSINESS_CAPABILITIES;
+  return Array.from(new Set(["public_profile", ...selected])) as BusinessCapability[];
+}
+
+export function isProfessionalServiceCategory(category: unknown, industry?: unknown) {
+  if (typeof category === "string" && PROFESSIONAL_CATEGORY_KEYS.has(category as ProfessionalServiceCategory)) return true;
+  const normalized = String(industry || "").toLowerCase();
+  return PROFESSIONAL_INDUSTRY_ALIASES.some((alias) => normalized.includes(alias));
+}
+
+export function normalizeProfessionalServiceCategory(value: unknown): ProfessionalServiceCategory | null {
+  return typeof value === "string" && PROFESSIONAL_CATEGORY_KEYS.has(value as ProfessionalServiceCategory)
+    ? value as ProfessionalServiceCategory
+    : null;
+}
+
+export function safeProfessionalRequestMessage(value: unknown) {
+  const message = typeof value === "string" ? value.trim().slice(0, 500) : "";
+  if (!message) return "";
+  if (/\b(ssn|social security|medical record|diagnos|symptom|prescription|medication|patient history|insurance claim|policy number|case number|docket|legal matter|bank account|account number|tax return|routing number|credit card)\b/i.test(message)) {
+    throw new Error(PROFESSIONAL_REQUEST_WARNING);
+  }
+  return message;
+}
 
 export type BusinessPlanType = typeof BUSINESS_PLAN_CATALOG[number]["planType"];
 export const FOUNDING_LOCAL_OFFER = {
@@ -511,14 +555,21 @@ export async function registerBusinessExperienceRoutes(
     const result = await pool.query(
       `SELECT ba.id AS business_account_id, bp.id, bp.company_name, bp.company_logo, bp.industry,
               bp.description, bp.address, bp.zip_code, bp.service_area, bp.website, bp.business_hours,
-              bp.preferred_contact_method
+              bp.preferred_contact_method, bp.capabilities, bp.professional_category,
+              bp.specialties, bp.availability_note
          FROM business_accounts ba
          JOIN business_profiles bp ON bp.user_id = ba.owner_user_id
         WHERE ${where.join(" AND ")}
         ORDER BY bp.company_name ASC LIMIT 100`,
       params,
     );
-    res.json(result.rows.map((row) => ({ ...row, isOpen: isOpenNow(row.business_hours), kind: "official_business" })));
+     res.json(result.rows.map((row) => ({
+       ...row,
+       capabilities: normalizeBusinessCapabilities(row.capabilities),
+       specialties: Array.isArray(row.specialties) ? row.specialties : [],
+       isOpen: isOpenNow(row.business_hours),
+       kind: "official_business",
+     })));
   });
 
   app.get("/api/public/businesses/:id", async (req, res) => {
@@ -527,8 +578,10 @@ export async function registerBusinessExperienceRoutes(
               bp.company_name AS "companyName", bp.company_logo AS "companyLogo",
               bp.industry, bp.description, bp.business_description AS "businessDescription",
               bp.address, bp.zip_code AS "zipCode", bp.service_area AS "serviceArea",
-              bp.business_hours AS "businessHours", bp.website,
-              bp.user_id AS "ownerUserId", ba.status AS "accountStatus"
+               bp.business_hours AS "businessHours", bp.website,
+               bp.capabilities, bp.professional_category AS "professionalCategory",
+               bp.specialties, bp.availability_note AS "availabilityNote",
+               ba.status AS "accountStatus"
          FROM business_accounts ba
          JOIN business_profiles bp ON bp.user_id = ba.owner_user_id
         WHERE ba.id = $1 AND ba.status = 'verified_business'`,
@@ -540,7 +593,139 @@ export async function registerBusinessExperienceRoutes(
       `SELECT * FROM marketplace_items WHERE business_account_id = $1 AND status IN ('available', 'active') ORDER BY created_at DESC`,
       [business.business_account_id],
     );
-    res.json({ ...business, isOpen: isOpenNow(business.businessHours), kind: "official_business", inventory: inventory.rows });
+     res.json({
+       ...business,
+       capabilities: normalizeBusinessCapabilities(business.capabilities),
+       specialties: Array.isArray(business.specialties) ? business.specialties : [],
+       publicActions: normalizeBusinessCapabilities(business.capabilities),
+       isOpen: isOpenNow(business.businessHours),
+       kind: "official_business",
+       inventory: inventory.rows,
+     });
+  });
+
+  app.get("/api/business/requests", requireAuth, async (req, res) => {
+    const account = await accountFor(req);
+    if (!account) return res.status(404).json({ message: "No business account found" });
+    const result = await pool.query(
+      `SELECT r.id, r.request_type, r.topic, r.message, r.requested_start_at,
+              r.customer_timezone, r.customer_location, r.status, r.business_note,
+              r.created_at, r.updated_at, u.guber_id AS customer_guber_id
+         FROM business_contact_requests r
+         JOIN users u ON u.id = r.requester_user_id
+        WHERE r.business_account_id = $1
+        ORDER BY r.created_at DESC`,
+      [account.id],
+    );
+    res.json(result.rows);
+  });
+
+  app.get("/api/business/requests/mine", requireAuth, async (req, res) => {
+    const result = await pool.query(
+      `SELECT r.id, r.request_type, r.topic, r.message, r.requested_start_at,
+              r.customer_timezone, r.customer_location, r.status, r.business_note,
+              r.created_at, r.updated_at, bp.company_name, COALESCE(bp.company_logo, ba.company_logo) AS company_logo
+         FROM business_contact_requests r
+         JOIN business_accounts ba ON ba.id = r.business_account_id
+         JOIN business_profiles bp ON bp.user_id = ba.owner_user_id
+        WHERE r.requester_user_id = $1
+        ORDER BY r.created_at DESC`,
+      [req.session.userId],
+    );
+    res.json(result.rows);
+  });
+
+  app.patch("/api/business/requests/:id/status", requireAuth, async (req, res) => {
+    const account = await accountFor(req);
+    if (!account) return res.status(404).json({ message: "No business account found" });
+    const status = String(req.body.status || "").trim();
+    if (!["contacted", "scheduled", "quoted", "closed", "declined"].includes(status)) {
+      return res.status(400).json({ message: "Choose a valid request status" });
+    }
+    const result = await pool.query(
+      `UPDATE business_contact_requests
+          SET status = $1, business_note = $2, updated_at = NOW()
+        WHERE id = $3 AND business_account_id = $4
+        RETURNING id, status`,
+      [status, typeof req.body.note === "string" ? req.body.note.trim().slice(0, 1000) || null : null, Number(req.params.id), account.id],
+    );
+    if (!result.rows[0]) return res.status(404).json({ message: "Request not found" });
+    res.json(result.rows[0]);
+  });
+
+  app.post("/api/public/businesses/:id/request", requireAuth, async (req, res) => {
+    const businessId = Number(req.params.id);
+    const requesterId = req.session.userId!;
+    const requestType = String(req.body.requestType || "").trim();
+    const allowedTypes = ["inquiry", "quote", "consultation", "appointment"];
+    if (!allowedTypes.includes(requestType)) return res.status(400).json({ message: "Choose a valid request type" });
+
+    const businessResult = await pool.query(
+      `SELECT ba.id, ba.owner_user_id, ba.status, bp.industry, bp.capabilities,
+              bp.professional_category
+         FROM business_accounts ba
+         JOIN business_profiles bp ON bp.user_id = ba.owner_user_id
+        WHERE ba.id = $1 AND ba.status = 'verified_business'`,
+      [businessId],
+    );
+    const business = businessResult.rows[0];
+    if (!business) return res.status(404).json({ message: "Business not found" });
+    if (Number(business.owner_user_id) === requesterId) return res.status(400).json({ message: "A business cannot request from itself" });
+
+    const capabilities = normalizeBusinessCapabilities(business.capabilities);
+    const capabilityForRequest: Record<string, BusinessCapability> = {
+      inquiry: "customer_inquiries",
+      quote: "quote_requests",
+      consultation: "consultation_requests",
+      appointment: "appointments",
+    };
+    if (!capabilities.includes(capabilityForRequest[requestType])) {
+      return res.status(404).json({ message: "This business has not enabled that customer request" });
+    }
+
+    const topic = typeof req.body.topic === "string" ? req.body.topic.trim().slice(0, 160) : "";
+    if (!topic) return res.status(400).json({ message: "A short topic is required" });
+    const professional = isProfessionalServiceCategory(business.professional_category, business.industry);
+    let message = typeof req.body.message === "string" ? req.body.message.trim().slice(0, professional ? 500 : 2000) : "";
+    if (professional) {
+      try {
+        message = safeProfessionalRequestMessage(message);
+      } catch (error: any) {
+        return res.status(400).json({ message: error.message });
+      }
+    }
+    const requestedStartAt = req.body.requestedStartAt ? new Date(String(req.body.requestedStartAt)) : null;
+    if (requestedStartAt && Number.isNaN(requestedStartAt.getTime())) {
+      return res.status(400).json({ message: "Choose a valid requested date and time" });
+    }
+    if (requestType === "appointment" && !requestedStartAt) {
+      return res.status(400).json({ message: "Appointment requests need a requested date and time" });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO business_contact_requests
+        (business_account_id, requester_user_id, request_type, topic, message,
+         requested_start_at, customer_timezone, customer_location)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       RETURNING id, request_type, topic, status, created_at`,
+      [
+        businessId,
+        requesterId,
+        requestType,
+        topic,
+        message || null,
+        requestedStartAt,
+        typeof req.body.customerTimezone === "string" ? req.body.customerTimezone.trim().slice(0, 80) || null : null,
+        typeof req.body.customerLocation === "string" ? req.body.customerLocation.trim().slice(0, 240) || null : null,
+      ],
+    );
+    await storage.createNotification({
+      userId: Number(business.owner_user_id),
+      title: `New ${requestType} request`,
+      body: `${topic} was sent from your verified GUBER business profile.`,
+      type: "business_request",
+    }).catch(() => {});
+    res.status(201).json(result.rows[0]);
   });
 
   app.get("/api/business/storefront", requireAuth, async (req, res) => {

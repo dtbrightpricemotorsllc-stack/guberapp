@@ -361,6 +361,92 @@ describe("business-scoped inventory", () => {
   });
 });
 
+describe("universal business customer requests", () => {
+  it("accepts a safe consultation request using the selected capability", async () => {
+    const inserted = {
+      id: 55,
+      request_type: "consultation",
+      topic: "Initial consultation",
+      status: "requested",
+      created_at: "2026-08-29T12:00:00.000Z",
+    };
+    mockPool.query
+      .mockResolvedValueOnce({
+        rows: [{
+          id: BUSINESS_ACCOUNT_ID,
+          owner_user_id: BUSINESS_OWNER_ID,
+          status: "verified_business",
+          industry: "Legal / Professional Services",
+          professional_category: "legal_practice",
+          capabilities: ["public_profile", "consultation_requests"],
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [inserted] });
+
+    const response = await supertest(buildApp(DISTRIBUTOR_ID))
+      .post(`/api/public/businesses/${BUSINESS_ACCOUNT_ID}/request`)
+      .send({
+        requestType: "consultation",
+        topic: "Initial consultation",
+        message: "I would like to understand how to schedule an initial consultation.",
+        requestedStartAt: "2026-09-02T15:00:00.000Z",
+        customerTimezone: "America/New_York",
+      })
+      .expect(201);
+
+    expect(response.body).toEqual(inserted);
+    expect(mockPool.query.mock.calls[1][0]).toContain("business_contact_requests");
+    expect(mockStorage.createNotification).toHaveBeenCalledWith(expect.objectContaining({
+      userId: BUSINESS_OWNER_ID,
+      type: "business_request",
+    }));
+  });
+
+  it("rejects sensitive details for regulated professionals before inserting", async () => {
+    mockPool.query.mockResolvedValueOnce({
+      rows: [{
+        id: BUSINESS_ACCOUNT_ID,
+        owner_user_id: BUSINESS_OWNER_ID,
+        status: "verified_business",
+        industry: "Healthcare",
+        professional_category: "medical_practice",
+        capabilities: ["public_profile", "consultation_requests"],
+      }],
+    });
+
+    const response = await supertest(buildApp(DISTRIBUTOR_ID))
+      .post(`/api/public/businesses/${BUSINESS_ACCOUNT_ID}/request`)
+      .send({
+        requestType: "consultation",
+        topic: "New patient consultation",
+        message: "My diagnosis and prescription are in this note.",
+      })
+      .expect(400);
+
+    expect(response.body.message).toContain("do not include");
+    expect(mockPool.query).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not allow a request type the business has not enabled", async () => {
+    mockPool.query.mockResolvedValueOnce({
+      rows: [{
+        id: BUSINESS_ACCOUNT_ID,
+        owner_user_id: BUSINESS_OWNER_ID,
+        status: "verified_business",
+        industry: "Retail",
+        professional_category: null,
+        capabilities: ["public_profile", "customer_inquiries"],
+      }],
+    });
+
+    await supertest(buildApp(DISTRIBUTOR_ID))
+      .post(`/api/public/businesses/${BUSINESS_ACCOUNT_ID}/request`)
+      .send({ requestType: "quote", topic: "Bulk order" })
+      .expect(404);
+    expect(mockPool.query).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("exactly-once business referral reward and cash-out", () => {
   it("creates one $5 reward and one cash-out request across retries", async () => {
     const pendingAttribution = {

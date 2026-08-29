@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import {
   LayoutDashboard, FileText, Settings, LogOut,
   Menu, X, Building2, ChevronRight, ChevronLeft, Flame, Search,
-  ShieldCheck, Send, ClipboardList, Eye, CalendarClock
+   ShieldCheck, Send, ClipboardList, Eye, CalendarClock, MessageSquare
 } from "lucide-react";
 
 const GOLD = "#C6A85C";
@@ -25,6 +25,7 @@ const NAV: NavItem[] = [
   { section: "divider" },
   { sectionLabel: "OPERATIONS" },
   { label: "Assignments", href: "/biz/post-job", icon: ClipboardList },
+  { label: "Customer Requests", href: "/biz/requests", icon: MessageSquare },
   { label: "Bookings", href: "/biz/bookings", icon: CalendarClock },
   { label: "Inspection Standards", href: "/biz/templates", icon: FileText },
   { section: "divider" },

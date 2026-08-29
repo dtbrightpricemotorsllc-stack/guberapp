@@ -6,6 +6,9 @@ import {
   getBusinessReferralCashoutBlock,
   getBusinessPlanFromCatalog,
   getBusinessRequirementsForIndustry,
+  isProfessionalServiceCategory,
+  normalizeBusinessCapabilities,
+  safeProfessionalRequestMessage,
   isFoundingLocalOfferEligible,
   resolveBusinessReferralPayoutOwner,
 } from "../business-experience";
@@ -117,5 +120,30 @@ describe("business handout promises", () => {
       stripeAccountId: "acct_ready",
       stripeAccountStatus: "active",
     })).toBeNull();
+  });
+});
+
+describe("universal business capabilities", () => {
+  it("always keeps a public profile and removes unknown capability keys", () => {
+    expect(normalizeBusinessCapabilities(["quote_requests", "unknown", "quote_requests"])).toEqual([
+      "public_profile",
+      "quote_requests",
+    ]);
+    expect(normalizeBusinessCapabilities([])).toEqual([
+      "public_profile",
+      "customer_inquiries",
+      "service_availability",
+    ]);
+  });
+
+  it("recognizes regulated professional categories without exposing a professional identity", () => {
+    expect(isProfessionalServiceCategory("medical_practice", "Other")).toBe(true);
+    expect(isProfessionalServiceCategory("", "Legal / Professional Services")).toBe(true);
+    expect(isProfessionalServiceCategory("", "Retail")).toBe(false);
+  });
+
+  it("blocks sensitive intake details while allowing general routing context", () => {
+    expect(safeProfessionalRequestMessage("I need an initial consultation next week")).toContain("initial consultation");
+    expect(() => safeProfessionalRequestMessage("My diagnosis and prescription are attached")).toThrow("do not include");
   });
 });

@@ -14,6 +14,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Building2, ChevronLeft, ChevronRight, Upload, Shield, Clock, Globe, Image, CheckCircle2 } from "lucide-react";
 import type { BusinessProfile } from "@shared/schema";
 import {
+  BUSINESS_CAPABILITIES,
+  DEFAULT_BUSINESS_CAPABILITIES,
+  PROFESSIONAL_SERVICE_CATEGORIES,
+  type BusinessCapability,
+} from "@shared/business-capabilities";
+import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
@@ -22,6 +28,7 @@ const INDUSTRIES = [
   "Insurance", "Property Management", "Survey & Inspection", "Automotive",
   "Lending & Finance", "Real Estate", "Retail", "Government & Municipal",
   "Healthcare", "Logistics & Delivery", "Construction", "Other",
+  "Professional Services", "Dental", "Accounting & Tax",
 ];
 
 const CONTACT_METHODS = ["Email", "Phone", "Text / SMS", "Any"];
@@ -29,6 +36,7 @@ const CONTACT_METHODS = ["Email", "Phone", "Text / SMS", "Any"];
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const DRAFT_KEY = "guber_biz_onboarding_draft";
+const PROFESSIONAL_INDUSTRY_PATTERN = /\b(healthcare|medical|doctor|dental|dentist|clinic|legal|law|accounting|accountant|tax|financial advisory)\b/i;
 
 const STEPS = [
   { label: "Company Info",   icon: Building2 },
@@ -117,6 +125,10 @@ export default function BusinessOnboarding() {
     businessHours: defaultHours() as BusinessHours,
     socialLinks: { instagram: "", facebook: "", linkedin: "", twitter: "" } as Record<string, string>,
     photoUrls: [] as string[],
+    capabilities: DEFAULT_BUSINESS_CAPABILITIES,
+    professionalCategory: "",
+    specialties: [] as string[],
+    availabilityNote: "",
   });
 
   // Restore from existing profile
@@ -141,6 +153,12 @@ export default function BusinessOnboarding() {
         businessHours:          (existing as any).businessHours || defaultHours(),
         socialLinks:            (existing as any).socialLinks || { instagram: "", facebook: "", linkedin: "", twitter: "" },
         photoUrls:              (existing as any).photoUrls || [],
+        capabilities:           Array.isArray((existing as any).capabilities) && (existing as any).capabilities.length
+          ? Array.from(new Set(["public_profile", ...(existing as any).capabilities]))
+          : DEFAULT_BUSINESS_CAPABILITIES,
+        professionalCategory:   (existing as any).professionalCategory || "",
+        specialties:            Array.isArray((existing as any).specialties) ? (existing as any).specialties : [],
+        availabilityNote:       (existing as any).availabilityNote || "",
       }));
       if (existing.companyLogo) setLogoPreview(existing.companyLogo);
     }
@@ -215,6 +233,27 @@ export default function BusinessOnboarding() {
     }));
   };
 
+  const isProfessionalIndustry = PROFESSIONAL_INDUSTRY_PATTERN.test(form.industry) || Boolean(form.professionalCategory);
+  const toggleCapability = (key: BusinessCapability) => {
+    if (key === "public_profile") return;
+    setForm(f => ({
+      ...f,
+      capabilities: f.capabilities.includes(key)
+        ? f.capabilities.filter(item => item !== key)
+        : [...f.capabilities, key],
+    }));
+  };
+
+  const setIndustry = (industry: string) => {
+    const professional = PROFESSIONAL_INDUSTRY_PATTERN.test(industry);
+    setForm(f => ({
+      ...f,
+      industry,
+      professionalCategory: professional ? f.professionalCategory : "",
+      specialties: professional ? f.specialties : [],
+    }));
+  };
+
   const isStep0Valid = !!form.companyName;
   const canSave = isStep0Valid;
 
@@ -257,7 +296,7 @@ export default function BusinessOnboarding() {
       {/* Industry */}
       <div className="space-y-1.5">
         <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Industry</Label>
-        <Select value={form.industry} onValueChange={(v) => setForm(f => ({ ...f, industry: v }))}>
+        <Select value={form.industry} onValueChange={setIndustry}>
           <SelectTrigger className="bg-background border-border/30" data-testid="select-industry">
             <SelectValue placeholder="Select your industry" />
           </SelectTrigger>
@@ -266,6 +305,59 @@ export default function BusinessOnboarding() {
           </SelectContent>
         </Select>
       </div>
+
+      <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+        <div>
+          <p className="text-sm font-semibold">What should customers be able to do?</p>
+          <p className="mt-1 text-xs text-muted-foreground">Choose the parts of your GUBER presence that fit your business. You can change these later.</p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {BUSINESS_CAPABILITIES.map((capability) => {
+            const checked = form.capabilities.includes(capability.key);
+            return (
+              <label key={capability.key} className={`flex gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${checked ? "border-primary/50 bg-primary/10" : "border-border/30 hover:border-primary/30"}`}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={capability.key === "public_profile"}
+                  onChange={() => toggleCapability(capability.key)}
+                  className="mt-1 h-4 w-4 accent-primary"
+                  data-testid={`checkbox-capability-${capability.key}`}
+                />
+                <span>
+                  <span className="block text-xs font-semibold">{capability.label}{capability.key === "booking" ? " (paid feature)" : ""}</span>
+                  <span className="mt-1 block text-[10px] leading-relaxed text-muted-foreground">{capability.description}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      {isProfessionalIndustry && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+          <div>
+            <p className="text-sm font-semibold">Professional Services profile</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">GUBER helps people discover your practice and request an initial appointment or consultation. GUBER does not provide regulated advice or treatment.</p>
+          </div>
+          <Select value={form.professionalCategory} onValueChange={(professionalCategory) => setForm(f => ({ ...f, professionalCategory }))}>
+            <SelectTrigger className="bg-background border-border/30" data-testid="select-professional-category">
+              <SelectValue placeholder="Choose your professional category" />
+            </SelectTrigger>
+            <SelectContent>
+              {PROFESSIONAL_SERVICE_CATEGORIES.map(category => <SelectItem key={category.key} value={category.key}>{category.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Input
+            value={form.specialties.join(", ")}
+            onChange={(e) => setForm(f => ({ ...f, specialties: e.target.value.split(",").map(item => item.trim()).filter(Boolean).slice(0, 20) }))}
+            placeholder="Specialties or practice areas, separated by commas"
+            className="bg-background border-border/30"
+            data-testid="input-professional-specialties"
+          />
+          <p className="text-[10px] text-amber-700 dark:text-amber-300">List public specialties or practice areas only. Do not add patient, client, case, or financial details.</p>
+        </div>
+      )}
 
       {/* Company Description */}
       <div className="space-y-1.5">
@@ -344,6 +436,18 @@ export default function BusinessOnboarding() {
             {CONTACT_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Availability Note</Label>
+        <Input value={form.availabilityNote}
+          onChange={(e) => setForm(f => ({ ...f, availabilityNote: e.target.value }))}
+          placeholder="e.g. New consultations available weekday mornings"
+          maxLength={240}
+          className="bg-background border-border/30"
+          data-testid="input-availability-note"
+        />
+        <p className="text-[10px] text-muted-foreground">A short public note about when customers can generally reach or schedule you.</p>
       </div>
 
       {/* Business Hours */}

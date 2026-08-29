@@ -4,10 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest } from "@/lib/queryClient";
-import { Building2, CalendarClock, Clock3, MapPin, Search, ShieldCheck, ArrowRight } from "lucide-react";
+import { AlertTriangle, Building2, CalendarClock, Clock3, MapPin, Search, ShieldCheck, ArrowRight, MessageSquare } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { PROFESSIONAL_INDUSTRY_ALIASES } from "@shared/business-capabilities";
 
 type Business = {
   business_account_id: number;
@@ -20,6 +21,29 @@ type Business = {
   service_area?: string | null;
   website?: string | null;
   isOpen: boolean | null;
+  capabilities?: string[];
+  professional_category?: string | null;
+  specialties?: string[];
+  availability_note?: string | null;
+};
+
+const CAPABILITY_LABELS: Record<string, string> = {
+  customer_inquiries: "Ask a question",
+  service_availability: "Service availability",
+  quote_requests: "Request a quote",
+  consultation_requests: "Request a consultation",
+  appointments: "Request an appointment",
+  booking: "Booking available",
+};
+
+const PROFESSIONAL_CATEGORY_LABELS: Record<string, string> = {
+  medical_practice: "Medical practice",
+  dental_practice: "Dental practice",
+  clinic: "Clinic",
+  legal_practice: "Legal practice",
+  accounting_practice: "Accounting practice",
+  financial_advisory: "Financial advisory",
+  other_regulated: "Professional services",
 };
 
 function BookingPanel({ businessId }: { businessId: string }) {
@@ -101,6 +125,89 @@ function BookingPanel({ businessId }: { businessId: string }) {
   );
 }
 
+function CustomerRequestPanel({ business }: { business: any }) {
+  const { user } = useAuth();
+  const actions = (business.publicActions || business.capabilities || []).filter((key: string) => key !== "public_profile" && key !== "service_availability" && key !== "booking");
+  const [requestType, setRequestType] = useState<string>("");
+  const [topic, setTopic] = useState("");
+  const [message, setMessage] = useState("");
+  const [requestedStartAt, setRequestedStartAt] = useState("");
+  const [customerLocation, setCustomerLocation] = useState("");
+  const professional = Boolean(business.professionalCategory) || PROFESSIONAL_INDUSTRY_ALIASES.some((alias) => (business.industry || "").toLowerCase().includes(alias));
+  const selectedAction = requestType ? CAPABILITY_LABELS[requestType] : "";
+  const submit = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/public/businesses/${business.business_account_id}/request`, {
+        requestType,
+        topic,
+        message,
+        requestedStartAt: requestedStartAt || null,
+        customerTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        customerLocation,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      setTopic("");
+      setMessage("");
+      setRequestedStartAt("");
+      setCustomerLocation("");
+    },
+  });
+
+  if (!actions.length) return null;
+  return (
+    <section className="mt-8 rounded-3xl border bg-card p-6 md:p-8" data-testid="section-business-requests">
+      <div className="flex items-start gap-3">
+        <MessageSquare className="mt-1 h-5 w-5 text-primary" />
+        <div>
+          <h2 className="text-xl font-bold">Connect with this business</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Send a general request through GUBER. Your personal identity remains represented by your Guber ID.</p>
+        </div>
+      </div>
+      {!user ? (
+        <div className="mt-5 rounded-xl bg-muted p-4 text-sm">
+          <p>Sign in with your Guber account to contact this business.</p>
+          <Link href={`/login?returnTo=/businesses/${business.business_account_id}`} className="mt-3 inline-block font-semibold text-primary">Sign in to continue →</Link>
+        </div>
+      ) : (
+        <div className="mt-5 space-y-4">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {actions.map((capability: string) => {
+              const type = capability === "customer_inquiries" ? "inquiry" : capability === "quote_requests" ? "quote" : capability === "consultation_requests" ? "consultation" : "appointment";
+              const label = CAPABILITY_LABELS[capability] || capability.replace(/_/g, " ");
+              return (
+                <button key={capability} type="button" onClick={() => setRequestType(type)} className={`rounded-2xl border p-4 text-left transition-colors ${requestType === type ? "border-primary bg-primary/5" : "hover:border-primary/50"}`}>
+                  <span className="font-semibold">{label}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">{capability === "consultation_requests" ? "Start with general scheduling and routing." : "No personal contact details are shown publicly."}</span>
+                </button>
+              );
+            })}
+          </div>
+          {requestType && (
+            <div className="rounded-2xl border border-dashed p-4">
+              <p className="text-sm font-semibold">{selectedAction}</p>
+              {professional && (
+                <p className="mt-2 flex gap-2 rounded-xl bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />For privacy, use this only for general scheduling and routing. Do not include medical, legal, financial, insurance, account, or other sensitive case details.
+                </p>
+              )}
+              <label className="mt-3 block text-xs font-semibold text-muted-foreground">Short topic *</label>
+              <Input value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={160} placeholder={professional ? "e.g. Initial consultation" : "e.g. Availability for a new project"} className="mt-1" />
+              {(requestType === "appointment" || requestType === "consultation") && <div className="mt-3"><label className="text-xs font-semibold text-muted-foreground">Requested date and time {requestType === "appointment" ? "*" : "(optional)"}</label><Input type="datetime-local" value={requestedStartAt} onChange={(e) => setRequestedStartAt(e.target.value)} className="mt-1" /></div>}
+              <div className="mt-3"><label className="text-xs font-semibold text-muted-foreground">General note {professional ? "(optional)" : ""}</label><Textarea value={message} onChange={(e) => setMessage(e.target.value)} maxLength={professional ? 500 : 2000} placeholder={professional ? "Keep this to general scheduling or routing context only." : "What would you like the business to know?"} className="mt-1" /></div>
+              {requestType !== "inquiry" && <div className="mt-3"><label className="text-xs font-semibold text-muted-foreground">City or service area (optional)</label><Input value={customerLocation} onChange={(e) => setCustomerLocation(e.target.value)} placeholder="City, ZIP, or general service area" className="mt-1" /></div>}
+              {submit.isError && <p className="mt-3 text-sm text-destructive">{(submit.error as Error).message}</p>}
+              {submit.isSuccess && <p className="mt-3 text-sm font-semibold text-emerald-600">Your request was sent to the business.</p>}
+              <Button className="mt-4" disabled={submit.isPending || !topic.trim() || (requestType === "appointment" && !requestedStartAt)} onClick={() => submit.mutate()}>{submit.isPending ? "Sending…" : "Send request"}</Button>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function BusinessDiscovery() {
   const [, detailParams] = useRoute("/businesses/:id");
   const [search, setSearch] = useState("");
@@ -149,11 +256,26 @@ export default function BusinessDiscovery() {
               <p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" />{detail.address || detail.serviceArea || detail.zipCode || "Local service area"}</p>
               <p className="flex items-center gap-2"><Clock3 className="h-4 w-4 text-primary" />Business hours shown in the profile</p>
             </div>
+             {detail.capabilities?.some((capability: string) => CAPABILITY_LABELS[capability]) && (
+               <div className="mt-5 flex flex-wrap gap-2">
+                 {detail.capabilities.filter((capability: string) => CAPABILITY_LABELS[capability]).map((capability: string) => (
+                   <span key={capability} className="rounded-full border border-primary/20 px-3 py-1 text-xs font-semibold text-primary">{CAPABILITY_LABELS[capability]}</span>
+                 ))}
+               </div>
+             )}
             <div className="mt-8 flex flex-wrap gap-3">
               <Link href="/services"><Button>Request a service</Button></Link>
               {detail.website && <a href={detail.website} target="_blank" rel="noreferrer"><Button variant="outline">Visit official website</Button></a>}
             </div>
+             {detail.specialties?.length > 0 && (
+               <div className="mt-6">
+                 <p className="text-xs font-bold uppercase tracking-wide text-primary">{detail.professionalCategory ? (PROFESSIONAL_CATEGORY_LABELS[detail.professionalCategory] || "Professional services") : "Specialties"}</p>
+                 <div className="mt-2 flex flex-wrap gap-2">{detail.specialties.map((specialty: string) => <span key={specialty} className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{specialty}</span>)}</div>
+               </div>
+             )}
+             {detail.availabilityNote && <p className="mt-5 flex items-center gap-2 rounded-xl bg-muted p-3 text-sm"><CalendarClock className="h-4 w-4 text-primary" />{detail.availabilityNote}</p>}
           </div>
+           <CustomerRequestPanel business={detail} />
           <BookingPanel businessId={String(detail.business_account_id)} />
           {detail.inventory?.length > 0 && (
             <section className="mt-8">
@@ -215,6 +337,13 @@ export default function BusinessDiscovery() {
                     </span>
                   </div>
                   <h2 className="text-lg font-bold group-hover:text-primary">{business.company_name}</h2>
+                   {business.capabilities?.some((capability) => CAPABILITY_LABELS[capability]) && (
+                     <div className="mt-3 flex flex-wrap gap-1.5">
+                       {business.capabilities.filter((capability) => CAPABILITY_LABELS[capability]).slice(0, 3).map((capability) => (
+                         <span key={capability} className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary">{CAPABILITY_LABELS[capability]}</span>
+                       ))}
+                     </div>
+                   )}
                   <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-primary">{business.industry || "Local business"}</p>
                   <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">{business.description || "Verified business profile on GUBER."}</p>
                   <div className="mt-4 space-y-2 text-xs text-muted-foreground">

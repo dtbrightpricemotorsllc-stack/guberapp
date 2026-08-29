@@ -2492,7 +2492,36 @@ app.use((req, res, next) => {
     ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS social_links JSONB;
     ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS photo_urls JSONB;
     ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS preferred_contact_method TEXT;
+    ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS capabilities JSONB DEFAULT '["public_profile", "customer_inquiries", "service_availability"]'::jsonb;
+    ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS professional_category TEXT;
+    ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS specialties JSONB;
+    ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS availability_note TEXT;
   `).catch(e => console.error("[migration] business_profiles extended columns error:", e));
+
+  // ── Universal business customer requests ───────────────────────────────────
+  // Separate from jobs and bookings so inquiry, quote, consultation, and
+  // appointment requests can use a minimal, non-sensitive intake flow.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS business_contact_requests (
+      id SERIAL PRIMARY KEY,
+      business_account_id INTEGER NOT NULL,
+      requester_user_id INTEGER NOT NULL,
+      request_type TEXT NOT NULL,
+      topic TEXT NOT NULL,
+      message TEXT,
+      requested_start_at TIMESTAMP,
+      customer_timezone TEXT,
+      customer_location TEXT,
+      status TEXT NOT NULL DEFAULT 'requested',
+      business_note TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_business_contact_requests_business
+      ON business_contact_requests(business_account_id, status, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_business_contact_requests_requester
+      ON business_contact_requests(requester_user_id, created_at DESC);
+  `).catch(e => console.error("[migration] business contact requests table error:", e));
 
   // ── Business Booking & Appointments ───────────────────────────────────────
   // Separate from jobs/direct offers: appointments have their own service-level

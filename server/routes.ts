@@ -90,6 +90,8 @@ import {
   businessPlanHasAccess,
   getBusinessPlanFromCatalog,
   isFoundingLocalOfferEligible,
+  normalizeBusinessCapabilities,
+  normalizeProfessionalServiceCategory,
 } from "./business-experience";
 import { registerBusinessBookingRoutes } from "./business-bookings";
 import {
@@ -26133,6 +26135,7 @@ OUTPUT STYLE:
         // Extended onboarding fields
         address, zipCode, serviceArea, businessDescription, productsServices,
         businessHours, website, socialLinks, photoUrls, preferredContactMethod,
+        capabilities, professionalCategory, specialties, availabilityNote,
       } = req.body;
       if (!companyName) return res.status(400).json({ error: "Company name required" });
 
@@ -26154,6 +26157,12 @@ OUTPUT STYLE:
         socialLinks: socialLinks || null,
         photoUrls: photoUrls || null,
         preferredContactMethod: preferredContactMethod || null,
+        capabilities: normalizeBusinessCapabilities(capabilities),
+        professionalCategory: normalizeProfessionalServiceCategory(professionalCategory),
+        specialties: Array.isArray(specialties)
+          ? specialties.filter((item: unknown): item is string => typeof item === "string").map((item: string) => item.trim().slice(0, 80)).filter(Boolean).slice(0, 20)
+          : [],
+        availabilityNote: typeof availabilityNote === "string" ? availabilityNote.trim().slice(0, 240) || null : null,
       };
       const existing = await storage.getBusinessProfile(userId);
       let profile;
