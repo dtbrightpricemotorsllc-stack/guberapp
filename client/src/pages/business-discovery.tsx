@@ -115,7 +115,7 @@ function BookingPanel({ businessId }: { businessId: string }) {
               {(selectedService.fulfillment_mode === "mobile" || selectedService.fulfillment_mode === "event") && <div className="mt-3"><label className="text-xs font-semibold text-muted-foreground">Service location or event details</label><Input value={customerLocation} onChange={(e) => setCustomerLocation(e.target.value)} placeholder="City, address, venue, or service area" className="mt-1" /></div>}
               <div className="mt-3"><label className="text-xs font-semibold text-muted-foreground">Details for the business</label><Textarea value={customerNote} onChange={(e) => setCustomerNote(e.target.value)} placeholder={selectedService.confirmation_mode === "quote" ? "Guest count, vehicle details, event date, scope, or anything else to quote…" : "Anything the business should know?"} className="mt-1" /></div>
               {submit.isError && <p className="mt-3 text-sm text-destructive">{(submit.error as Error).message}</p>}
-              {submit.isSuccess && <p className="mt-3 text-sm font-semibold text-emerald-600">{selectedService.confirmation_mode === "instant" ? "Your booking is confirmed." : "Your request was sent to the business."}</p>}
+              {submit.isSuccess && <p className="mt-3 text-sm font-semibold text-emerald-600">{selectedService.confirmation_mode === "instant" ? "Your booking is confirmed." : "Your request was sent to the business."} <Link href="/business-requests" className="underline underline-offset-2">View My Requests</Link></p>}
               <Button className="mt-4" disabled={submit.isPending || !serviceId || (selectedService.confirmation_mode !== "quote" && !requestedStartAt)} onClick={() => submit.mutate()}>{submit.isPending ? "Sending…" : selectedService.confirmation_mode === "instant" ? "Confirm booking" : selectedService.confirmation_mode === "approval" ? "Request booking" : "Request a quote"}</Button>
             </div>
           )}
@@ -198,7 +198,7 @@ function CustomerRequestPanel({ business }: { business: any }) {
               <div className="mt-3"><label className="text-xs font-semibold text-muted-foreground">General note {professional ? "(optional)" : ""}</label><Textarea value={message} onChange={(e) => setMessage(e.target.value)} maxLength={professional ? 500 : 2000} placeholder={professional ? "Keep this to general scheduling or routing context only." : "What would you like the business to know?"} className="mt-1" /></div>
               {requestType !== "inquiry" && <div className="mt-3"><label className="text-xs font-semibold text-muted-foreground">City or service area (optional)</label><Input value={customerLocation} onChange={(e) => setCustomerLocation(e.target.value)} placeholder="City, ZIP, or general service area" className="mt-1" /></div>}
               {submit.isError && <p className="mt-3 text-sm text-destructive">{(submit.error as Error).message}</p>}
-              {submit.isSuccess && <p className="mt-3 text-sm font-semibold text-emerald-600">Your request was sent to the business.</p>}
+              {submit.isSuccess && <p className="mt-3 text-sm font-semibold text-emerald-600">Your request was sent to the business. <Link href="/business-requests" className="underline underline-offset-2">View My Requests</Link></p>}
               <Button className="mt-4" disabled={submit.isPending || !topic.trim() || (requestType === "appointment" && !requestedStartAt)} onClick={() => submit.mutate()}>{submit.isPending ? "Sending…" : "Send request"}</Button>
             </div>
           )}

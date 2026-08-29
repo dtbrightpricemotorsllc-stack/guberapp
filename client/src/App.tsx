@@ -60,6 +60,7 @@ const PostJob = lazy(() => import("@/pages/post-job"));
 const MyJobs = lazy(() => import("@/pages/my-jobs"));
 const Profile = lazy(() => import("@/pages/profile"));
 const AccountSettings = lazy(() => import("@/pages/account-settings"));
+const MyBusinessRequests = lazy(() => import("@/pages/my-business-requests"));
 const NotificationsPage = lazy(() => import("@/pages/notifications-page"));
 const WalletPage = lazy(() => import("@/pages/wallet"));
 const JobPaymentSuccess = lazy(() => import("@/pages/job-payment-success"));
@@ -387,6 +388,7 @@ function Router() {
       <Route path="/profile" component={() => <ProtectedRoute component={Profile} />} />
       <Route path="/profile/:id" component={() => <ProtectedRoute component={Profile} />} />
       <Route path="/account-settings" component={() => <ConsumerRoute component={AccountSettings} />} />
+      <Route path="/business-requests" component={() => <ConsumerRoute component={MyBusinessRequests} />} />
       <Route path="/notifications" component={() => <ProtectedRoute component={NotificationsPage} />} />
       <Route path="/os/command-center" component={() => <OSAdminRoute component={OSCommandCenter} />} />
       <Route path="/os/briefing" component={() => <OSAdminRoute component={OSBriefing} />} />

@@ -40,6 +40,7 @@ import {
   ShoppingBag,
   ArrowLeft,
   Building2,
+  ClipboardList,
 } from "lucide-react";
 
 const SOUND_PRIORITY: SoundType[] = ["money", "nearby", "action", "closed", "default"];
@@ -365,6 +366,11 @@ export function GuberLayout({ children, hideHeader, showBack, backHref, onBack, 
                   <DropdownMenuItem asChild>
                     <Link href="/wallet" className="flex items-center gap-3 cursor-pointer rounded-xl px-3 py-2.5 text-sm">
                       <Wallet className="w-4 h-4 text-muted-foreground" /> Wallet
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/business-requests" className="flex items-center gap-3 cursor-pointer rounded-xl px-3 py-2.5 text-sm" data-testid="link-nav-my-requests">
+                      <ClipboardList className="w-4 h-4 text-muted-foreground" /> My Requests
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>

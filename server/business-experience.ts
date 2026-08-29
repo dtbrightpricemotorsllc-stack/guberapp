@@ -70,6 +70,18 @@ export function safeProfessionalRequestMessage(value: unknown) {
   return message;
 }
 
+export function getCustomerBusinessRequestNextAction(source: "request" | "booking", status: string) {
+  if (status === "reschedule_proposed") return "Review the proposed new time";
+  if (status === "requested") return "Waiting for the business to respond";
+  if (status === "quoted") return "Review the business response";
+  if (status === "contacted") return "Review the business response";
+  if (status === "scheduled" || status === "confirmed") return "Your appointment is confirmed";
+  if (status === "declined" || status === "cancelled" || status === "closed" || status === "completed") {
+    return "No action needed";
+  }
+  return source === "booking" ? "Check this booking for updates" : "Check this request for updates";
+}
+
 export type BusinessPlanType = typeof BUSINESS_PLAN_CATALOG[number]["planType"];
 export const FOUNDING_LOCAL_OFFER = {
   offerKey: "founding_local_business",
@@ -621,18 +633,47 @@ export async function registerBusinessExperienceRoutes(
   });
 
   app.get("/api/business/requests/mine", requireAuth, async (req, res) => {
-    const result = await pool.query(
-      `SELECT r.id, r.request_type, r.topic, r.message, r.requested_start_at,
-              r.customer_timezone, r.customer_location, r.status, r.business_note,
-              r.created_at, r.updated_at, bp.company_name, COALESCE(bp.company_logo, ba.company_logo) AS company_logo
+    const [contactRequests, bookings] = await Promise.all([
+      pool.query(
+      `SELECT 'request' AS source, r.id, r.request_type AS "requestType",
+              r.topic AS "serviceName", r.requested_start_at AS "requestedStartAt",
+              NULL::timestamp AS "proposedStartAt", r.status,
+              r.business_note AS "businessNote", r.created_at AS "createdAt",
+              r.updated_at AS "updatedAt", bp.company_name AS "businessName",
+              COALESCE(bp.company_logo, ba.company_logo) AS "businessLogo"
          FROM business_contact_requests r
          JOIN business_accounts ba ON ba.id = r.business_account_id
          JOIN business_profiles bp ON bp.user_id = ba.owner_user_id
         WHERE r.requester_user_id = $1
-        ORDER BY r.created_at DESC`,
-      [req.session.userId],
-    );
-    res.json(result.rows);
+        ORDER BY r.updated_at DESC`,
+        [req.session.userId],
+      ),
+      pool.query(
+      `SELECT 'booking' AS source, b.id,
+              CASE WHEN s.confirmation_mode = 'quote' THEN 'quote' ELSE 'appointment' END AS "requestType",
+              s.name AS "serviceName", b.requested_start_at AS "requestedStartAt",
+              b.proposed_start_at AS "proposedStartAt", b.status,
+              b.business_note AS "businessNote", b.created_at AS "createdAt",
+              b.updated_at AS "updatedAt", bp.company_name AS "businessName",
+              COALESCE(bp.company_logo, ba.company_logo) AS "businessLogo"
+         FROM business_bookings b
+         JOIN business_booking_services s ON s.id = b.service_id
+         JOIN business_accounts ba ON ba.id = b.business_account_id
+         JOIN business_profiles bp ON bp.user_id = ba.owner_user_id
+        WHERE b.customer_user_id = $1
+        ORDER BY b.updated_at DESC`,
+        [req.session.userId],
+      ),
+    ]);
+    const history = [...contactRequests.rows, ...bookings.rows]
+      .map((item) => ({
+        ...item,
+        nextAction: getCustomerBusinessRequestNextAction(item.source, item.status),
+      }))
+      .sort((left, right) =>
+        new Date(right.updatedAt || right.createdAt).getTime() - new Date(left.updatedAt || left.createdAt).getTime(),
+      );
+    res.json(history);
   });
 
   app.patch("/api/business/requests/:id/status", requireAuth, async (req, res) => {

@@ -6,6 +6,7 @@ import {
   getBusinessReferralCashoutBlock,
   getBusinessPlanFromCatalog,
   getBusinessRequirementsForIndustry,
+  getCustomerBusinessRequestNextAction,
   isProfessionalServiceCategory,
   normalizeBusinessCapabilities,
   safeProfessionalRequestMessage,
@@ -145,5 +146,16 @@ describe("universal business capabilities", () => {
   it("blocks sensitive intake details while allowing general routing context", () => {
     expect(safeProfessionalRequestMessage("I need an initial consultation next week")).toContain("initial consultation");
     expect(() => safeProfessionalRequestMessage("My diagnosis and prescription are attached")).toThrow("do not include");
+  });
+});
+
+describe("customer business request history", () => {
+  it("maps booking and request statuses to clear customer next actions", () => {
+    expect(getCustomerBusinessRequestNextAction("booking", "reschedule_proposed"))
+      .toBe("Review the proposed new time");
+    expect(getCustomerBusinessRequestNextAction("request", "quoted"))
+      .toBe("Review the business response");
+    expect(getCustomerBusinessRequestNextAction("booking", "completed"))
+      .toBe("No action needed");
   });
 });

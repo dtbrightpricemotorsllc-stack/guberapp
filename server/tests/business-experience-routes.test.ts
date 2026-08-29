@@ -362,6 +362,64 @@ describe("business-scoped inventory", () => {
 });
 
 describe("universal business customer requests", () => {
+  it("returns one customer-scoped history without owner identity fields", async () => {
+    mockPool.query
+      .mockResolvedValueOnce({
+        rows: [{
+          source: "request",
+          id: 8,
+          requestType: "consultation",
+          serviceName: "Initial consultation",
+          requestedStartAt: "2026-09-03T15:00:00.000Z",
+          proposedStartAt: null,
+          status: "contacted",
+          businessNote: "Please bring your questions.",
+          createdAt: "2026-08-29T10:00:00.000Z",
+          updatedAt: "2026-08-29T13:00:00.000Z",
+          businessName: "North Star Retail",
+          businessLogo: "https://example.com/logo.png",
+        }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{
+          source: "booking",
+          id: 9,
+          requestType: "appointment",
+          serviceName: "On-site service",
+          requestedStartAt: "2026-09-04T15:00:00.000Z",
+          proposedStartAt: "2026-09-05T15:00:00.000Z",
+          status: "reschedule_proposed",
+          businessNote: "Would this new time work?",
+          createdAt: "2026-08-29T11:00:00.000Z",
+          updatedAt: "2026-08-29T14:00:00.000Z",
+          businessName: "Public Business Name",
+          businessLogo: null,
+        }],
+      });
+
+    const response = await supertest(buildApp(DISTRIBUTOR_ID))
+      .get("/api/business/requests/mine")
+      .expect(200);
+
+    expect(response.body).toHaveLength(2);
+    expect(response.body[0]).toMatchObject({
+      source: "booking",
+      serviceName: "On-site service",
+      status: "reschedule_proposed",
+      nextAction: "Review the proposed new time",
+    });
+    expect(response.body[1]).toMatchObject({
+      source: "request",
+      nextAction: "Review the business response",
+    });
+    expect(response.body[0]).not.toHaveProperty("ownerUserId");
+    expect(response.body[0]).not.toHaveProperty("customerUserId");
+    expect(mockPool.query.mock.calls[0][1]).toEqual([DISTRIBUTOR_ID]);
+    expect(mockPool.query.mock.calls[1][1]).toEqual([DISTRIBUTOR_ID]);
+    expect(mockPool.query.mock.calls[0][0]).toContain("r.requester_user_id = $1");
+    expect(mockPool.query.mock.calls[1][0]).toContain("b.customer_user_id = $1");
+  });
+
   it("accepts a safe consultation request using the selected capability", async () => {
     const inserted = {
       id: 55,
