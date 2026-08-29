@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { Send, Mic, Volume2, ArrowRight, MessageSquare, Minus, Loader2, FileText, Sparkles } from "lucide-react";
-import { JacConvaiVoice } from "@/components/jac/jac-convai-voice";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
-import { ConversationProvider } from "@elevenlabs/react";
-import { JacConvaiSession, prewarmJacSession, type JacConvaiSessionHandle, type ConvaiPhase } from "@/components/jac/jac-convai-session";
+import {
+  JacOpenAIRealtimeSession,
+  type JacOpenAIRealtimeSessionHandle,
+} from "@/components/jac/jac-openai-realtime-session";
+import type { JacRealtimePhase } from "@/lib/jac-openai-realtime-transport";
 import { useJacDraftCardPoll } from "@/hooks/use-jac-draft-card-poll";
 import { useGuestJacSession } from "@/hooks/use-guest-jac-session";
 import {
@@ -14,7 +16,7 @@ import {
   readSharedJacConversation,
 } from "@/lib/jac-live-coordination";
 import { saveServiceOfferPrefill } from "@/lib/jac-listing-prefill";
-type ConversationState = ConvaiPhase;
+type ConversationState = JacRealtimePhase;
 
 const LIVE_PHASE_LABEL: Record<ConversationState, string> = {
   idle: "ready",
@@ -131,7 +133,7 @@ const GREETING: JacMsg = {
 };
 
 // Kept for reference — the greeting is shown as text only, never spoken by TTS.
-// ElevenLabs firstMessage is always suppressed so voice never replays the greeting.
+// Realtime voice never replays the greeting.
 const _GREETING_TTS_UNUSED = "";
 
 function toSpeechText(text: string): string {
@@ -354,13 +356,12 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
   const { listening, transcribing, start: startListening, stop: stopListening, supported: micSupported } =
     useSpeechInput((text) => processInput(text));
 
-  // ── ElevenLabs ConvAI — runs silently behind the mic button ──────────────
+  // ── OpenAI Realtime voice — runs behind the explicit mic button ──────────
   const [liveMode, setLiveMode] = useState(false);
   const [liveState, setLiveState] = useState<ConversationState>("idle");
   const [jacVolume, setJacVolumeState] = useState(() => getJacVolume());
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
-  const [convaiKey, setConvaiKey] = useState(0);
-  const convaiSessionRef = useRef<JacConvaiSessionHandle | null>(null);
+  const realtimeSessionRef = useRef<JacOpenAIRealtimeSessionHandle | null>(null);
   // Skip the CRT animation for returning visitors — they've seen it.
   // First-timers get the full 3.2s effect; everybody else goes straight to "done".
   const _crtAlreadySeen = typeof window !== "undefined" && localStorage.getItem("jac_crt_seen") === "1";
@@ -373,12 +374,12 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
   // Tracks whether JAC is currently speaking — used to suppress echo turns
   const isSpeakingRef = useRef(false);
 
-  const handleConvaiPhaseChange = useCallback((phase: ConvaiPhase) => {
+  const handleRealtimePhaseChange = useCallback((phase: JacRealtimePhase) => {
     isSpeakingRef.current = phase === "speaking";
     setLiveState(phase);
   }, []);
 
-  const handleConvaiUserTranscript = useCallback((text: string) => {
+  const handleRealtimeUserTranscript = useCallback((text: string) => {
     // ── Transcript guards ────────────────────────────────────────────────────
     // 1. Skip while JAC is speaking — prevents her own audio from becoming a user turn.
     if (isSpeakingRef.current) return;
@@ -389,29 +390,20 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
     if (/^[.…\s]+$/.test(trimmed)) return;
     // 4. Skip punctuation-only strings (no letters or digits — not a real utterance).
     if (!/[a-zA-Z0-9]/.test(trimmed)) return;
-    appendSharedJacMessage({ role: "user", content: trimmed, source: "homepage" });
-    setMessages(prev => [...prev, { role: "user" as const, content: trimmed }]);
-  }, []);
+    // The homepage brain owns the turn, message history, drafts, and actions.
+    // Do not add a second transcript bubble here.
+    void processInput(trimmed);
+  }, [processInput]);
 
-  const handleConvaiJacResponse = useCallback((text: string) => {
-    // Strip internal voice/emotion tags e.g. [happy], [excited] before displaying.
-    const sanitized = text.replace(/\[[^\]]*\]/g, "").trim();
-    if (!sanitized) return; // nothing left after stripping — discard silently
-    appendSharedJacMessage({ role: "assistant", content: sanitized, source: "homepage" });
-    setMessages(prev => {
-      // Replace the initial static greeting with the first ConvAI transcript
-      // so only one greeting bubble is ever shown (ConvAI's own words).
-      if (prev.length === 1 && prev[0].role === "assistant") {
-        return [{ role: "assistant" as const, content: sanitized }];
-      }
-      return [...prev, { role: "assistant" as const, content: sanitized }];
-    });
+  const handleRealtimeJacResponse = useCallback((_text: string) => {
+    // The realtime transport reports the audio transcript for the response
+    // already approved and rendered by processInput. Never append it again.
   }, []);
 
   // ── Guest session — persisted UUID for anonymous JAC drafts ─────────────
   const { guestSessionId, saveGuestDraft } = useGuestJacSession();
 
-  // ── Draft card polling — when ElevenLabs creates a job draft via tool call,
+  // ── Draft card polling — when voice creates a job draft via tool call,
   // inject a "Review Draft" card into the chat so the user can tap to open it.
   const [, navigate] = useLocation();
   useJacDraftCardPoll(liveMode, useCallback((card) => {
@@ -422,7 +414,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
     }]);
   }, []));
 
-  const handleConvaiError = useCallback((msg: string) => {
+  const handleRealtimeError = useCallback((msg: string) => {
     setLiveMode(false);
     setLiveState("idle");
     liveModeRef.current = false;
@@ -451,12 +443,10 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
     if (liveMode) {
       // If the session is already connected, toggle mute rather than ending the
       // session.  This lets users pause/resume mic mid-conversation without a
-      // cold reconnect — and critically without ElevenLabs replaying a greeting
-      // (firstMessage is always suppressed, so reconnect is silent anyway, but
-      // avoiding the cold reconnect latency is better UX).
-      if (convaiSessionRef.current?.connected) {
-        convaiSessionRef.current.toggleMute();
-        // liveState updates via handleConvaiPhaseChange when the SDK's isMuted flag changes.
+      // cold reconnect. Avoiding reconnect latency is better UX.
+      if (realtimeSessionRef.current?.connected) {
+        realtimeSessionRef.current.toggleMute();
+        // liveState updates via handleRealtimePhaseChange when mute changes.
         return;
       }
       // Session exists but is still connecting or errored — stop it.
@@ -475,26 +465,17 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
     liveModeRef.current = true;   // sync guard — speak() checks this ref directly
     setLiveMode(true);
     setLiveState("listening");
-    // Do NOT bump convaiKey here — that remounts the component and wastes ~100ms.
-    // The active prop change alone triggers a new boot() run in JacConvaiSession.
     if (!micHintDone) {
       setMicHintDone(true);
       try { localStorage.setItem(JAC_MIC_HINT_KEY, "1"); } catch {}
     }
   }
 
-  // speak — text-mode TTS only; no-ops when ConvAI is active (ElevenLabs handles audio)
+  // speak — text-mode TTS only; realtime voice handles its own audio.
   const speak = useCallback((text: string) => {
     if (mutedRef.current || liveModeRef.current) return;
     jacSpeak(text, { muted: mutedRef.current });
   }, []);
-
-  // Pre-warm intentionally disabled: text conversation is the default experience.
-  // Voice prewarm is skipped so no ElevenLabs session token is requested on page load.
-  // Re-enable this effect when voice is the confirmed default path.
-  // useEffect(() => {
-  //   prewarmJacSession("/api/jac/convai/investor-session");
-  // }, []);
 
   useEffect(() => {
     function onVisibility() {
@@ -538,11 +519,11 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
   //
   // Auto-start-on-gesture was removed because:
   //  1. Any click — including focusing the text input — triggered a voice connection attempt.
-  //  2. When that attempt failed (mic permission denied, network, IAB browser), handleConvaiError
+  //  2. When that attempt failed (mic permission denied, network, IAB browser), handleRealtimeError
   //     was called which previously replayed the TTS greeting — a confusing double-greeting.
   //  3. The user explicitly wants: text = ready immediately, voice = explicit mic tap only.
   //
-  // AudioContext is still unlocked on any gesture via the prewarm effect above.
+  // AudioContext is unlocked by the explicit interaction that starts voice.
 
   // CRT power-on: plays once for first-time visitors only.
   // Mark as seen in localStorage so subsequent visits skip straight to "done".
@@ -586,15 +567,12 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
     // Greeting is shown as text immediately.
     // Audio is intentionally NOT auto-played here:
     //   - Web Speech (boring robot voice) is a poor first impression.
-    //   - When the user taps the mic, ConvAI greets in JAC's real ElevenLabs
-    //     voice — that IS JAC speaking first, with the right voice.
+    //   - Voice responses use JAC's realtime OpenAI voice after the user speaks.
     //   - Playing both causes a double-welcome (boring voice → excited voice).
     // greetingSpokenRef stays false so text-mode TTS still works for replies.
   }
 
-  // Returning-visitor personalisation — ConvAI now voices the greeting, so we
-  // no longer overwrite the chat bubble here; the static GREETING stays until
-  // ConvAI's first transcript replaces it.
+  // Returning-visitor personalisation is available to JAC's backend context.
   useEffect(() => {
     const returning = localStorage.getItem("jac_returning") === "1";
     if (!returning) return;
@@ -732,7 +710,11 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
       const final = [...next, aMsg];
       appendSharedJacMessage({ role: "assistant", content: aMsg.content, source: "homepage" });
       setMessages(final);
-      if (!muted) speak(aMsg.content);
+       if (liveModeRef.current) {
+         realtimeSessionRef.current?.speakApprovedText(toSpeechText(aMsg.content));
+       } else if (!muted) {
+         speak(aMsg.content);
+       }
       try { localStorage.setItem("jac_returning", "1"); } catch {}
 
       await logInteraction(final, {
@@ -919,7 +901,22 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
 
               {/* Primary CTAs */}
               <div className="flex flex-wrap gap-3 justify-center md:justify-start mb-5">
-                <JacConvaiVoice />
+                <button
+                  onClick={() => {
+                    unlockAudioContext();
+                    setMode("chat");
+                    setTimeout(() => toggleLiveMode(), 120);
+                  }}
+                  className="flex items-center gap-2 h-11 px-6 rounded-xl text-sm font-display font-black tracking-wide transition-all active:scale-95"
+                  style={{
+                    background: "hsl(152 100% 44%)",
+                    color: "black",
+                    boxShadow: "0 0 20px hsl(152 100% 44% / 0.25)",
+                  }}
+                  data-testid="button-jac-voice"
+                >
+                  <Mic className="w-4 h-4" /> Talk to JAC
+                </button>
                 <button
                   onClick={() => openChat()}
                   className="flex items-center gap-2 h-11 px-6 rounded-xl text-sm font-display font-black tracking-wide transition-all active:scale-95"
@@ -950,7 +947,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
                 ))}
               </div>
               <p className="text-[10px] mt-4 text-center md:text-left" style={{ color: "hsl(0 0% 28%)" }}>
-                No account needed · Voice powered by ElevenLabs
+                No account needed · Voice powered by OpenAI
               </p>
             </div>
           </div>
@@ -993,20 +990,17 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
 
   return (
     <>
-    {/* ConversationProvider only mounts with its session — SDK never initialises before mic tap */}
+    {/* Realtime voice only mounts after an explicit mic gesture. */}
     {liveMode && (
-      <ConversationProvider>
-        <JacConvaiSession
-          key={convaiKey}
-          ref={convaiSessionRef}
-          active={liveMode}
-          sessionEndpoint="/api/jac/convai/investor-session"
-          onPhaseChange={handleConvaiPhaseChange}
-          onUserTranscript={handleConvaiUserTranscript}
-          onJacResponse={handleConvaiJacResponse}
-          onError={handleConvaiError}
-        />
-      </ConversationProvider>
+      <JacOpenAIRealtimeSession
+        ref={realtimeSessionRef}
+        active={liveMode}
+        sessionEndpoint="/api/jac/realtime-token/guest"
+        onPhaseChange={handleRealtimePhaseChange}
+        onUserTranscript={handleRealtimeUserTranscript}
+        onJacResponse={handleRealtimeJacResponse}
+        onError={handleRealtimeError}
+      />
     )}
     <section
       className="relative z-10 w-full overflow-hidden"
@@ -1043,7 +1037,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
         </div>
       )}
 
-      {/* ── MAIN CONTENT — always rendered so ElevenLabs initialises ── */}
+      {/* ── MAIN CONTENT ── */}
       <div
         className="relative max-w-4xl mx-auto px-3 sm:px-6 flex flex-row items-end gap-2 sm:gap-4 md:gap-6 py-4 md:py-10"
         style={{
@@ -1308,7 +1302,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
                 </button>
               </div>
               <p className="text-center text-[8px] text-white/12 mt-2 font-display tracking-wider">
-                {"JAC · Voice by ElevenLabs"}
+                {"JAC · Voice by OpenAI"}
               </p>
             </div>
           </div>

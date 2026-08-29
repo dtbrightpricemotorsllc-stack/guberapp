@@ -5,7 +5,7 @@
  *   Surface 1 (left / top)   — JAC character + conversation controls
  *   Surface 2 (right / bottom) — context-driven action area
  *
- * Voice: ElevenLabs ConvAI, starts only from the explicit mic control.
+ * Voice: OpenAI Realtime, starts only from the explicit mic control.
  * Text:  /api/jac/onboard with full conversation history.
  * Both modes share the same message history and Surface 2 state.
  */
@@ -13,7 +13,6 @@
 import {
   useState, useEffect, useRef, useCallback, useId,
 } from "react";
-import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import {
   Mic, MicOff, Send, Loader2, RefreshCw, ChevronDown,
   ArrowRight,
@@ -23,22 +22,23 @@ import { useAuth } from "@/lib/auth-context";
 import { JacCharacterRenderer, type JacState } from "@/components/jac/jac-character-renderer";
 import { Link } from "wouter";
 import { useGuestJacSession } from "@/hooks/use-guest-jac-session";
-import { cancelAllJacAudio, setJacConvaiActive, unlockAudioContext } from "@/lib/jac-tts";
-import { createJacConvaiVoiceOverride } from "@/lib/jac-convai-voice-lock";
+import { cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
 import { isNativeApp } from "@/lib/platform";
+import {
+  JacOpenAIRealtimeSession,
+  type JacOpenAIRealtimeSessionHandle,
+} from "@/components/jac/jac-openai-realtime-session";
+import type { JacRealtimePhase } from "@/lib/jac-openai-realtime-transport";
 import {
   appendSharedJacMessage,
   claimJacWelcomeGreeting,
   getJacQuickActions,
   isServiceDiscoveryIntent,
-  isJacE2EVoiceHarnessEnabled,
   isJacMicrophoneReady,
   JAC_WELCOME_GREETING,
   readSharedJacConversation,
-  subscribeToJacE2EVoiceEvents,
 } from "@/lib/jac-live-coordination";
 import { saveServiceOfferPrefill } from "@/lib/jac-listing-prefill";
-import { JAC_ELEVENLABS_VOICE_ID } from "@shared/jac-voice";
 import {
   getActiveCampaignSessionId,
   getCampaignSession,
@@ -79,44 +79,8 @@ const WELCOME_GREETING = JAC_WELCOME_GREETING;
 
 export function getJacLiveSessionEndpoint(isAuthenticated: boolean): string {
   return isAuthenticated
-    ? "/api/jac/convai/session"
-    : "/api/jac/convai/public-session";
-}
-
-type JacVoiceTelemetryEvent = "connect" | "timeout" | "error" | "disconnect";
-
-function getJacVoicePlatform(): string {
-  if (isNativeApp) return /android/i.test(navigator.userAgent) ? "android_native" : "ios_native";
-  if (typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches) return "pwa";
-  if (/android/i.test(navigator.userAgent)) return "android_chrome";
-  if (/iPad|iPhone|iPod/i.test(navigator.userAgent)) return "ios_safari";
-  return "web";
-}
-
-function reportJacVoiceTelemetry(
-  event: JacVoiceTelemetryEvent,
-  reason: string | undefined,
-  voiceToken: string | null,
-): void {
-  try {
-    fetch("/api/jac/convai/telemetry", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        event,
-        platform: getJacVoicePlatform(),
-        ...(reason ? { reason: reason.slice(0, 120) } : {}),
-        ...(voiceToken ? { voiceToken } : {}),
-      }),
-      keepalive: true,
-    }).catch(() => {});
-  } catch {
-    // Diagnostics must never make text JAC unavailable.
-  }
-}
-
-function isRecoverableJacVoiceError(message: string): boolean {
-  return !/(permission|notallowed|denied|unsupported|identity|sign in|unauthorized|forbidden|i[a-z]+ browser)/i.test(message);
+    ? "/api/jac/realtime-token/session"
+    : "/api/jac/realtime-token/guest";
 }
 
 // ── Session storage persistence ──────────────────────────────────────────────
@@ -413,21 +377,20 @@ function WaveformBars({ active, color }: { active: boolean; color: string }) {
   );
 }
 
-// ── Inner component (uses useConversation — must be inside ConversationProvider) ─
+// ── Inner component ──────────────────────────────────────────────────────────
 function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: string; isAuthenticated: boolean }) {
   // The web/PWA experience is text-first. Voice is an optional attachment and
   // must never be allowed to block the conversation surface.
   const mountedRef = useRef(false);
   const voiceRequestedRef = useRef(false);
   const intentionalEndRef = useRef(false);
-  const bootInFlightRef = useRef(false);
-  const statusRef = useRef<string>("disconnected");
+  const sessionRef = useRef<JacOpenAIRealtimeSessionHandle>(null);
+  const statusRef = useRef<JacRealtimePhase>("idle");
   const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recoveryAttemptsRef = useRef(0);
   const voiceConnectedRef = useRef(false);
   const recoveryRef = useRef<((reason: string) => void) | null>(null);
-  const voiceTokenRef = useRef<string | null>(null);
-  const bootAttemptRef = useRef(0);
+  const pendingVoiceReplyRef = useRef(false);
 
   const [msgs, setMsgs]         = useState<Msg[]>(loadMsgs);
   const [surface, setSurface]   = useState<Surface2State>({ kind: "welcome" });
@@ -439,93 +402,14 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   const [muted, setMutedLocal]  = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
-  const [e2eVoice, setE2EVoice] = useState<{
-    connected: boolean;
-    phase: "idle" | "listening" | "speaking";
-  }>({ connected: false, phase: "idle" });
+  const [voicePhase, setVoicePhase] = useState<JacRealtimePhase>("idle");
+  const [voiceActive, setVoiceActive] = useState(false);
   const transcriptEndRef        = useRef<HTMLDivElement>(null);
   const inputRef                = useRef<HTMLInputElement>(null);
   const textId                  = useId();
   const { guestSessionId, saveGuestDraft } = useGuestJacSession();
   const [campaignSessionId] = useState(() => getActiveCampaignSessionId());
   const campaignStartedRef = useRef(false);
-
-  const { startSession, endSession, status, isSpeaking, isListening, isMuted, setMuted } = useConversation({
-    onConnect:    () => {
-      statusRef.current = "connected";
-      voiceConnectedRef.current = true;
-      setReconnecting(false);
-      setJacConvaiActive(true);
-      cancelAllJacAudio();
-      setError(null);
-      setEnded(false);
-      reportJacVoiceTelemetry("connect", undefined, voiceTokenRef.current);
-    },
-    onDisconnect: (details: any) => {
-      statusRef.current = "disconnected";
-      setJacConvaiActive(false);
-      const context = details?.context ?? {};
-      const detail = [
-        details?.reason,
-        context?.type,
-        context?.reason,
-        context?.code ?? details?.closeCode,
-        details?.closeReason,
-      ].filter(Boolean).join(":") || "unknown_disconnect";
-      console.warn(`[JAC ConvAI] disconnect platform=${getJacVoicePlatform()} detail=${detail}`);
-      reportJacVoiceTelemetry("disconnect", detail, voiceTokenRef.current);
-      if (
-        mountedRef.current
-        && voiceRequestedRef.current
-        && !intentionalEndRef.current
-      ) {
-        recoveryRef.current?.(`disconnect:${detail}`);
-      } else if (mountedRef.current && !intentionalEndRef.current) {
-        setEnded(true);
-      }
-    },
-    onError:      (msg: string) => {
-      statusRef.current = "disconnected";
-      setJacConvaiActive(false);
-      const message = msg || "Connection failed";
-      console.error(`[JAC ConvAI] error platform=${getJacVoicePlatform()} message=${message}`);
-      reportJacVoiceTelemetry("error", message, voiceTokenRef.current);
-      if (
-        mountedRef.current
-        && voiceRequestedRef.current
-        && !intentionalEndRef.current
-        && isRecoverableJacVoiceError(message)
-      ) {
-        recoveryRef.current?.(`sdk_error:${message}`);
-      } else {
-        setError(message);
-        setEnded(true);
-      }
-    },
-    onStatusChange: ({ status: nextStatus }: { status: string }) => {
-      statusRef.current = nextStatus;
-      console.debug(`[JAC ConvAI] status=${nextStatus} platform=${getJacVoicePlatform()}`);
-    },
-    onDebug: (info: unknown) => {
-      // Keep the SDK's transport/browser diagnostics in the mobile console
-      // without sending raw SDK payloads or user content to the server.
-      const summary = typeof info === "string" ? info : JSON.stringify(info);
-      console.debug(`[JAC ConvAI] sdk-debug ${String(summary).slice(0, 400)}`);
-    },
-    onMessage:    (({ source, message }: { source: "ai" | "user"; message: string }) => {
-      if (!message?.trim()) return;
-      const text = message.trim();
-      addMsg({
-        id: uid(),
-        role: source === "ai" ? "assistant" : "user",
-        text,
-      });
-      if (source === "ai") {
-        const kind = inferSurface(text);
-        setSurface({ kind });
-      }
-    }) as any,
-  });
 
   // Persist messages
   useEffect(() => { saveMsgs(msgs); }, [msgs]);
@@ -544,252 +428,15 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     });
   }
 
-  useEffect(() => subscribeToJacE2EVoiceEvents("homepage", (event) => {
-    if (!mountedRef.current) return;
-    if (event.kind === "connect") {
-      statusRef.current = "connected";
-      voiceConnectedRef.current = true;
-      setE2EVoice({ connected: true, phase: "listening" });
-      setReconnecting(false);
-      setJacConvaiActive(true);
-      setError(null);
-      setEnded(false);
-      return;
-    }
-    if (event.kind === "listening" || event.kind === "speaking") {
-      setE2EVoice({ connected: true, phase: event.kind });
-      return;
-    }
-    if (event.kind === "user-transcript" && event.text?.trim()) {
-      addMsg({ id: uid(), role: "user", text: event.text.trim() });
-      return;
-    }
-    if (event.kind === "assistant-response" && event.text?.trim()) {
-      const text = event.text.trim();
-      addMsg({ id: uid(), role: "assistant", text });
-      setSurface({ kind: inferSurface(text) });
-      return;
-    }
-    if (event.kind === "error") {
-      statusRef.current = "disconnected";
-      voiceConnectedRef.current = false;
-      setJacConvaiActive(false);
-      setE2EVoice({ connected: false, phase: "idle" });
-      setReconnecting(false);
-      setError(event.text?.trim() || "Connection failed");
-      setEnded(true);
-      return;
-    }
-    if (event.kind === "disconnect") {
-      statusRef.current = "disconnected";
-      voiceConnectedRef.current = false;
-      setJacConvaiActive(false);
-      setE2EVoice({ connected: false, phase: "idle" });
-      setReconnecting(false);
-      setEnded(true);
-    }
-  }), []);
-
-  // ── Map ConvAI → JacState ─────────────────────────────────────────────────
-  const e2eHarnessEnabled = isJacE2EVoiceHarnessEnabled();
-  const connected = e2eHarnessEnabled ? e2eVoice.connected : status === "connected";
-  const voiceIsSpeaking = e2eHarnessEnabled ? e2eVoice.phase === "speaking" : isSpeaking;
-  const voiceIsListening = e2eHarnessEnabled ? e2eVoice.phase === "listening" : isListening;
+  // ── Map Realtime phase → JacState ─────────────────────────────────────────
+  const connected = voicePhase === "listening" || voicePhase === "thinking" || voicePhase === "speaking" || voicePhase === "muted";
+  const voiceIsSpeaking = voicePhase === "speaking";
+  const voiceIsListening = voicePhase === "listening";
   let jacState: JacState = "idle";
   if (error || ended || !connected || muted) jacState = "idle";
   else if (voiceIsSpeaking)               jacState = "speaking";
   else if (voiceIsListening)              jacState = "listening";
   else                                    jacState = "thinking";
-
-  // ── Boot session ──────────────────────────────────────────────────────────
-  const boot = useCallback(async ({ automatic = false }: { automatic?: boolean } = {}) => {
-    if (!mountedRef.current || bootInFlightRef.current || statusRef.current === "connected") return;
-    const attempt = ++bootAttemptRef.current;
-    bootInFlightRef.current = true;
-    voiceRequestedRef.current = true;
-    setVoiceStartAttempted(true);
-    setError(null);
-    setEnded(false);
-    setReconnecting(automatic);
-    // Live voice is the sole audio owner once explicitly requested.
-    cancelAllJacAudio();
-    // This must run synchronously in the tap handler. The ElevenLabs SDK also
-    // has an iOS unlock listener, but explicitly unlocking here covers mobile
-    // Safari, installed PWAs, and Capacitor WebViews consistently.
-    if (!automatic) unlockAudioContext();
-
-    let permissionStream: MediaStream | null = null;
-    try {
-      if (!isJacE2EVoiceHarnessEnabled() && !navigator.mediaDevices?.getUserMedia) {
-        throw new Error("Microphone is not supported in this browser.");
-      }
-
-      // Start the permission request immediately, before the session fetch.
-      // The SDK will open its own stream, but this preserves the user gesture
-      // on mobile browsers and keeps that stream alive until SDK startup has
-      // completed instead of stopping it immediately and racing getUserMedia.
-      const micPromise = isJacE2EVoiceHarnessEnabled()
-        ? Promise.resolve({ getTracks: () => [] } as unknown as MediaStream)
-        : navigator.mediaDevices.getUserMedia({
-            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-          });
-      const sessionPromise = fetch(sessionEndpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ platform: getJacVoicePlatform(), campaignSessionId }),
-      });
-      const [micRes, sesRes] = await Promise.allSettled([
-        micPromise,
-        sessionPromise,
-      ]);
-      if (!mountedRef.current || attempt !== bootAttemptRef.current) {
-        if (micRes.status === "fulfilled") micRes.value.getTracks().forEach(track => track.stop());
-        return;
-      }
-
-      if (micRes.status === "rejected") {
-        throw new Error(`Microphone unavailable (${micRes.reason?.name || "permission"}). Allow mic access or use text chat.`);
-      }
-      permissionStream = micRes.value;
-
-      if (sesRes.status === "rejected" || !sesRes.value.ok) {
-        const code = sesRes.status === "fulfilled" ? sesRes.value.status : 0;
-        throw new Error(`Session error ${code}`);
-      }
-
-      const session = await sesRes.value.json();
-      if (!mountedRef.current || attempt !== bootAttemptRef.current) return;
-      if (session.voiceId !== JAC_ELEVENLABS_VOICE_ID) {
-        throw new Error("JAC voice identity check failed");
-      }
-      voiceTokenRef.current = session.voiceToken || null;
-      const dynVars: Record<string, string> = {
-        [session.dynamicVariableName]: session.voiceToken,
-      };
-      if (session.userContext?.firstName) dynVars["user_first_name"] = session.userContext.firstName;
-      if (session.userContext?.role)      dynVars["user_role"]        = session.userContext.role;
-      if (session.userContext?.platform)  dynVars["user_platform"]    = session.userContext.platform;
-      if (session.userContext?.jac_mode)  dynVars["jac_mode"]         = session.userContext.jac_mode;
-      if (session.userContext?.userId != null) dynVars["user_id"]     = String(session.userContext.userId);
-      if (session.userContext?.campaign_session_id) dynVars["campaign_session_id"] = session.userContext.campaign_session_id;
-      if (session.userContext?.campaign_kind) dynVars["campaign_kind"] = session.userContext.campaign_kind;
-      if (session.userContext?.campaign_intent) dynVars["campaign_intent"] = session.userContext.campaign_intent;
-
-      const params: Record<string, any> = {
-        dynamicVariables: dynVars,
-        overrides: createJacConvaiVoiceOverride(),
-      };
-      if (session.signedUrl) params.signedUrl = session.signedUrl;
-      else                   params.agentId   = session.agentId;
-
-      if (isJacE2EVoiceHarnessEnabled()) {
-        setE2EVoice({ connected: false, phase: "idle" });
-        permissionStream.getTracks().forEach(track => track.stop());
-        permissionStream = null;
-        return;
-      }
-
-      console.info(`[JAC ConvAI] start platform=${getJacVoicePlatform()} transport=${session.signedUrl ? "websocket/signed" : "agent/public"}`);
-      startSession(params as any);
-      // The SDK's own input controller now owns the real session stream. Give
-      // it time to acquire that stream before releasing the permission probe.
-      const streamToRelease = permissionStream;
-      permissionStream = null;
-      setTimeout(() => streamToRelease?.getTracks().forEach(track => track.stop()), 1200);
-    } catch (err: any) {
-      permissionStream?.getTracks().forEach(track => track.stop());
-      if (!mountedRef.current || attempt !== bootAttemptRef.current) return;
-      const message = err?.message || "Could not connect to JAC";
-      console.error(`[JAC ConvAI] boot failed platform=${getJacVoicePlatform()} message=${message}`);
-      reportJacVoiceTelemetry("error", `boot:${message}`, voiceTokenRef.current);
-      if (isJacE2EVoiceHarnessEnabled()) {
-        setError(message);
-        setEnded(true);
-        setReconnecting(false);
-      } else if (isRecoverableJacVoiceError(message) && mountedRef.current && !intentionalEndRef.current) {
-        recoveryRef.current?.(`boot:${message}`);
-      } else {
-        setError(message);
-        setEnded(true);
-        setReconnecting(false);
-      }
-    } finally {
-      bootInFlightRef.current = false;
-    }
-  }, [campaignSessionId, sessionEndpoint, startSession]);
-
-  const scheduleRecovery = useCallback((reason: string) => {
-    if (
-      !mountedRef.current
-      || !voiceRequestedRef.current
-      || intentionalEndRef.current
-      || recoveryTimerRef.current
-    ) return;
-
-    // A failed first start is not a disconnected live session. Do not turn a
-    // permission, browser-policy, or slow-session failure into a reconnect
-    // loop. The existing Start voice control is the only recovery surface.
-    if (!voiceConnectedRef.current) {
-      setReconnecting(false);
-      setEnded(true);
-      setError("Voice is unavailable right now. JAC text is still ready.");
-      return;
-    }
-
-    const attempt = recoveryAttemptsRef.current + 1;
-    if (attempt > 2) {
-      console.error(`[JAC ConvAI] recovery exhausted platform=${getJacVoicePlatform()} reason=${reason}`);
-      setReconnecting(false);
-      setEnded(true);
-      setError("Voice could not reconnect. Text chat is still available.");
-      return;
-    }
-
-    recoveryAttemptsRef.current = attempt;
-    const delay = attempt === 1 ? 700 : 1600;
-    setError(null);
-    setEnded(false);
-    setReconnecting(true);
-    console.warn(`[JAC ConvAI] recovery attempt=${attempt}/2 delayMs=${delay} platform=${getJacVoicePlatform()} reason=${reason}`);
-    recoveryTimerRef.current = setTimeout(() => {
-      recoveryTimerRef.current = null;
-      if (!mountedRef.current || intentionalEndRef.current) return;
-      void boot({ automatic: true });
-    }, delay);
-  }, [boot]);
-
-  recoveryRef.current = scheduleRecovery;
-
-  // Voice has one owner: the canonical ConvAI session. Never fall back to a
-  // separate direct-TTS or browser voice when a live session cannot start.
-  useEffect(() => {
-    mountedRef.current = true;
-    claimJacWelcomeGreeting();
-
-    // Native WebViews may start automatically only after permission was
-    // previously granted. Web/PWA stays text-first until the user taps voice.
-    let cancelled = false;
-    if (isNativeApp) {
-      void isJacMicrophoneReady().then(ready => {
-        if (ready && !cancelled) void boot({ automatic: true });
-      });
-    }
-
-    return () => {
-      cancelled = true;
-      mountedRef.current = false;
-      bootAttemptRef.current += 1;
-      voiceRequestedRef.current = false;
-      voiceConnectedRef.current = false;
-      intentionalEndRef.current = true;
-      if (recoveryTimerRef.current) {
-        clearTimeout(recoveryTimerRef.current);
-        recoveryTimerRef.current = null;
-      }
-      setJacConvaiActive(false);
-      try { endSession(); } catch {}
-    };
-  }, [boot, endSession]);
 
   // ── Text-mode send ────────────────────────────────────────────────────────
   const sendText = useCallback(async (text: string) => {
@@ -846,6 +493,10 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
           surface: kind,
         });
         setSurface({ kind, route });
+        if (pendingVoiceReplyRef.current) {
+          pendingVoiceReplyRef.current = false;
+          sessionRef.current?.speakApprovedText(reply);
+        }
       }
     } catch {
       addMsg({ id: uid(), role: "assistant", text: "Sorry, I had trouble responding. Try again?" });
@@ -853,6 +504,82 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       setTextLoading(false);
     }
   }, [campaignSessionId, guestSessionId, isAuthenticated, msgs, textLoading]);
+
+  const startVoice = useCallback(() => {
+    voiceRequestedRef.current = true;
+    intentionalEndRef.current = false;
+    setVoiceStartAttempted(true);
+    setError(null);
+    setEnded(false);
+    setReconnecting(false);
+    cancelAllJacAudio();
+    unlockAudioContext();
+    setVoiceActive(true);
+  }, []);
+
+  const scheduleRecovery = useCallback((reason: string) => {
+    if (!mountedRef.current || intentionalEndRef.current || recoveryTimerRef.current) return;
+    if (!voiceConnectedRef.current) {
+      setReconnecting(false);
+      setEnded(true);
+      setError("Voice is unavailable right now. JAC text is still ready.");
+      return;
+    }
+    const attempt = recoveryAttemptsRef.current + 1;
+    if (attempt > 2) {
+      setReconnecting(false);
+      setEnded(true);
+      setError("Voice could not reconnect. Text chat is still available.");
+      return;
+    }
+    recoveryAttemptsRef.current = attempt;
+    setReconnecting(true);
+    recoveryTimerRef.current = setTimeout(() => {
+      recoveryTimerRef.current = null;
+      if (!intentionalEndRef.current) sessionRef.current?.reconnect();
+    }, attempt === 1 ? 700 : 1600);
+  }, []);
+
+  const onVoicePhaseChange = useCallback((phase: JacRealtimePhase) => {
+    statusRef.current = phase;
+    setVoicePhase(phase);
+    if (phase === "listening" || phase === "thinking" || phase === "speaking" || phase === "muted") {
+      voiceConnectedRef.current = true;
+      recoveryAttemptsRef.current = 0;
+      setReconnecting(false);
+      setError(null);
+      setEnded(false);
+    }
+  }, []);
+
+  const onVoiceError = useCallback((message: string) => {
+    setVoicePhase("error");
+    if (voiceConnectedRef.current && voiceRequestedRef.current && !intentionalEndRef.current) {
+      scheduleRecovery(message);
+    } else {
+      setVoiceActive(false);
+      setEnded(true);
+      setError("Voice is unavailable right now. JAC text is still ready.");
+    }
+  }, [scheduleRecovery]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    claimJacWelcomeGreeting();
+    let cancelled = false;
+    if (isNativeApp) {
+      void isJacMicrophoneReady().then(ready => {
+        if (ready && !cancelled) startVoice();
+      });
+    }
+    return () => {
+      cancelled = true;
+      mountedRef.current = false;
+      intentionalEndRef.current = true;
+      if (recoveryTimerRef.current) clearTimeout(recoveryTimerRef.current);
+      sessionRef.current?.end();
+    };
+  }, [startVoice]);
 
   useEffect(() => {
     if (!campaignSessionId || campaignStartedRef.current) return;
@@ -880,10 +607,9 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
 
   const toggleMute = useCallback(() => {
     if (!connected) return;
-    const next = !muted;
-    setMuted(next);
-    setMutedLocal(next);
-  }, [connected, muted, setMuted]);
+    sessionRef.current?.toggleMute();
+    setMutedLocal(next => !next);
+  }, [connected]);
 
   const handleReconnect = useCallback(() => {
     intentionalEndRef.current = true;
@@ -893,15 +619,16 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     }
     recoveryAttemptsRef.current = 0;
     voiceConnectedRef.current = false;
-    try { endSession(); } catch {}
+    sessionRef.current?.end();
     setEnded(false);
     setError(null);
     setReconnecting(true);
     setTimeout(() => {
       intentionalEndRef.current = false;
-      void boot();
+      setVoiceActive(true);
+      sessionRef.current?.reconnect();
     }, 400);
-  }, [endSession, boot]);
+  }, []);
 
   // ── Phase indicator ───────────────────────────────────────────────────────
   const phaseColor =
@@ -931,6 +658,21 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
         flexDirection: "column",
       }}
     >
+      <JacOpenAIRealtimeSession
+        ref={sessionRef}
+        e2eTarget="homepage"
+        active={voiceActive}
+        sessionEndpoint={sessionEndpoint}
+        onPhaseChange={onVoicePhaseChange}
+        onUserTranscript={(text) => {
+          pendingVoiceReplyRef.current = true;
+          void sendText(text);
+        }}
+        // Realtime speech is only accepted after the onboard brain has approved
+        // and appended it above; never duplicate it in the transcript.
+        onJacResponse={() => {}}
+        onError={onVoiceError}
+      />
       {/* ── Two-surface layout ────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row flex-1 gap-0 lg:gap-6 items-stretch">
 
@@ -1001,7 +743,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
               </div>
             ) : (
               <button
-                onClick={() => void boot()}
+                onClick={startVoice}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-display font-bold transition-all active:scale-95"
                 style={{
                   background: "linear-gradient(135deg,hsl(270 100% 65%),hsl(152 100% 44%))",
@@ -1084,7 +826,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
           </div>
 
           <p className="text-[10px] mt-2 text-center w-full" style={{ color: "hsl(0 0% 25%)" }}>
-            Voice by ElevenLabs · No account required to talk
+            Voice · No account required to talk
           </p>
         </div>
 
@@ -1122,17 +864,15 @@ export function JacLiveExperience() {
   const { user } = useAuth();
 
   // Authentication hydrates after the initial public render. The endpoint is
-  // part of the voice-session identity, so a change must recreate the ConvAI
-  // wrapper; recent transcript remains available through shared storage.
+  // part of the realtime-session identity; recent transcript remains available
+  // through shared storage.
   const sessionEndpoint = getJacLiveSessionEndpoint(!!user);
 
   return (
-    <ConversationProvider key={sessionEndpoint}>
-      <JacLiveInner
-        key={sessionEndpoint}
-        sessionEndpoint={sessionEndpoint}
-        isAuthenticated={!!user}
-      />
-    </ConversationProvider>
+    <JacLiveInner
+      key={sessionEndpoint}
+      sessionEndpoint={sessionEndpoint}
+      isAuthenticated={!!user}
+    />
   );
 }

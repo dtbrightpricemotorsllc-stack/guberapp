@@ -36,14 +36,18 @@ describe("JAC ElevenLabs voice lock", () => {
     expect(String(fetchMock.mock.calls[0][0])).not.toContain("an-unapproved-voice");
   });
 
-  it("keeps every ConvAI controller on the shared TTS override", () => {
+  it("keeps active JAC surfaces on the OpenAI Realtime controller", () => {
     for (const relativePath of [
-      "client/src/components/jac/jac-convai-session.tsx",
-      "client/src/components/jac/jac-convai-voice.tsx",
+      "client/src/components/guber-assistant.tsx",
+      "client/src/components/guber-door-splash.tsx",
+      "client/src/components/jac-homepage.tsx",
       "client/src/components/jac/jac-live-experience.tsx",
     ]) {
       const source = readFileSync(path.join(projectRoot, relativePath), "utf8");
-      expect(source, relativePath).toContain("overrides: createJacConvaiVoiceOverride()");
+      expect(source, relativePath).toContain("JacOpenAIRealtimeSession");
+      expect(source, relativePath).not.toContain("@elevenlabs/react");
+      expect(source, relativePath).not.toContain("JacConvaiSession");
+      expect(source, relativePath).not.toContain("JacConvaiVoice");
     }
   });
 

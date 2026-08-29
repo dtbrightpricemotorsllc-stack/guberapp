@@ -66,6 +66,11 @@ import {
   isNativeDigitalCommerceProduct,
 } from "./mobile-checkout-token";
 import { verifyJacVoiceToken, signJacVoiceToken } from "./jac-voice-token";
+import {
+  JAC_REALTIME_PATH,
+  JAC_REALTIME_TOKEN_TTL_MS,
+  registerJacRealtimeRelay,
+} from "./jac-realtime-relay";
 import { sanitizeAssistMessages, isReflectedAssistantTurn, resolveVoiceToken, newCompletionId, writeOpenAiStream, writeSuppressedOpenAiStream, buildNonStreamCompletion, buildSuppressedCompletion, checkConvaiRateLimit } from "./jac-convai";
 import { getJacSession, setJacSession, clearJacSession, summarizeSession } from "./jac-session";
 import { normalizeOnboardActions } from "./jac-onboard-actions";
@@ -868,6 +873,7 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   const PgSession = connectPgSimple(session);
+  registerJacRealtimeRelay(httpServer);
 
   app.set("trust proxy", 1);
   app.use(
@@ -20924,6 +20930,33 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
   });
 
   // ── JAC Realtime (OpenAI Realtime API / WebRTC) ──────────────────────────
+  app.post("/api/jac/realtime-token/guest", (req: Request, res: Response) => {
+    const token = signJacVoiceToken({
+      userId: null,
+      role: "anon",
+      platform: "web",
+      jacMode: "app",
+      aud: "openai-realtime",
+      ttlMs: JAC_REALTIME_TOKEN_TTL_MS,
+    });
+    res.json({ token, expiresInSeconds: JAC_REALTIME_TOKEN_TTL_MS / 1000, websocketPath: JAC_REALTIME_PATH });
+  });
+
+  app.post("/api/jac/realtime-token/session", requireAuth, async (req: Request, res: Response) => {
+    const user = (req as any).currentUser || await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "Unauthorized" });
+    const token = signJacVoiceToken({
+      userId: user.id,
+      role: user.role === "admin" ? "admin" : "user",
+      platform: "web",
+      firstName: String(user.fullName || "").trim().split(/\s+/)[0] || undefined,
+      jacMode: "app",
+      aud: "openai-realtime",
+      ttlMs: JAC_REALTIME_TOKEN_TTL_MS,
+    });
+    res.json({ token, expiresInSeconds: JAC_REALTIME_TOKEN_TTL_MS / 1000, websocketPath: JAC_REALTIME_PATH });
+  });
+
   app.post("/api/jac/realtime-session", (_req: Request, res: Response) => {
     res.status(410).json({
       message: "This legacy voice path is disabled. Use the canonical JAC ConvAI session.",

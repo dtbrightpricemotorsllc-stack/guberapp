@@ -34,6 +34,8 @@ export interface JacVoiceTokenPayload {
   firstName?: string;
   /** Optional: JAC surface mode (homepage | investor | app | admin). */
   jacMode?: string;
+  /** Restricts tokens minted for a dedicated transport from cross-use. */
+  aud?: "openai-realtime";
 }
 
 function getSecret(): string {
@@ -57,17 +59,20 @@ export function signJacVoiceToken(input: {
   cid?: string;
   firstName?: string;
   jacMode?: string;
+  aud?: "openai-realtime";
+  ttlMs?: number;
 }): string {
   const payload: JacVoiceTokenPayload = {
     userId: input.userId ?? null,
     role: input.role,
     platform: input.platform,
     cid: input.cid || crypto.randomBytes(8).toString("hex"),
-    exp: Date.now() + TTL_MS,
+    exp: Date.now() + (input.ttlMs ?? TTL_MS),
     nonce: crypto.randomBytes(8).toString("hex"),
     ver: 1,
     ...(input.firstName ? { firstName: input.firstName } : {}),
     ...(input.jacMode   ? { jacMode:   input.jacMode   } : {}),
+    ...(input.aud       ? { aud:       input.aud       } : {}),
   };
   const body = b64url(Buffer.from(JSON.stringify(payload), "utf8"));
   const sig = b64url(crypto.createHmac("sha256", getSecret()).update(body).digest());

@@ -35,6 +35,21 @@ const INDUSTRIES = [
 const GOLD = "#C6A85C";
 const PURPLE = "#7B3FE4";
 
+export function normalizeOptionalWebsite(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const candidate = /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  try {
+    const parsed = new URL(candidate);
+    if (!["http:", "https:"].includes(parsed.protocol) || !parsed.hostname.includes(".")) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
     { label: "At least 8 characters", ok: password.length >= 8 },
@@ -128,6 +143,15 @@ export default function BusinessSignup() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const normalizedWebsite = normalizeOptionalWebsite(form.website);
+    if (normalizedWebsite === null) {
+      toast({
+        title: "Check Website",
+        description: "Enter a website like guberapp.com, or leave this optional field blank.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!passwordValid) {
       toast({ title: "Weak Password", description: "Password must be 8+ chars with a capital letter and symbol.", variant: "destructive" });
       return;
@@ -141,7 +165,10 @@ export default function BusinessSignup() {
       if (campaignSessionId) {
         void recordCampaignEvent(campaignSessionId, "auth_started", "auth_started:business-signup");
       }
-      await apiRequest("POST", "/api/auth/business-access-request", form);
+      await apiRequest("POST", "/api/auth/business-access-request", {
+        ...form,
+        website: normalizedWebsite,
+      });
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       setLocation(await claimAndResolveCampaignPath("/biz/dashboard"));
     } catch (err: any) {
@@ -232,7 +259,22 @@ export default function BusinessSignup() {
 
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-display tracking-[0.12em] uppercase" style={{ color: "#6B6B6B" }}>WEBSITE <span style={{ color: "#4B4B4B" }}>(optional)</span></Label>
-                <Input value={form.website} onChange={updateForm("website")} type="url" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }} placeholder="https://yourcompany.com" data-testid="input-website" />
+                <Input
+                  value={form.website}
+                  onChange={updateForm("website")}
+                  onBlur={() => {
+                    const normalized = normalizeOptionalWebsite(form.website);
+                    if (normalized !== null) setForm((f) => ({ ...f, website: normalized }));
+                  }}
+                  type="text"
+                  inputMode="url"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  className="rounded-xl h-11 text-sm px-4 border-0"
+                  style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }}
+                  placeholder="guberapp.com"
+                  data-testid="input-website"
+                />
               </div>
 
               <div className="space-y-1.5">

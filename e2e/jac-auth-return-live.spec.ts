@@ -4,11 +4,10 @@
  * Uses the real homepage, login form, demo-account session cookie, authenticated
  * dashboard, JAC components, storage handoff, and navigation. Provider responses
  * are deterministic at browser boundaries so CI never publishes, pays, or relies
- * on ElevenLabs/OpenAI availability.
+ * on OpenAI availability.
  */
 
 import { test, expect, type Page, type Route } from "@playwright/test";
-import { JAC_ELEVENLABS_VOICE_ID } from "../shared/jac-voice";
 
 const DEMO_EMAIL = "demo.consumer@guberapp.internal";
 const DEMO_PASSWORD = "GuberDemo2026!";
@@ -17,7 +16,6 @@ const PUBLIC_VOICE_REPLY = "I heard you. We can continue after you sign in.";
 const AUTH_VOICE_REPLY = "Welcome back. Your earlier conversation is still here.";
 const AUTH_TEXT_REPLY = "Your profile is the safe place to review those account details.";
 
-type SessionKind = "public" | "authenticated" | "investor";
 type VoiceKind =
   | "connect"
   | "listening"
@@ -27,23 +25,6 @@ type VoiceKind =
   | "assistant-response"
   | "error"
   | "disconnect";
-
-function sessionPayload(kind: Exclude<SessionKind, "investor">) {
-  return {
-    agentId: "jac-e2e-agent",
-    signedUrl: "wss://e2e.invalid/jac",
-    voiceId: JAC_ELEVENLABS_VOICE_ID,
-    voiceToken: `e2e-${kind}-voice-token`,
-    dynamicVariableName: "secret__jac_voice_token",
-    userContext: {
-      firstName: kind === "authenticated" ? "Demo" : "there",
-      role: kind === "authenticated" ? "consumer" : "anon",
-      platform: "web",
-      jac_mode: "app",
-      userId: kind === "authenticated" ? "demo-user" : "anon",
-    },
-  };
-}
 
 async function emitVoice(
   page: Page,
@@ -78,10 +59,7 @@ test("JAC takes a real user from greeting to a safe action across login", async 
     localStorage.setItem("guber_alert_modal_autoshown", "true");
   });
 
-  const sessionRequests: SessionKind[] = [];
   const unsafeRequests: string[] = [];
-  let publicAttempts = 0;
-  let authenticatedAttempts = 0;
   let assistantTextAttempts = 0;
 
   const blockUnsafeMutation = async (route: Route) => {
@@ -104,40 +82,6 @@ test("JAC takes a real user from greeting to a safe action across login", async 
   await page.route("**/api/jac/publish-job", blockUnsafeMutation);
   await page.route(/\/api\/.*(?:checkout|payment-intent|payout|capture-payment|stripe-transfer)/i, blockUnsafeMutation);
 
-  await page.route("**/api/jac/convai/public-session", async (route) => {
-    sessionRequests.push("public");
-    publicAttempts += 1;
-    if (publicAttempts === 1) {
-      await route.fulfill({
-        status: 503,
-        contentType: "application/json",
-        body: JSON.stringify({ message: "temporary voice outage" }),
-      });
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(sessionPayload("public")),
-    });
-  });
-  await page.route("**/api/jac/convai/session", async (route) => {
-    sessionRequests.push("authenticated");
-    authenticatedAttempts += 1;
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(sessionPayload("authenticated")),
-    });
-  });
-  await page.route("**/api/jac/convai/investor-session", async (route) => {
-    sessionRequests.push("investor");
-    await route.fulfill({
-      status: 500,
-      contentType: "application/json",
-      body: JSON.stringify({ message: "investor endpoint must not be used" }),
-    });
-  });
   await page.route("**/api/jac/onboard", async (route) => {
     await route.fulfill({
       status: 200,
@@ -146,6 +90,20 @@ test("JAC takes a real user from greeting to a safe action across login", async 
     });
   });
   await page.route("**/api/ai/guber-assist", async (route) => {
+    const payload = route.request().postDataJSON();
+    if (payload?.voiceMode === true) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          reply: AUTH_VOICE_REPLY,
+          route: null,
+          actions: [],
+          options: [],
+        }),
+      });
+      return;
+    }
     assistantTextAttempts += 1;
     if (assistantTextAttempts === 1) {
       await route.fulfill({
@@ -175,29 +133,28 @@ test("JAC takes a real user from greeting to a safe action across login", async 
   await page.route("**/api/jac/pending-draft-card", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ card: null }) }));
 
-  // Public greeting selects the public voice session. The first outage remains
-  // recoverable without taking text chat away.
+  // A first voice outage does not reconnect automatically and never takes text
+  // chat away. The user can explicitly retry.
   await page.goto("/?jac_e2e=1");
   await expect(page.getByTestId("page-home")).toBeVisible();
   await page.getByRole("button", { name: "Start voice" }).click();
-  await expect.poll(() => publicAttempts).toBe(1);
-  await expect(page.getByTestId("jac-live-voice-error")).toContainText("Session error 503");
+  await emitVoice(page, "homepage", "error", "temporary voice outage");
+  await expect(page.getByTestId("jac-live-voice-error")).toContainText("Voice is unavailable right now");
   await expect(page.getByTestId("jac-live-voice-error")).toContainText("Text chat is still available");
   await page.getByTestId("button-jac-live-reconnect").click();
-  await expect.poll(() => publicAttempts).toBe(2);
+  await page.waitForTimeout(450);
 
-  // The deterministic provider seam emits the same callbacks the live SDK uses:
-  // connect, user transcript, assistant transcript, and playback phase.
+  // The deterministic provider seam emits the same callbacks the live transport
+  // uses. User speech goes through the canonical onboard endpoint.
   await emitVoice(page, "homepage", "connect");
   await expect(page.getByTestId("jac-live-voice-status")).toHaveText("Listening…");
   await emitVoice(page, "homepage", "user-transcript", "Please remember that I need account guidance.");
-  await emitVoice(page, "homepage", "assistant-response", PUBLIC_VOICE_REPLY);
   await emitVoice(page, "homepage", "speaking");
   await expect(page.getByTestId("jac-live-voice-status")).toHaveText("JAC is speaking");
 
   await page.getByRole("button", { name: "Chat", exact: true }).click();
   await expect(page.getByTestId("jac-live-transcript")).toContainText("Please remember that I need account guidance.");
-  await expect(page.getByTestId("jac-live-transcript")).toContainText(PUBLIC_VOICE_REPLY);
+  await expect(page.getByTestId("jac-live-transcript")).toContainText(PUBLIC_TEXT_REPLY);
 
   await page.getByLabel("Message JAC").fill("Explain my safe account options.");
   await page.getByLabel("Message JAC").press("Enter");
@@ -214,16 +171,13 @@ test("JAC takes a real user from greeting to a safe action across login", async 
   await dismissDashboardOverlays(page);
 
   // Authenticated web voice must remain idle until the real user taps the mic.
-  expect(authenticatedAttempts).toBe(0);
   await page.getByTestId("button-guber-assistant").click();
   const thread = page.getByTestId("assistant-message-thread");
-  await expect(thread).toContainText(PUBLIC_VOICE_REPLY);
   await expect(thread).toContainText(PUBLIC_TEXT_REPLY);
   await page.getByRole("button", { name: "Start voice" }).click();
-  await expect.poll(() => authenticatedAttempts).toBe(1);
   await emitVoice(page, "assistant", "connect");
   await emitVoice(page, "assistant", "user-transcript", "Can we continue from before?");
-  await emitVoice(page, "assistant", "assistant-response", AUTH_VOICE_REPLY);
+  await expect(thread).toContainText(AUTH_VOICE_REPLY);
   await emitVoice(page, "assistant", "speaking");
   await expect(page.getByTestId("status-convai-phase")).toHaveText("Speaking…");
   await expect(thread).toContainText("Can we continue from before?");
@@ -234,7 +188,6 @@ test("JAC takes a real user from greeting to a safe action across login", async 
   await emitVoice(page, "assistant", "error", "Voice network interrupted.");
   await expect(page.getByTestId("text-convai-error")).toHaveText("Voice network interrupted.");
   await page.getByTestId("button-convai-reconnect").click();
-  await expect.poll(() => authenticatedAttempts).toBe(2);
   await emitVoice(page, "assistant", "listening");
   await expect(page.getByTestId("status-convai-phase")).toHaveText("Listening…");
 
@@ -250,8 +203,5 @@ test("JAC takes a real user from greeting to a safe action across login", async 
   await page.locator("[data-testid^='button-dd-route-']").last().click();
   await expect(page).toHaveURL(/\/profile$/);
 
-  expect(sessionRequests.filter((kind) => kind === "public")).toHaveLength(2);
-  expect(sessionRequests.filter((kind) => kind === "authenticated")).toHaveLength(2);
-  expect(sessionRequests).not.toContain("investor");
   expect(unsafeRequests).toEqual([]);
 });

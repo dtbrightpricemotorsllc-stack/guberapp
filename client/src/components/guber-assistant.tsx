@@ -12,8 +12,11 @@ import {
 } from "lucide-react";
 import { useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
-import { ConversationProvider } from "@elevenlabs/react";
-import { JacConvaiSession, type ConvaiPhase, type JacConvaiSessionHandle } from "@/components/jac/jac-convai-session";
+import {
+  JacOpenAIRealtimeSession,
+  type JacOpenAIRealtimeSessionHandle,
+} from "@/components/jac/jac-openai-realtime-session";
+import type { JacRealtimePhase } from "@/lib/jac-openai-realtime-transport";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { saveListingPrefill, clearListingPrefill } from "@/lib/jac-listing-prefill";
@@ -120,7 +123,7 @@ function hasListingIntent(text: string): boolean {
   return LISTING_PATTERNS.some((p) => p.test(text));
 }
 
-const CONVAI_PHASE_COLOR: Record<ConvaiPhase, string> = {
+const CONVAI_PHASE_COLOR: Record<JacRealtimePhase, string> = {
   idle:       "hsl(0 0% 45%)",
   connecting: "hsl(270 100% 65%)",
   listening:  "hsl(152 100% 44%)",
@@ -129,7 +132,7 @@ const CONVAI_PHASE_COLOR: Record<ConvaiPhase, string> = {
   muted:      "hsl(0 0% 50%)",
   error:      "hsl(0 85% 60%)",
 };
-const CONVAI_PHASE_LABEL: Record<ConvaiPhase, string> = {
+const CONVAI_PHASE_LABEL: Record<JacRealtimePhase, string> = {
   idle:       "",
   connecting: "Connecting…",
   listening:  "Listening…",
@@ -387,12 +390,12 @@ export function GUBERAssistant() {
   const { cancel: cancelSpeech, muted, toggleMute, supported: ttsSupported } =
     useSpeechOutput();
 
-  // ── ConvAI session state ───────────────────────────────────────────────────
+  // ── Realtime voice session state ───────────────────────────────────────────
   const [convaiActive, setConvaiActive] = useState(false);
-  const [convaiPhase, setConvaiPhase] = useState<ConvaiPhase>("idle");
+  const [convaiPhase, setConvaiPhase] = useState<JacRealtimePhase>("idle");
   const [convaiError, setConvaiError] = useState<string | null>(null);
   const convaiActiveRef = useRef(false);
-  const convaiSessionRef = useRef<JacConvaiSessionHandle | null>(null);
+  const convaiSessionRef = useRef<JacOpenAIRealtimeSessionHandle | null>(null);
   const automaticStartClaimRef = useRef<(() => boolean) | null>(null);
   if (!automaticStartClaimRef.current) {
     automaticStartClaimRef.current = createJacAutomaticVoiceStartClaim();
@@ -440,9 +443,13 @@ export function GUBERAssistant() {
     convaiSessionRef.current?.reconnect();
   }
 
-  // speak — text-mode TTS only; no-ops when ConvAI is handling voice
+  // Voice replies are played by Realtime; browser TTS is reserved for text mode.
   function speak(text: string) {
-    if (muted || convaiActiveRef.current) return;
+    if (convaiActiveRef.current) {
+      convaiSessionRef.current?.speakApprovedText(text);
+      return;
+    }
+    if (muted) return;
     jacSpeak(text, { muted });
   }
 
@@ -549,8 +556,7 @@ export function GUBERAssistant() {
         if ((data.hirerOpen ?? 0) > 0) parts.push(`${data.hirerOpen} open job${data.hirerOpen! > 1 ? "s" : ""} you posted`);
         if ((data.unreadNotifs ?? 0) > 0) parts.push(`${data.unreadNotifs} new notification${data.unreadNotifs! > 1 ? "s" : ""}`);
         if ((data.walletBalance ?? 0) > 0) parts.push(`$${(data.walletBalance!).toFixed(2)} in your wallet`);
-        // ConvAI now voices the personalised greeting — don't overwrite the
-        // static bubble here; it will be replaced by ConvAI's first transcript.
+        // Live voice supplies its own greeting transcript.
         void name; void parts; // context still useful for JAC backend
       })
       .catch(() => {});
@@ -611,10 +617,7 @@ export function GUBERAssistant() {
         const chatMs = Math.round(performance.now() - timing.start);
         console.log(`[JAC voice] STT→chat-response: ${chatMs}ms (server reported ${data.latencyMs ?? "?"}ms)`);
       }
-      // Text-mode TTS — skipped when ConvAI is active (ElevenLabs handles voice)
-      if (!muted && !convaiActiveRef.current) {
-        jacSpeak(msg.content, { muted });
-      }
+      speak(msg.content);
       voiceTimingRef.current = null;
       if (userRef.current && lastUserInputRef.current) {
         extractAndSaveMemory(lastUserInputRef.current, msg.content);
@@ -887,8 +890,7 @@ export function GUBERAssistant() {
   const showInitialChips = messages.length === 1 && !sendMutation.isPending;
   const isOnlyGreeting = messages.length === 1;
 
-  // ── Draft card polling — when ElevenLabs creates a job draft via tool call,
-  // inject a tappable "Review Draft" card into the chat so the user can open it.
+  // ── Draft card polling ──────────────────────────────────────────────────────
   useJacDraftCardPoll(convaiActive, useCallback((card) => {
     setMessages(prev => [...prev, {
       role: "assistant" as const,
@@ -897,23 +899,17 @@ export function GUBERAssistant() {
     }]);
   }, []));
 
-  const handleConvaiPhaseChange = useCallback((phase: ConvaiPhase) => {
+  const handleConvaiPhaseChange = useCallback((phase: JacRealtimePhase) => {
     setConvaiPhase(phase);
   }, []);
-  const handleConvaiUserTranscript = useCallback((text: string) => {
-    appendSharedJacMessage({ role: "user", content: text, source: "assistant" });
-    setMessages(prev => [...prev, { role: "user" as const, content: text }]);
-  }, []);
-  const handleConvaiJacResponse = useCallback((text: string) => {
-    appendSharedJacMessage({ role: "assistant", content: text, source: "assistant" });
-    setMessages(prev => {
-      // Replace the initial static greeting with the first ConvAI transcript
-      // so only one greeting bubble is ever shown (ConvAI's own words).
-      if (prev.length === 1 && prev[0].role === "assistant") {
-        return [{ role: "assistant" as const, content: text }];
-      }
-      return [...prev, { role: "assistant" as const, content: text }];
-    });
+  function handleConvaiUserTranscript(text: string) {
+    lastInputWasVoiceRef.current = true;
+    doSend(text);
+  }
+  const handleConvaiJacResponse = useCallback((_text: string) => {
+    // The existing assistant mutation owns the approved reply and transcript.
+    // Realtime reports the rendered audio transcript only; appending it here
+    // would create a second assistant message.
   }, []);
   const handleConvaiError = useCallback((msg: string) => {
     convaiActiveRef.current = false;
@@ -929,18 +925,16 @@ export function GUBERAssistant() {
     <>
     {/* Keep the live controller mounted independently of the visual sheet so a
         previously-granted microphone can auto-start from the main app entry. */}
-    {convaiActive && (
-      <ConversationProvider>
-        <JacConvaiSession
-          ref={convaiSessionRef}
-          active={convaiActive}
-          onPhaseChange={handleConvaiPhaseChange}
-          onUserTranscript={handleConvaiUserTranscript}
-          onJacResponse={handleConvaiJacResponse}
-          onError={handleConvaiError}
-        />
-      </ConversationProvider>
-    )}
+    <JacOpenAIRealtimeSession
+      ref={convaiSessionRef}
+      active={convaiActive}
+      sessionEndpoint="/api/jac/realtime-token/session"
+      e2eTarget="assistant"
+      onPhaseChange={handleConvaiPhaseChange}
+      onUserTranscript={handleConvaiUserTranscript}
+      onJacResponse={handleConvaiJacResponse}
+      onError={handleConvaiError}
+    />
     <Sheet
       open={s.open}
       onOpenChange={(v) => {
@@ -1491,7 +1485,7 @@ export function GUBERAssistant() {
               <Volume2 className="w-4 h-4" />
             </button>
 
-            {/* Mic button — ElevenLabs ConvAI voice session */}
+            {/* Mic button — realtime voice session */}
             <div className="relative flex flex-col items-center">
               {/* "Tap to talk" guidance label — shows until first mic use */}
               {!convaiActive && !micHintDone && (

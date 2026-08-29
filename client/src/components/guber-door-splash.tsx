@@ -5,7 +5,7 @@
  *
  * Spec: GUBER_JAC_INTERACTIVE_VIRTUAL_CHARACTER_PROMPT (see attached_assets)
  *   • JAC has four live states: idle | listening | thinking | speaking
- *   • Voice session is continuous (ElevenLabs turn-detection, no push-to-talk)
+ *   • Voice session is continuous (OpenAI Realtime turn-detection, no push-to-talk)
  *   • Greeting fires EXACTLY ONCE per tab session (module-level guard)
  *   • Conversation stays inside the scene — no navigation
  *   • One visible JAC — live character layer only
@@ -13,12 +13,11 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
-import { ConversationProvider } from "@elevenlabs/react";
 import {
-  JacConvaiSession,
-  type JacConvaiSessionHandle,
-  type ConvaiPhase,
-} from "@/components/jac/jac-convai-session";
+  JacOpenAIRealtimeSession,
+  type JacOpenAIRealtimeSessionHandle,
+} from "@/components/jac/jac-openai-realtime-session";
+import type { JacRealtimePhase } from "@/lib/jac-openai-realtime-transport";
 import { JacAnimatedCharacter, type JacState } from "@/components/jac/jac-animated-character";
 import { SignupCard } from "@/components/jac/jac-signup-card";
 import { getGuestSessionId } from "@/hooks/use-guest-jac-session";
@@ -98,8 +97,8 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const [inputText,    setInputText]    = useState("");
   const [textLoading,  setTextLoading]  = useState(false);
   const [jacSpeakingTx,setJacSpeakingTx] = useState(false); // TTS for text replies
-  const [convaiPhase,  setConvaiPhase]  = useState<ConvaiPhase>("idle");
-  const [convaiActive, setConvaiActive] = useState(false);
+  const [realtimePhase,  setRealtimePhase]  = useState<JacRealtimePhase>("idle");
+  const [realtimeActive, setRealtimeActive] = useState(false);
   const [showSignup,   setShowSignup]   = useState(false);
   const [signupReturnTo, setSignupReturnTo] = useState<string | undefined>();
 
@@ -107,10 +106,9 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const [jacHeightPx, setJacHeightPx]  = useState(380);
 
   const timerRefs      = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const convaiRef      = useRef<JacConvaiSessionHandle | null>(null);
+  const realtimeRef    = useRef<JacOpenAIRealtimeSessionHandle | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef       = useRef<HTMLTextAreaElement>(null);
-  const echoGuard      = useRef(false); // suppress convai echo during greeting
   const signupOffered  = useRef(false); // in-scene signup card fires at most once per conversation
 
   const schedule = useCallback((fn: () => void, ms: number) => {
@@ -150,7 +148,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
       return "idle";
     }
     // voice mode
-    switch (convaiPhase) {
+    switch (realtimePhase) {
       case "speaking":   return "speaking";
       case "thinking":   return "thinking";
       case "listening":  return "listening";
@@ -193,9 +191,8 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     if (phase !== "open") return;
     cancelAllJacAudio();
     setGreetingPlaying(false);
-    echoGuard.current = true; // first convai utterance = JAC greeting replay guard
     setConvMode("voice");
-    setConvaiActive(true);
+    setRealtimeActive(true);
   }
 
   // ── Text mode entry ───────────────────────────────────────────────────────
@@ -208,8 +205,8 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   }
 
   // ── Text conversation ─────────────────────────────────────────────────────
-  async function sendText() {
-    const text = inputText.trim();
+  async function sendText(textOverride?: string) {
+    const text = (textOverride ?? inputText).trim();
     if (!text || textLoading) return;
     setInputText("");
     const userMsg: Msg = { role: "user", text };
@@ -246,7 +243,12 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
       if (reply) {
         setMessages(prev => [...prev, { role: "jac", text: reply }]);
         setJacSpeakingTx(true);
-        jacSpeak(reply).catch(() => {}).finally(() => setJacSpeakingTx(false));
+        if (convMode === "voice") {
+          realtimeRef.current?.speakApprovedText(reply);
+          setJacSpeakingTx(false);
+        } else {
+          jacSpeak(reply).catch(() => {}).finally(() => setJacSpeakingTx(false));
+        }
       }
     } catch {
       setMessages(prev => [...prev, {
@@ -258,44 +260,28 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     }
   }
 
-  // ── ConvAI callbacks ──────────────────────────────────────────────────────
-  const handleConvaiPhase = useCallback((p: ConvaiPhase) => {
-    setConvaiPhase(p);
+  // ── Realtime callbacks ────────────────────────────────────────────────────
+  const handleRealtimePhase = useCallback((p: JacRealtimePhase) => {
+    setRealtimePhase(p);
   }, []);
 
-  const handleConvaiUser = useCallback((text: string) => {
+  const handleRealtimeUser = useCallback((text: string) => {
     const t = text.trim();
     if (!t || /^[.\s!?,]*$/.test(t)) return;
-    setMessages(prev => {
-      const last = prev[prev.length - 1];
-      if (last?.role === "user" && last.text === t) return prev;
-      return [...prev, { role: "user", text: t }];
-    });
-  }, []);
+    // sendText is the single owner of guest actions, drafts, history, and the
+    // approved response. Do not add a second transcript message here.
+    void sendText(t);
+  }, [sendText]);
 
-  const handleConvaiJac = useCallback((text: string) => {
-    const t = text.replace(/\[.*?\]/g, "").trim();
-    if (!t) return;
-
-    // Suppress first ConvAI utterance if it echoes the spoken greeting
-    if (echoGuard.current) {
-      echoGuard.current = false;
-      // Only suppress if it looks like the greeting (similarity > 60%)
-      const greetNorm = GREETING_TEXT.toLowerCase().slice(0, 30);
-      if (t.toLowerCase().includes(greetNorm.slice(0, 15))) return;
-    }
-
-    setMessages(prev => {
-      const last = prev[prev.length - 1];
-      if (last?.role === "jac" && last.text === t) return prev;
-      return [...prev, { role: "jac", text: t }];
-    });
+  const handleRealtimeJac = useCallback((_text: string) => {
+    // This is the transcript of audio requested by sendText after its brain
+    // response was rendered. Adding it here would duplicate the JAC message.
   }, []);
 
   // ── Exit scene → main app ─────────────────────────────────────────────────
   function exitToApp(voice: boolean) {
     setPhase("exiting");
-    setConvaiActive(false);
+    setRealtimeActive(false);
     cancelAllJacAudio();
     schedule(() => {
       setMounted(false);
@@ -315,14 +301,14 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     ? `transform ${DOOR_SLIDE_MS}ms cubic-bezier(0.42,0,0.12,1)`
     : "none";
 
-  const isMuted       = convaiPhase === "muted";
-  const isVoiceLive   = convMode === "voice" && convaiPhase !== "idle" && convaiPhase !== "connecting";
+  const isMuted       = realtimePhase === "muted";
+  const isVoiceLive   = convMode === "voice" && realtimePhase !== "idle" && realtimePhase !== "connecting";
   const statusLabel   =
-    convaiPhase === "connecting" ? "Connecting…" :
-    convaiPhase === "thinking"   ? "JAC is thinking…" :
-    convaiPhase === "speaking"   ? "JAC is speaking" :
-    convaiPhase === "listening"  ? "Listening…" :
-    convaiPhase === "muted"      ? "Muted — tap 🎙️ to unmute" : "JAC is here";
+    realtimePhase === "connecting" ? "Connecting…" :
+    realtimePhase === "thinking"   ? "JAC is thinking…" :
+    realtimePhase === "speaking"   ? "JAC is speaking" :
+    realtimePhase === "listening"  ? "Listening…" :
+    realtimePhase === "muted"      ? "Muted — tap 🎙️ to unmute" : "JAC is here";
 
   return (
     <>
@@ -800,14 +786,14 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                   ))}
 
                   {/* Typing / thinking indicator */}
-                  {(textLoading || convaiPhase === "thinking" || convaiPhase === "connecting") && (
+                  {(textLoading || realtimePhase === "thinking" || realtimePhase === "connecting") && (
                     <div style={{ alignSelf:"flex-start" }}>
                       <div style={{
                         background:"rgba(0,20,40,.72)",
                         border:"1px solid rgba(0,180,220,.35)",
                         borderRadius:"16px 16px 16px 4px",
                         padding:"10px 18px",
-                        animation: convaiPhase === "thinking" ? "think-pulse 1.4s ease-in-out infinite" : "none",
+                        animation: realtimePhase === "thinking" ? "think-pulse 1.4s ease-in-out infinite" : "none",
                       }}>
                         <div style={{ display:"flex", gap:4 }}>
                           {[0,1,2].map(i => (
@@ -833,7 +819,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                       onAuthed={(accountType) => {
                         // Door scene exits → standard new-user onboarding/dashboard
                         setPhase("exiting");
-                        setConvaiActive(false);
+                        setRealtimeActive(false);
                         cancelAllJacAudio();
                         schedule(() => {
                           setMounted(false);
@@ -860,21 +846,21 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                       <span style={{
                         fontSize:"clamp(11px,3vw,13px)",
                         color:
-                          convaiPhase === "speaking"  ? "rgba(130,100,255,.95)" :
-                          convaiPhase === "listening" ? "rgba(0,220,140,.95)" :
-                          convaiPhase === "thinking"  ? "rgba(180,140,255,.85)" :
+                          realtimePhase === "speaking"  ? "rgba(130,100,255,.95)" :
+                          realtimePhase === "listening" ? "rgba(0,220,140,.95)" :
+                          realtimePhase === "thinking"  ? "rgba(180,140,255,.85)" :
                           "rgba(255,255,255,.5)",
                         fontFamily:"'Inter',sans-serif", letterSpacing:".04em",
                         transition:"color 300ms ease",
                       }}>
                         {statusLabel}
                       </span>
-                      <ListenWave active={convaiPhase === "listening"} />
+                      <ListenWave active={realtimePhase === "listening"} />
                     </div>
 
                     {/* MUTE / UNMUTE toggle (replaces push-to-talk) */}
                     <button
-                      onClick={() => convaiRef.current?.toggleMute()}
+                      onClick={() => realtimeRef.current?.toggleMute()}
                       aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
                       className="gdoor-mute-btn"
                       style={{
@@ -889,7 +875,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                         display:"flex", alignItems:"center", justifyContent:"center",
                         fontSize:20, color:"#fff",
                         transition:"background 200ms ease, border 200ms ease",
-                        animation: !isMuted && convaiPhase === "listening"
+                        animation: !isMuted && realtimePhase === "listening"
                           ? "think-pulse 2s ease-in-out infinite" : "none",
                       }}
                     >
@@ -900,7 +886,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                     <button
                       onClick={() => {
                         setConvMode("text");
-                        setConvaiActive(false);
+                        setRealtimeActive(false);
                         setTimeout(() => inputRef.current?.focus(), 300);
                       }}
                       aria-label="Switch to typing"
@@ -956,7 +942,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
 
                     {/* Send */}
                     <button
-                      onClick={sendText}
+                      onClick={() => void sendText()}
                       disabled={!inputText.trim() || textLoading}
                       aria-label="Send message"
                       className="gdoor-send"
@@ -977,7 +963,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                       onClick={() => {
                         cancelAllJacAudio();
                         setConvMode("voice");
-                        setConvaiActive(true);
+                        setRealtimeActive(true);
                       }}
                       aria-label="Switch to voice"
                       style={{
@@ -1011,20 +997,17 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
         {/* ── end open-scene UI ─────────────────────────────────────────── */}
 
 
-        {/* ── ConvAI session ─────────────────────────────────────────────── */}
+        {/* ── OpenAI Realtime session ────────────────────────────────────── */}
         {convMode === "voice" && (
-          <ConversationProvider>
-            <JacConvaiSession
-              ref={convaiRef}
-              active={convaiActive}
-              sessionEndpoint="/api/jac/convai/session"
-              suppressFirstMessage={true}
-              onPhaseChange={handleConvaiPhase}
-              onUserTranscript={handleConvaiUser}
-              onJacResponse={handleConvaiJac}
-              onError={() => setConvaiPhase("idle")}
-            />
-          </ConversationProvider>
+          <JacOpenAIRealtimeSession
+            ref={realtimeRef}
+            active={realtimeActive}
+            sessionEndpoint="/api/jac/realtime-token/guest"
+            onPhaseChange={handleRealtimePhase}
+            onUserTranscript={handleRealtimeUser}
+            onJacResponse={handleRealtimeJac}
+            onError={() => setRealtimePhase("idle")}
+          />
         )}
 
       </div>
