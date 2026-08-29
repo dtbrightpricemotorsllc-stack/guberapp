@@ -243,6 +243,21 @@ describe("POST /api/auth/signup (handleSignup)", () => {
     expect(res.body).not.toHaveProperty("password");
   });
 
+  it("should create an individual account without collecting a name or username", async () => {
+    const res = await supertest(app)
+      .post("/api/auth/signup")
+      .send({
+        email: "identity-optional@example.com",
+        password: "StrongPassword1!",
+        zipcode: "27401",
+      })
+      .expect(201);
+
+    expect(res.body.fullName).toBe("GUBER Member");
+    expect(res.body.username).toMatch(/^member_[a-f0-9]{16}$/);
+    expect(res.body).not.toHaveProperty("password");
+  });
+
   it("should set a session cookie after signup", async () => {
     const res = await supertest(app)
       .post("/api/auth/signup")

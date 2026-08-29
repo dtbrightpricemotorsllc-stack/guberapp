@@ -91,6 +91,7 @@ import {
   getBusinessPlanFromCatalog,
   isFoundingLocalOfferEligible,
 } from "./business-experience";
+import { registerBusinessBookingRoutes } from "./business-bookings";
 import {
   getCampaignSession,
   claimCampaignSession,
@@ -1000,6 +1001,7 @@ export async function registerRoutes(
 
   registerServiceOfferRoutes(app, { requireAuth, requireAdmin, checkSuspended });
   registerBusinessExperienceRoutes(app, { requireAuth, requireAdmin });
+  registerBusinessBookingRoutes(app, { requireAuth });
   registerCampaignOnboardingRoutes(app, { requireAuth });
 
   app.get("/api/config", (_req: Request, res: Response) => {
@@ -2937,7 +2939,9 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
       }
-      const { businessName, workEmail, phone, industry, companyNeedsSummary, fullName, username, password, businessAddress, website, ein, invitationCode } = parsed.data;
+      const { businessName, workEmail, phone, industry, companyNeedsSummary, fullName, password, businessAddress, website, ein, invitationCode } = parsed.data;
+      const suppliedUsername = parsed.data.username?.trim();
+      const username = suppliedUsername || `business_${randomBytes(8).toString("hex")}`;
 
       const pwError = validatePasswordStrength(password);
       if (pwError) return res.status(400).json({ message: pwError });
@@ -2946,7 +2950,11 @@ export async function registerRoutes(
       if (existingEmail) return res.status(400).json({ message: "Email already in use" });
 
       const existingUsername = await storage.getUserByUsername(username);
-      if (existingUsername) return res.status(400).json({ message: "Username already taken" });
+      if (existingUsername) {
+        return res.status(400).json({
+          message: suppliedUsername ? "Username already taken" : "Internal account identifier collision; please try again",
+        });
+      }
 
       const hashedPassword = await hashPassword(password);
       let newGuberId = generateGuberId();
@@ -3505,12 +3513,8 @@ export async function registerRoutes(
       const user = await storage.getUser(targetUserId);
       if (user) {
         detailedUser = {
-          fullName: user.fullName,
-          email: user.email,
-          profilePhoto: user.profilePhoto,
-          zipcode: user.zipcode,
+            guberId: user.guberId,
           skills: user.skills,
-          userBio: user.userBio,
         };
       }
     }
@@ -4680,6 +4684,8 @@ export async function registerRoutes(
       delete safe.stripeAccountStatus;
       delete safe.fullName;
       delete safe.username;
+      delete safe.publicUsername;
+      delete safe.profilePhoto;
       delete safe.zipcode;
       delete safe.lat;
       delete safe.lng;
@@ -5082,11 +5088,10 @@ export async function registerRoutes(
       const pins = visibleWorkers
         .map(w => ({
           id: w.id,
-          publicUsername: (w as any).publicUsername || null,
           guberId: (w as any).guberId || null,
-          displayName: (w as any).publicUsername ? `@${(w as any).publicUsername}` : ((w as any).guberId || "GUBER Member"),
+          displayName: (w as any).guberId || "GUBER Member",
           tier: w.tier,
-          avatar: w.profilePhoto,
+          avatar: null,
           lat: fuzzCoordinate(w.lat, w.id),
           lng: fuzzCoordinate(w.lng, w.id + 1000000),
           bio: filterContactInfo(w.userBio || "").clean,
@@ -7472,10 +7477,14 @@ export async function registerRoutes(
 
   function maskMarketplaceItem(item: any, seller: any, hasDeal: boolean) {
     const sellerGuberId = seller?.guberId || null;
+    const { verifiedByName: _verifiedByName, ...publicItem } = item;
+    const publicSellerName = item.businessAccountId
+      ? (item.sellerName || "Verified business")
+      : (sellerGuberId || "GUBER Seller");
     return {
-      ...item,
-      // Mask real name — show only GUBER ID publicly; reveal after deal
-      sellerName: hasDeal ? item.sellerName : "Private Party",
+      ...publicItem,
+      // Individual identities stay pseudonymous even after a deal.
+      sellerName: publicSellerName,
       sellerGuberId,
       sellerRating: seller?.rating ?? null,
       sellerReviewCount: (seller as any)?.reviewCount ?? 0,
@@ -7598,7 +7607,7 @@ export async function registerRoutes(
       const item = await storage.createMarketplaceItem({
         sellerId: userId,
         businessAccountId: businessAccount?.id || null,
-        sellerName: user.fullName,
+        sellerName: businessAccount?.businessName || user.guberId,
         title,
         description,
         category,
@@ -8697,7 +8706,7 @@ export async function registerRoutes(
       await storage.createNotification({
         userId: item.sellerId,
         title: `Message about: ${item.title.slice(0, 40)}`,
-        body: `${sender?.fullName || "A buyer"}: ${message.slice(0, 120)}`,
+        body: `${sender?.guberId || "A GUBER buyer"}: ${message.slice(0, 120)}`,
         type: "marketplace",
         jobId: null,
       });
@@ -9102,7 +9111,11 @@ export async function registerRoutes(
       const user = await storage.getUser(req.session.userId!);
       if (!user || user.role !== "admin") return res.status(403).json({ message: "Forbidden" });
       const items = await storage.getAllMarketplaceItems();
-      res.json(items);
+      const publicItems = await Promise.all(items.map(async (item) => {
+        const seller = item.sellerId ? await storage.getUser(item.sellerId) : null;
+        return maskMarketplaceItem(item, seller, false);
+      }));
+      res.json(publicItems);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -9262,10 +9275,12 @@ export async function registerRoutes(
         listingSlug: item?.publicSlug || null,
         listingPhoto: (item?.photos as string[])?.[0] || null,
         listingCategory: item?.category || null,
-        buyerName: buyer?.fullName || buyer?.username || "Buyer",
-        sellerName: seller?.fullName || seller?.username || "Seller",
-        buyerAvatarUrl: buyer?.profilePhoto || null,
-        sellerAvatarUrl: seller?.profilePhoto || null,
+        buyerName: buyer?.guberId || "GUBER Buyer",
+        sellerName: seller?.guberId || "GUBER Seller",
+        buyerGuberId: buyer?.guberId || null,
+        sellerGuberId: seller?.guberId || null,
+        buyerAvatarUrl: null,
+        sellerAvatarUrl: null,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -11041,7 +11056,7 @@ export async function registerRoutes(
       const availWindow = `Available: ${fromDate.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} – ${toDate.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
       await notify(job.postedById, {
         title: "Helper Applied",
-        body: `${helper.fullName} wants to accept your job "${job.title}". ${availWindow}. Confirm to lock the job.`,
+        body: `${helper.guberId || "A GUBER member"} wants to accept your job "${job.title}". ${availWindow}. Confirm to lock the job.`,
         jobId,
         priority: "high",
       });
@@ -11449,7 +11464,7 @@ export async function registerRoutes(
       }
 
       const helper = await storage.getUser(job.assignedHelperId);
-      const helperName = helper?.fullName || "your helper";
+      const helperName = helper?.guberId || "your GUBER provider";
       const helperStripeAccountId = (helper as any)?.stripeAccountId;
       const helperStripeStatus = (helper as any)?.stripeAccountStatus;
 
@@ -21675,7 +21690,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
           const photosList = photos_url ? (Array.isArray(photos_url) ? photos_url : [photos_url]) : [];
           const item = await (storage as any).createMarketplaceItem({
             sellerId: userId!,
-            sellerName: user.fullName,
+            sellerName: user.guberId,
             title: cleanTitle,
             description: cleanDesc,
             category,
@@ -26335,13 +26350,11 @@ OUTPUT STYLE:
           name: profile.companyName,
           logo: profile.companyLogo,
           industry: profile.industry,
-          contactPerson: profile.contactPerson,
           verified: profile.companyVerified,
         } : null,
-        poster: poster ? { id: poster.id, name: poster.fullName, guberId: poster.guberId } : null,
+         poster: poster ? { id: poster.id, guberId: poster.guberId } : null,
         helper: helper ? {
           id: helper.id,
-          name: helper.fullName,
           guberId: helper.guberId,
           rating: helper.rating,
           jobsCompleted: helper.jobsCompleted,
@@ -28309,7 +28322,7 @@ OUTPUT STYLE:
         clueRevealOnArrival: false,
         requireInAppCamera: true,
         proofItems: [],
-        sponsorName: currentUser.cashDropBrandName || currentUser.fullName,
+        sponsorName: currentUser.cashDropBrandName || "GUBER Sponsor",
         sponsorLogo: resolvedLogo,
         sponsorId: null,
         isSponsored: false,
@@ -29040,19 +29053,19 @@ OUTPUT STYLE:
             .filter((q) => q.verificationStatus === "verified")
             .map(({ adminNotes, ...rest }) => rest);
 
-      if (isBizViewer && !isBizUnlocked && !isAdmin) {
-        const anonymized = {
+      if (!isAdmin) {
+        return res.json({
           ...resume,
           fullName: undefined,
           name: undefined,
+          profilePhoto: undefined,
+          profileImage: undefined,
           email: undefined,
           phone: undefined,
           zipcode: undefined,
-          profileImage: undefined,
-          qualifications: qualifications.map(({ ...q }) => ({ ...q })),
-          anonymized: true,
-        };
-        return res.json(anonymized);
+          qualifications,
+          anonymized: isBizViewer && !isBizUnlocked,
+        });
       }
 
       res.json({ ...resume, qualifications });
@@ -29744,7 +29757,7 @@ OUTPUT STYLE:
           await resend.emails.send({
             from: "GUBER <no-reply@guberapp.app>",
             to: user.email,
-            subject: "Thanks for your feedback, " + (user.fullName?.trim().split(/\s+/)[0] || "there") + " 💚",
+            subject: "Thanks for your feedback, GUBER member 💚",
             html: `<div style="font-family:sans-serif;max-width:480px;margin:auto;padding:24px">
               <h2 style="color:#22C55E">We got your feedback!</h2>
               <p>${autoResponse}</p>
@@ -30355,8 +30368,6 @@ OUTPUT STYLE:
           const hirer = await storage.getUser(offer.hirerUserId);
           responseData.hirerProfile = hirer ? {
             id: hirer.id,
-            fullName: hirer.fullName,
-            profilePhoto: hirer.profilePhoto,
             rating: hirer.rating,
             reviewCount: hirer.reviewCount,
             guberId: hirer.guberId,
@@ -30366,8 +30377,6 @@ OUTPUT STYLE:
           const worker = await storage.getUser(offer.workerUserId);
           responseData.workerProfile = worker ? {
             id: worker.id,
-            fullName: worker.fullName,
-            profilePhoto: worker.profilePhoto,
             rating: worker.rating,
             reviewCount: worker.reviewCount,
             guberId: worker.guberId,
@@ -30615,7 +30624,7 @@ OUTPUT STYLE:
       const applicationFeeCents = grossChargeCents - workerShareCents;
 
       const hirer = await storage.getUser(userId);
-      const workerName = worker.fullName || "worker";
+      const workerName = worker.guberId || "GUBER provider";
 
       const lineItems: any[] = [
         {
@@ -33863,8 +33872,6 @@ OUTPUT STYLE:
             guberId: poster.guberId,
             rating: poster.rating,
             reviewCount: poster.reviewCount,
-            // reveal name only to the poster themselves
-            fullName: isMine ? poster.fullName : undefined,
           } : null,
         };
       }));
@@ -34004,7 +34011,6 @@ OUTPUT STYLE:
             guberId: poster.guberId,
             rating: poster.rating,
             reviewCount: poster.reviewCount,
-            fullName: isConnected ? poster.fullName : undefined,
           } : null,
         },
         offers: isPoster ? offers : (myOffer ? [myOffer] : []),
@@ -34547,8 +34553,6 @@ OUTPUT STYLE:
           guberId: user.guberId,
           rating: user.rating,
           reviewCount: user.reviewCount,
-          fullName: isConnected ? user.fullName : undefined,
-          profilePhoto: isConnected ? user.profilePhoto : undefined,
         } : null,
         isConnected,
       });

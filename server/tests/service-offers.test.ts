@@ -260,7 +260,7 @@ describe("service-offer privacy, verification, and handoff contracts", () => {
       area: "Near 902••",
       provider: {
         id: PROVIDER_ID,
-        name: "@verified_builder",
+        name: "GUB-TEST123",
       },
     });
     expect(publicOffer.description).not.toContain("provider@example.com");

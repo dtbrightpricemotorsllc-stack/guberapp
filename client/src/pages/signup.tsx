@@ -53,10 +53,10 @@ export default function Signup() {
       const raw = localStorage.getItem("jac_job_prefill");
       if (raw) {
         const pf = JSON.parse(raw);
-        return { email: "", username: "", fullName: "", password: "", zipcode: pf.zip || "" };
+        return { email: "", password: "", zipcode: pf.zip || "" };
       }
     } catch {}
-    return { email: "", username: "", fullName: "", password: "", zipcode: "" };
+    return { email: "", password: "", zipcode: "" };
   });
   const [jacPrefill] = useState(() => {
     try {
@@ -323,16 +323,6 @@ export default function Signup() {
             <div className="space-y-2">
               <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]">EMAIL ADDRESS</Label>
               <Input value={form.email} onChange={update("email")} type="email" className="premium-input rounded-xl h-12 text-foreground text-sm px-4" placeholder="your@email.com" required data-testid="input-email" />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]">USERNAME</Label>
-              <Input value={form.username} onChange={update("username")} type="text" className="premium-input rounded-xl h-12 text-foreground text-sm px-4" placeholder="Choose a username" required data-testid="input-username" />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]">FULL NAME</Label>
-              <Input value={form.fullName} onChange={update("fullName")} type="text" className="premium-input rounded-xl h-12 text-foreground text-sm px-4" placeholder="Your full name" required data-testid="input-fullname" />
             </div>
 
             <div className="space-y-2">

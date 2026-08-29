@@ -253,14 +253,10 @@ export default function ResumePage() {
               </div>
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden border-2 border-primary/30 shrink-0">
-                  {resume.profilePhoto ? (
-                    <img src={resume.profilePhoto} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <User className="w-7 h-7 text-primary" />
-                  )}
+                  <User className="w-7 h-7 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-xl font-bold truncate" data-testid="text-resume-name">{resume.fullName}</h1>
+                  <h1 className="text-xl font-bold truncate" data-testid="text-resume-name">{resume.guberId || "GUBER Member"}</h1>
                   <p className="text-xs text-muted-foreground font-mono tracking-wider" data-testid="text-guber-id">{resume.guberId}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     <Clock className="w-3 h-3 inline mr-1" />
@@ -450,14 +446,10 @@ export default function ResumePage() {
 
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden border-2 border-primary/30">
-              {resume.profilePhoto ? (
-                <img src={resume.profilePhoto} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <User className="w-7 h-7 text-primary" />
-              )}
+              <User className="w-7 h-7 text-primary" />
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-bold truncate" data-testid="text-resume-name">{resume.fullName}</h1>
+              <h1 className="text-xl font-bold truncate" data-testid="text-resume-name">{resume.guberId || "GUBER Member"}</h1>
               <p className="text-xs text-muted-foreground font-mono tracking-wider" data-testid="text-guber-id">{resume.guberId}</p>
               {(resume.badges?.length > 0 || resume.proofConfidenceLevel) && (
                 <div className="mt-1.5">

@@ -316,19 +316,25 @@ export function setupCampaignLabRoutes(app: Express) {
       if (!assignR.rows.length) return res.status(403).json({ message: "Not assigned to this campaign" });
     }
 
-    // Get assignments with user info
+    // Admins/reviewers may use internal names for moderation; creators only
+    // receive the public Guber ID and never another creator's private details.
+    const isPrivileged = hasLabAdminAccess(user) || hasReviewAccess(user);
     const assignmentsR = await pool.query(
-      `SELECT a.*, u.full_name, u.email, u.profile_photo FROM campaign_lab_creator_assignments a
-       LEFT JOIN users u ON u.id = a.user_id
-       WHERE a.campaign_id = $1`,
+      isPrivileged
+        ? `SELECT a.*, u.full_name, u.email, u.profile_photo, u.guber_id FROM campaign_lab_creator_assignments a
+           LEFT JOIN users u ON u.id = a.user_id
+           WHERE a.campaign_id = $1`
+        : `SELECT a.*, u.guber_id FROM campaign_lab_creator_assignments a
+           LEFT JOIN users u ON u.id = a.user_id
+           WHERE a.campaign_id = $1`,
       [campaignId]
     );
 
     // Get work items
-    const workItemsQuery = hasLabAdminAccess(user) || hasReviewAccess(user)
+    const workItemsQuery = isPrivileged
       ? `SELECT w.*, u.full_name as creator_name FROM campaign_lab_work_items w LEFT JOIN users u ON u.id = w.user_id WHERE w.campaign_id = $1 ORDER BY w.created_at DESC`
-      : `SELECT w.*, u.full_name as creator_name FROM campaign_lab_work_items w LEFT JOIN users u ON u.id = w.user_id WHERE w.campaign_id = $1 AND w.user_id = $2 ORDER BY w.created_at DESC`;
-    const workItemsR = hasLabAdminAccess(user) || hasReviewAccess(user)
+      : `SELECT w.*, u.guber_id as creator_guber_id FROM campaign_lab_work_items w LEFT JOIN users u ON u.id = w.user_id WHERE w.campaign_id = $1 AND w.user_id = $2 ORDER BY w.created_at DESC`;
+    const workItemsR = isPrivileged
       ? await pool.query(workItemsQuery, [campaignId])
       : await pool.query(workItemsQuery, [campaignId, user.id]);
 

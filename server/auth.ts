@@ -211,7 +211,10 @@ export function handleSignup(storage: AuthStorage, deps: SignupDeps = {}) {
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
       }
-      const { email, username, fullName, password, zipcode } = parsed.data as SignupInput;
+      const { email, password, zipcode } = parsed.data as SignupInput;
+      const suppliedUsername = parsed.data.username?.trim();
+      const username = suppliedUsername || `member_${randomBytes(8).toString("hex")}`;
+      const fullName = parsed.data.fullName?.trim() || "GUBER Member";
       const rawRefCode = req.body?.referralCode;
       const incomingRefCode =
         typeof rawRefCode === "string" && rawRefCode.trim()
@@ -240,7 +243,11 @@ export function handleSignup(storage: AuthStorage, deps: SignupDeps = {}) {
       }
 
       const existingUsername = await storage.getUserByUsername(username);
-      if (existingUsername) return res.status(400).json({ message: "Username already taken" });
+      if (existingUsername) {
+        return res.status(400).json({
+          message: suppliedUsername ? "Username already taken" : "Internal account identifier collision; please try again",
+        });
+      }
 
       const hashedPassword = await hashPassword(password);
 
@@ -712,7 +719,6 @@ export function handleBusinessSignup(storage: BusinessSignupStorage, deps: Busin
         ein,
         legalBusinessName,
         email,
-        username,
         fullName,
         password,
         industry,
@@ -721,6 +727,7 @@ export function handleBusinessSignup(storage: BusinessSignupStorage, deps: Busin
         description,
         invitationCode,
       } = parsed.data;
+      const username = parsed.data.username?.trim() || `business_${randomBytes(8).toString("hex")}`;
 
       const pwError = validatePasswordStrength(password);
       if (pwError) return res.status(400).json({ message: pwError });
@@ -734,7 +741,11 @@ export function handleBusinessSignup(storage: BusinessSignupStorage, deps: Busin
       if (existingEmail) return res.status(400).json({ message: "Email already in use" });
 
       const existingUsername = await storage.getUserByUsername(username);
-      if (existingUsername) return res.status(400).json({ message: "Username already taken" });
+      if (existingUsername) {
+        return res.status(400).json({
+          message: parsed.data.username ? "Username already taken" : "Internal account identifier collision; please try again",
+        });
+      }
 
       if (deps.isEinAvailable) {
         const einFree = await deps.isEinAvailable(ein);

@@ -1,8 +1,12 @@
 import { useState } from "react";
 import { Link, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, Clock3, MapPin, Search, ShieldCheck, ArrowRight } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth-context";
+import { apiRequest } from "@/lib/queryClient";
+import { Building2, CalendarClock, Clock3, MapPin, Search, ShieldCheck, ArrowRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
 type Business = {
@@ -17,6 +21,85 @@ type Business = {
   website?: string | null;
   isOpen: boolean | null;
 };
+
+function BookingPanel({ businessId }: { businessId: string }) {
+  const { user } = useAuth();
+  const [serviceId, setServiceId] = useState("");
+  const [requestedStartAt, setRequestedStartAt] = useState("");
+  const [customerNote, setCustomerNote] = useState("");
+  const [customerLocation, setCustomerLocation] = useState("");
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["/api/public/businesses/booking", businessId],
+    queryFn: async () => {
+      const response = await fetch(`/api/public/businesses/${businessId}/booking`);
+      if (!response.ok) return null;
+      return response.json();
+    },
+  });
+  const selectedService = data?.services?.find((service: any) => String(service.id) === serviceId);
+  const submit = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/public/businesses/${businessId}/booking`, {
+        serviceId: Number(serviceId),
+        requestedStartAt: requestedStartAt || null,
+        customerTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        customerNote,
+        customerLocation,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      setRequestedStartAt("");
+      setCustomerNote("");
+      setCustomerLocation("");
+    },
+  });
+
+  if (isLoading || !data?.services?.length) return null;
+  return (
+    <section className="mt-8 rounded-3xl border bg-card p-6 md:p-8" data-testid="section-business-bookings">
+      <div className="flex items-start gap-3">
+        <CalendarClock className="mt-1 h-5 w-5 text-primary" />
+        <div>
+          <h2 className="text-xl font-bold">Book this business</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Choose a service. Each service has its own booking method.</p>
+        </div>
+      </div>
+      {!user ? (
+        <div className="mt-5 rounded-xl bg-muted p-4 text-sm">
+          <p>Sign in with your Guber account to request or book a service.</p>
+          <Link href="/login?returnTo=/businesses" className="mt-3 inline-block font-semibold text-primary">Sign in to continue →</Link>
+        </div>
+      ) : (
+        <div className="mt-5 space-y-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            {data.services.map((service: any) => (
+              <button key={service.id} type="button" onClick={() => setServiceId(String(service.id))} className={`rounded-2xl border p-4 text-left transition-colors ${serviceId === String(service.id) ? "border-primary bg-primary/5" : "hover:border-primary/50"}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="font-semibold">{service.name}</span>
+                  <span className="whitespace-nowrap text-xs font-bold text-primary">{service.pricing_mode === "fixed" ? `$${(service.price_cents / 100).toFixed(2)}` : service.pricing_mode === "starting_at" ? `From $${(service.price_cents / 100).toFixed(2)}` : "Quote"}</span>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{service.description || "Service details available after you submit."}</p>
+                <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{service.confirmation_mode === "instant" ? "Instant booking" : service.confirmation_mode === "approval" ? "Business approval" : "Quote request"} · {service.fulfillment_mode.replace("_", " ")}</p>
+              </button>
+            ))}
+          </div>
+          {selectedService && (
+            <div className="rounded-2xl border border-dashed p-4">
+              <p className="text-sm font-semibold">{selectedService.confirmation_mode === "instant" ? "Choose a time" : selectedService.confirmation_mode === "approval" ? "Request a time" : "Tell the business what you need"}</p>
+              {selectedService.confirmation_mode !== "quote" || selectedService.availability_mode === "appointment" ? <div className="mt-3"><label className="text-xs font-semibold text-muted-foreground">Requested date and time {selectedService.confirmation_mode === "quote" ? "(optional)" : "*"}</label><Input type="datetime-local" value={requestedStartAt} onChange={(e) => setRequestedStartAt(e.target.value)} className="mt-1" /></div> : null}
+              {(selectedService.fulfillment_mode === "mobile" || selectedService.fulfillment_mode === "event") && <div className="mt-3"><label className="text-xs font-semibold text-muted-foreground">Service location or event details</label><Input value={customerLocation} onChange={(e) => setCustomerLocation(e.target.value)} placeholder="City, address, venue, or service area" className="mt-1" /></div>}
+              <div className="mt-3"><label className="text-xs font-semibold text-muted-foreground">Details for the business</label><Textarea value={customerNote} onChange={(e) => setCustomerNote(e.target.value)} placeholder={selectedService.confirmation_mode === "quote" ? "Guest count, vehicle details, event date, scope, or anything else to quote…" : "Anything the business should know?"} className="mt-1" /></div>
+              {submit.isError && <p className="mt-3 text-sm text-destructive">{(submit.error as Error).message}</p>}
+              {submit.isSuccess && <p className="mt-3 text-sm font-semibold text-emerald-600">{selectedService.confirmation_mode === "instant" ? "Your booking is confirmed." : "Your request was sent to the business."}</p>}
+              <Button className="mt-4" disabled={submit.isPending || !serviceId || (selectedService.confirmation_mode !== "quote" && !requestedStartAt)} onClick={() => submit.mutate()}>{submit.isPending ? "Sending…" : selectedService.confirmation_mode === "instant" ? "Confirm booking" : selectedService.confirmation_mode === "approval" ? "Request booking" : "Request a quote"}</Button>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
 
 export default function BusinessDiscovery() {
   const [, detailParams] = useRoute("/businesses/:id");
@@ -49,10 +132,15 @@ export default function BusinessDiscovery() {
           <Link href="/businesses" className="text-sm text-primary">← Back to local businesses</Link>
           <div className="mt-6 rounded-3xl border bg-card p-6 md:p-10">
             <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">Official business</p>
-                <h1 className="mt-2 text-3xl font-black">{detail.companyName}</h1>
-                <p className="mt-2 text-sm text-muted-foreground">{detail.industry || "Local business"} · {detail.isOpen === true ? "Open now" : detail.isOpen === false ? "Closed now" : "Check hours"}</p>
+               <div className="flex items-start gap-4">
+                 <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-primary/10">
+                   {detail.companyLogo ? <img src={detail.companyLogo} alt="" className="h-full w-full object-cover" /> : <Building2 className="h-7 w-7 text-primary" aria-label="Business placeholder" />}
+                 </div>
+                 <div>
+                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">Official business</p>
+                   <h1 className="mt-2 text-3xl font-black">{detail.companyName}</h1>
+                   <p className="mt-2 text-sm text-muted-foreground">{detail.industry || "Local business"} · {detail.isOpen === true ? "Open now" : detail.isOpen === false ? "Closed now" : "Check hours"}</p>
+                 </div>
               </div>
               <ShieldCheck className="h-8 w-8 text-emerald-600" />
             </div>
@@ -66,6 +154,7 @@ export default function BusinessDiscovery() {
               {detail.website && <a href={detail.website} target="_blank" rel="noreferrer"><Button variant="outline">Visit official website</Button></a>}
             </div>
           </div>
+          <BookingPanel businessId={String(detail.business_account_id)} />
           {detail.inventory?.length > 0 && (
             <section className="mt-8">
               <div className="mb-4 flex items-center justify-between">

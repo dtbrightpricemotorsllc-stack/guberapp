@@ -59,3 +59,4 @@
 - [Business verification and referral rail](business-verification-referrals.md) — business verification is requirement-based with auditable admin review; distributor rewards stay separate cash obligations.
 - [Campaign onboarding continuity](campaign-onboarding-continuity.md) — flyer/invite entry is JAC-first and uses a server-backed session claimed across authentication with deduplicated funnel events.
 - [Native digital commerce boundary](native-digital-commerce-boundary.md) — digital purchase, subscription, founding-offer, and billing actions stay on guberapp.com; native only reads entitlements.
+- [Public identity privacy policy](identity-privacy-policy.md) — individual public identity is Guber ID plus trust signals; names, handles, and photos stay private; verified businesses may show name/logo.

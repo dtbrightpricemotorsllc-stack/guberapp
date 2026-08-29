@@ -2494,6 +2494,67 @@ app.use((req, res, next) => {
     ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS preferred_contact_method TEXT;
   `).catch(e => console.error("[migration] business_profiles extended columns error:", e));
 
+  // ── Business Booking & Appointments ───────────────────────────────────────
+  // Separate from jobs/direct offers: appointments have their own service-level
+  // confirmation mode, availability, conflict rules, and customer lifecycle.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS business_booking_services (
+      id SERIAL PRIMARY KEY,
+      business_account_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      confirmation_mode TEXT NOT NULL DEFAULT 'approval',
+      pricing_mode TEXT NOT NULL DEFAULT 'quote',
+      price_cents INTEGER,
+      duration_minutes INTEGER,
+      fulfillment_mode TEXT NOT NULL DEFAULT 'in_person',
+      location_text TEXT,
+      service_area TEXT,
+      availability_mode TEXT NOT NULL DEFAULT 'appointment',
+      availability_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+      booking_window_days INTEGER NOT NULL DEFAULT 30,
+      lead_time_hours INTEGER NOT NULL DEFAULT 24,
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_booking_services_business
+      ON business_booking_services(business_account_id, active);
+    CREATE TABLE IF NOT EXISTS business_bookings (
+      id SERIAL PRIMARY KEY,
+      business_account_id INTEGER NOT NULL,
+      service_id INTEGER NOT NULL,
+      customer_user_id INTEGER NOT NULL,
+      requested_start_at TIMESTAMP,
+      requested_end_at TIMESTAMP,
+      customer_timezone TEXT,
+      customer_note TEXT,
+      customer_location TEXT,
+      status TEXT NOT NULL DEFAULT 'requested',
+      quoted_price_cents INTEGER,
+      business_note TEXT,
+      proposed_start_at TIMESTAMP,
+      proposed_end_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_bookings_business_status
+      ON business_bookings(business_account_id, status, requested_start_at);
+    CREATE INDEX IF NOT EXISTS idx_bookings_customer
+      ON business_bookings(customer_user_id, status, requested_start_at);
+    CREATE TABLE IF NOT EXISTS business_booking_events (
+      id SERIAL PRIMARY KEY,
+      booking_id INTEGER NOT NULL,
+      actor_user_id INTEGER,
+      from_status TEXT,
+      to_status TEXT NOT NULL,
+      note TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_booking_events_booking
+      ON business_booking_events(booking_id, created_at);
+  `).catch(e => console.error("[migration] business booking tables error:", e));
+
   // NOTE: jac_voice_telemetry table was superseded by jac_voice_convai_events
   // (which adds cid, session deduplication, and token-validated writes).
   // Migration block intentionally removed to avoid creating an unused table.

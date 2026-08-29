@@ -669,9 +669,6 @@ export default function LoadBoardDetail() {
             </div>
             <span className="font-display font-bold tracking-wide">{listing.poster?.guberId || "GUBER Member"}</span>
             {listing.poster?.rating > 0 && <span>⭐ {Number(listing.poster.rating).toFixed(1)} ({listing.poster.reviewCount})</span>}
-            {isConnected && listing.poster?.fullName && (
-              <span className="text-foreground/80 font-bold">· {listing.poster.fullName}</span>
-            )}
           </div>
         </div>
 

@@ -1030,8 +1030,11 @@ export const loginSchema = z.object({
 
 export const signupSchema = z.object({
   email: z.string().email(),
-  username: z.string().min(3),
-  fullName: z.string().min(2),
+  // Kept optional for compatibility with older clients. New accounts use
+  // server-generated internal values and never ask individuals for public
+  // names or usernames.
+  username: z.string().min(3).optional(),
+  fullName: z.string().min(2).optional(),
   password: z.string().min(6),
   zipcode: z.string().optional(),
 });
@@ -1040,7 +1043,7 @@ export const businessSignupSchema = z.object({
   ein: z.string().regex(/^\d{9}$/, "EIN must be exactly 9 digits"),
   legalBusinessName: z.string().min(2, "Legal business name is required"),
   email: z.string().email(),
-  username: z.string().min(3),
+  username: z.string().min(3).optional(),
   fullName: z.string().min(2),
   password: z.string().min(8, "Password must be at least 8 characters"),
   industry: z.string().optional(),
@@ -1665,7 +1668,7 @@ export const businessAccessRequestSchema = z.object({
   industry: z.string().min(1, "Industry is required"),
   companyNeedsSummary: z.string().optional(),
   fullName: z.string().min(2, "Full name is required"),
-  username: z.string().min(3, "Username must be at least 3 characters"),
+  username: z.string().min(3, "Username must be at least 3 characters").optional(),
   password: z.string().min(8, "Password must be at least 8 characters"),
   businessAddress: z.string().min(5, "Business address is required"),
   website: z.string().optional(),

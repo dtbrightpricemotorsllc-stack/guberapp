@@ -92,8 +92,8 @@ function publicOffer(row: any) {
     mapLng: fuzzCoordinate(row.lng, row.id, 2),
     provider: {
       id: row.provider_user_id,
-      name: row.public_username ? `@${row.public_username}` : row.guber_id || "GUBER Provider",
-      avatar: row.profile_photo || null,
+            name: row.guber_id || "GUBER Provider",
+            avatar: null,
       rating: row.rating || 0,
       reviewCount: row.review_count || 0,
       idVerified: !!row.id_verified,

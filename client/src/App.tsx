@@ -151,6 +151,7 @@ const BizTalentExplorer = lazy(() => import("@/pages/biz-talent-explorer"));
 const BizVerification = lazy(() => import("@/pages/biz-verification"));
 const BizOffers = lazy(() => import("@/pages/biz-offers"));
 const BizVerifyInspect = lazy(() => import("@/pages/biz-verify-inspect"));
+const BizBookings = lazy(() => import("@/pages/business-bookings"));
 const LoadBoard = lazy(() => import("@/pages/load-board"));
 const LoadBoardPost = lazy(() => import("@/pages/load-board-post"));
 const LoadBoardDetail = lazy(() => import("@/pages/load-board-detail"));
@@ -483,6 +484,7 @@ function Router() {
       <Route path="/biz/talent-explorer" component={() => <BizRoute component={BizTalentExplorer} />} />
       <Route path="/biz/verification" component={() => <BizRoute component={BizVerification} />} />
       <Route path="/biz/offers" component={() => <BizRoute component={BizOffers} />} />
+      <Route path="/biz/bookings" component={() => <BizRoute component={BizBookings} />} />
       <Route path="/biz/verify-inspect" component={() => <BizRoute component={BizVerifyInspect} />} />
       <Route path="/biz/account" component={() => <BizRoute component={BizAccount} />} />
       <Route path="/load-board/carrier" component={() => <ProtectedRoute component={LoadBoardCarrierHub} />} />

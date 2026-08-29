@@ -498,7 +498,6 @@ ${data.company ? `<h2>Company</h2>
 <div class="grid">
   <div class="field"><div class="label">Company</div><div class="value">${data.company.name || "—"}</div></div>
   <div class="field"><div class="label">Industry</div><div class="value">${data.company.industry || "—"}</div></div>
-  ${data.company.contactPerson ? `<div class="field"><div class="label">Contact</div><div class="value">${data.company.contactPerson}</div></div>` : ""}
   ${data.company.verified ? `<div class="field"><div class="label">Status</div><div class="value" style="color:#22c55e">Verified Company</div></div>` : ""}
 </div>` : ""}
 
@@ -1640,7 +1639,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               <Link href={`/profile/${job.postedById}`}>
                 <div className="flex items-center gap-3 rounded-xl p-2.5 -mx-1 transition-all hover:bg-white/[0.03] active:scale-[0.98] cursor-pointer" data-testid="link-poster-profile">
                   <div className="w-10 h-10 rounded-full bg-muted overflow-hidden shrink-0 ring-2 ring-border/20">
-                    {(poster as any).profilePhoto ? (
+                    {isOwner && (poster as any).profilePhoto ? (
                       <img src={(poster as any).profilePhoto} alt="Poster" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
@@ -1649,11 +1648,9 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">
-                      {isLockedOrBeyond
-                        ? ((poster as any).publicUsername ? `@${(poster as any).publicUsername}` : ((poster as any).guberId || "GUBER Member"))
-                        : ((poster as any).guberId || "GUBER Member")}
-                    </p>
+                      <p className="text-sm font-semibold text-foreground truncate">
+                        {(poster as any).guberId || "GUBER Member"}
+                      </p>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       <TrustBadge tier={poster.tier} />
                       {poster.rating != null && (
@@ -2693,13 +2690,9 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   <p className="text-[10px] font-display font-semibold text-muted-foreground uppercase tracking-wider mb-3">Who Accepted</p>
                   <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-full bg-muted overflow-hidden shrink-0 ring-2 ring-yellow-500/20">
-                      {assignedWorker.profilePhoto ? (
-                        <img src={assignedWorker.profilePhoto} alt="Worker avatar" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <User className="w-5 h-5 text-muted-foreground" />
-                        </div>
-                      )}
+                      <div className="w-full h-full flex items-center justify-center">
+                        <User className="w-5 h-5 text-muted-foreground" />
+                      </div>
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold truncate">

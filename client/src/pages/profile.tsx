@@ -563,11 +563,11 @@ export default function Profile() {
                 data-testid="input-profile-photo"
               />
               <Avatar className="w-20 h-20 border-2 border-primary/30 shadow-[0_0_15px_hsl(152_100%_44%/0.15)]">
-                {displayUser.profilePhoto && (
-                  <AvatarImage src={displayUser.profilePhoto} alt={(displayUser as any).publicUsername || (displayUser as any).guberId || "User"} className="object-cover" />
+                {isOwnProfile && displayUser.profilePhoto && (
+                  <AvatarImage src={displayUser.profilePhoto} alt="Your private profile photo" className="object-cover" />
                 )}
                 <AvatarFallback className="bg-muted text-primary text-xl font-display">
-                  {(displayUser as any).publicUsername?.slice(0, 2).toUpperCase() || (displayUser as any).guberId?.replace("GUB-", "").slice(0, 2) || "?"}
+                  {(displayUser as any).guberId?.replace("GUB-", "").slice(0, 2) || "GB"}
                 </AvatarFallback>
               </Avatar>
               {isOwnProfile && (
@@ -600,7 +600,7 @@ export default function Profile() {
               )}
             </div>
             <h1 className="text-xl font-display font-bold text-foreground tracking-tight" data-testid="text-public-identity">
-              {(displayUser as any).publicUsername ? `@${(displayUser as any).publicUsername}` : ((displayUser as any).guberId || "GUBER Member")}
+              {(displayUser as any).guberId || "GUBER Member"}
             </h1>
             {isOwnProfile && displayUser.fullName && (
               <p className="text-xs text-muted-foreground mb-0.5">{displayUser.fullName} <span className="text-[10px]">(private)</span></p>
@@ -729,49 +729,10 @@ export default function Profile() {
 
             </div>
           </div>
-          {isOwnProfile && (
-            <div className="mt-4 pt-4 border-t border-border/10">
-              <p className="text-xs font-display font-bold text-foreground/85 mb-2 uppercase tracking-widest">Public Username</p>
-              <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">Choose a public name others see. No real names, phone numbers, emails, or social handles.</p>
-              <div className="flex gap-2 items-start">
-                <div className="flex-1">
-                  <div className="flex items-center rounded-lg border border-border/20 bg-background/50 overflow-hidden">
-                    <span className="pl-3 pr-1 text-muted-foreground text-sm">@</span>
-                    <input
-                      type="text"
-                      value={pubUsernameInput}
-                      maxLength={20}
-                      placeholder="your_handle"
-                      className="flex-1 bg-transparent text-sm py-2 pr-3 outline-none text-foreground placeholder:text-muted-foreground"
-                      data-testid="input-public-username"
-                      onChange={e => { setPubUsernameInput(e.target.value); validatePubUsername(e.target.value); }}
-                    />
-                  </div>
-                  {pubUsernameValidation && (
-                    <p className={`text-[11px] mt-1 ${pubUsernameValidation.valid ? "text-primary" : "text-destructive"}`}>
-                      {pubUsernameValidation.valid ? "Available" : pubUsernameValidation.message}
-                    </p>
-                  )}
-                  {!pubUsernameValidation && pubUsernameInput.trim().length === 0 && (
-                    <p className="text-[10px] text-muted-foreground mt-1">3–20 characters, letters/numbers/underscore/dash only</p>
-                  )}
-                </div>
-                <Button
-                  size="sm"
-                  className="h-[38px] font-display text-xs shrink-0"
-                  disabled={pubUsernameSaving || (pubUsernameValidation !== null && !pubUsernameValidation.valid)}
-                  onClick={savePubUsername}
-                  data-testid="button-save-public-username"
-                >
-                  {pubUsernameSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
-                </Button>
-              </div>
-            </div>
-          )}
         </Card>
 
         {isOwnProfile && !displayUser.day1OG && !isDemoUser && !isStoreBuild && !ogCardHidden && isDay1OgPromotionActive() && (() => {
-          const profileIncomplete = !displayUser.userBio || !displayUser.profilePhoto || !displayUser.publicUsername || !displayUser.zipcode;
+           const profileIncomplete = !displayUser.userBio || !displayUser.zipcode;
           const accountAgeMs = displayUser.createdAt ? Date.now() - new Date(displayUser.createdAt).getTime() : 0;
           const isOnboardingWindow = accountAgeMs > 0 && accountAgeMs < 14 * 24 * 60 * 60 * 1000;
           if (!profileIncomplete || !isOnboardingWindow) return null;

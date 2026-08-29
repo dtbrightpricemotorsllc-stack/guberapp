@@ -110,7 +110,6 @@ export default function BusinessSignup() {
     industry: "",
     companyNeedsSummary: "",
     fullName: "",
-    username: "",
     password: "",
     businessAddress: "",
     website: "",
@@ -338,11 +337,6 @@ export default function BusinessSignup() {
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-[11px] font-display tracking-[0.12em] uppercase" style={{ color: "#6B6B6B" }}>USERNAME *</Label>
-                <Input value={form.username} onChange={updateForm("username")} type="text" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }} placeholder="Choose a username" required data-testid="input-username" />
-              </div>
-
-              <div className="space-y-1.5">
                 <Label className="text-[11px] font-display tracking-[0.12em] uppercase" style={{ color: "#6B6B6B" }}>PASSWORD *</Label>
                 <div className="relative">
                   <Input
@@ -390,7 +384,7 @@ export default function BusinessSignup() {
 
             <Button
               type="submit"
-              disabled={loading || !passwordValid || !termsAgreed || !form.workEmail || !form.username || !form.fullName || !form.businessName || !form.industry || !form.businessAddress}
+              disabled={loading || !passwordValid || !termsAgreed || !form.workEmail || !form.fullName || !form.businessName || !form.industry || !form.businessAddress}
               size="lg"
               className="w-full h-14 font-display text-[12px] tracking-[0.2em] rounded-xl disabled:opacity-30 text-black font-bold"
               style={{ background: `linear-gradient(135deg, ${GOLD}, #A88A43)`, boxShadow: "0 4px 20px rgba(168,138,67,0.18)", border: "1px solid rgba(198,168,92,0.22)" }}

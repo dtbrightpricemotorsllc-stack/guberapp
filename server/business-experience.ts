@@ -14,14 +14,14 @@ export const BUSINESS_PLAN_CATALOG = [
     planType: "business_plus",
     label: "Business+",
     monthlyPriceCents: 1999,
-    entitlements: ["official_profile", "services", "local_discovery", "explore", "enhanced_storefront", "priority_promotion"],
+    entitlements: ["official_profile", "services", "local_discovery", "explore", "enhanced_storefront", "priority_promotion", "booking_appointments"],
     platformFeeRate: 0.2,
   },
   {
     planType: "business_pro",
     label: "Business Pro",
     monthlyPriceCents: 4999,
-    entitlements: ["official_profile", "services", "local_discovery", "explore", "enhanced_storefront", "priority_promotion", "lower_platform_fee"],
+    entitlements: ["official_profile", "services", "local_discovery", "explore", "enhanced_storefront", "priority_promotion", "lower_platform_fee", "booking_appointments"],
     platformFeeRate: 0.15,
   },
 ] as const;

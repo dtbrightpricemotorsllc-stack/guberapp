@@ -250,5 +250,5 @@ function round2(n: number): number {
 
 function shortName(u: any): string {
   if (!u) return "user";
-  return (u.publicUsername as string) || (u.username as string) || `user #${u.id}`;
+  return (u.guberId as string) || "GUBER Member";
 }
