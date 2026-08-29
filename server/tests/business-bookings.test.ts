@@ -14,7 +14,9 @@ const mockStorage = vi.hoisted(() => ({
 
 vi.mock("../db", () => ({ pool: mockPool }));
 vi.mock("../storage", () => ({ storage: mockStorage }));
-vi.mock("../business-experience", () => ({ businessPlanHasAccess: () => true }));
+vi.mock("../business-experience", () => ({
+  resolveBusinessEntitlements: () => ({ activityAccess: true }),
+}));
 
 import { registerBusinessBookingRoutes } from "../business-bookings";
 

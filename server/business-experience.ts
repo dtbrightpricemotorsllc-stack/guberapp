@@ -101,6 +101,40 @@ export function getCustomerBusinessRequestNextAction(source: "request" | "bookin
   return source === "booking" ? "Check this booking for updates" : "Check this request for updates";
 }
 
+const BUSINESS_REQUEST_TYPE_LABELS: Record<string, string> = {
+  inquiry: "inquiry",
+  quote: "quote request",
+  consultation: "consultation",
+  appointment: "appointment request",
+};
+
+const BUSINESS_REQUEST_STATUS_LABELS: Record<string, string> = {
+  contacted: "contacted",
+  scheduled: "scheduled",
+  quoted: "quoted",
+  closed: "closed",
+  declined: "declined",
+};
+
+function businessRequestResponseNotification(
+  request: {
+    requester_user_id: number;
+    request_type: string;
+    status: string;
+  },
+  publicBusinessName: string,
+) {
+  const requestType = BUSINESS_REQUEST_TYPE_LABELS[request.request_type] || "request";
+  const status = BUSINESS_REQUEST_STATUS_LABELS[request.status] || "updated";
+  return {
+    userId: Number(request.requester_user_id),
+    title: `${publicBusinessName} responded to your ${requestType}`,
+    body: `Status: ${status}.`,
+    type: "business_request_response",
+    ctaUrl: "/business-requests",
+  };
+}
+
 export type BusinessPlanType = typeof BUSINESS_PLAN_CATALOG[number]["planType"];
 export const FOUNDING_LOCAL_OFFER = {
   offerKey: "founding_local_business",
@@ -824,19 +858,50 @@ export async function registerBusinessExperienceRoutes(
           : "Business verification is required before using customer requests",
       });
     }
-    const status = String(req.body.status || "").trim();
-    if (!["contacted", "scheduled", "quoted", "closed", "declined"].includes(status)) {
+    const statusProvided = Object.prototype.hasOwnProperty.call(req.body, "status");
+    const noteProvided = Object.prototype.hasOwnProperty.call(req.body, "note");
+    const status = statusProvided ? String(req.body.status || "").trim() : null;
+    if (statusProvided && (!status || !BUSINESS_REQUEST_STATUS_LABELS[status])) {
       return res.status(400).json({ message: "Choose a valid request status" });
     }
+    if (!statusProvided && !noteProvided) {
+      return res.status(400).json({ message: "Provide a request status or note" });
+    }
+    const note = noteProvided
+      ? (typeof req.body.note === "string" ? req.body.note.trim().slice(0, 1000) || null : null)
+      : null;
     const result = await pool.query(
       `UPDATE business_contact_requests
-          SET status = $1, business_note = $2, updated_at = NOW()
-        WHERE id = $3 AND business_account_id = $4
-        RETURNING id, status`,
-      [status, typeof req.body.note === "string" ? req.body.note.trim().slice(0, 1000) || null : null, Number(req.params.id), account.id],
+          SET status = COALESCE($1, status),
+              business_note = CASE WHEN $2::boolean THEN $3 ELSE business_note END,
+              updated_at = NOW()
+        WHERE id = $4
+          AND business_account_id = $5
+          AND (
+            ($1 IS NOT NULL AND status IS DISTINCT FROM $1)
+            OR ($2::boolean AND business_note IS DISTINCT FROM $3)
+          )
+        RETURNING id, status, requester_user_id, request_type`,
+      [status, noteProvided, note, Number(req.params.id), account.id],
     );
-    if (!result.rows[0]) return res.status(404).json({ message: "Request not found" });
-    res.json(result.rows[0]);
+    const updated = result.rows[0];
+    if (!updated) {
+      const existing = await pool.query(
+        `SELECT id, status
+           FROM business_contact_requests
+          WHERE id = $1 AND business_account_id = $2`,
+        [Number(req.params.id), account.id],
+      );
+      if (!existing.rows[0]) return res.status(404).json({ message: "Request not found" });
+      return res.json(existing.rows[0]);
+    }
+
+    const publicProfile = await storage.getBusinessProfile(account.ownerUserId);
+    const publicBusinessName = String(publicProfile?.companyName || account.businessName || "This business").trim();
+    await storage.createNotification(
+      businessRequestResponseNotification(updated, publicBusinessName),
+    ).catch(() => {});
+    res.json({ id: updated.id, status: updated.status });
   });
 
   app.post("/api/public/businesses/:id/request", requireAuth, async (req, res) => {

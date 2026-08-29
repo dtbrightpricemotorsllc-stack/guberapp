@@ -9,11 +9,20 @@ import { Bell, Check, Briefcase, AlertTriangle, Star, Info, ChevronRight, Zap, T
 import type { Notification } from "@shared/schema";
 import { useLocation } from "wouter";
 
-const typeIcons: Record<string, any> = { job: Briefcase, alert: AlertTriangle, review: Star, system: Info, cash_drop: Zap, cash_drop_win: Trophy };
+const typeIcons: Record<string, any> = {
+  job: Briefcase,
+  alert: AlertTriangle,
+  review: Star,
+  system: Info,
+  cash_drop: Zap,
+  cash_drop_win: Trophy,
+  business_request_response: Briefcase,
+};
 
 function getNotifUrl(n: Notification): string | null {
   if (n.cashDropId && (n.type === "cash_drop" || n.type === "cash_drop_win")) return `/cash-drop/${n.cashDropId}`;
   if (n.jobId) return `/jobs/${n.jobId}`;
+  if (n.ctaUrl && n.ctaUrl.startsWith("/")) return n.ctaUrl;
   if (n.type === "review") return "/my-jobs";
   if (n.type === "alert") return "/wallet";
   return null;

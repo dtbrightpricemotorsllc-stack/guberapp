@@ -39,7 +39,7 @@ const businessAccount = {
   phone: null,
   industry: "Retail",
   companyNeedsSummary: null,
-  status: "pending_business",
+  status: "verified_business",
   createdAt: new Date("2026-08-01T00:00:00.000Z"),
 };
 
@@ -526,6 +526,84 @@ describe("universal business customer requests", () => {
       .send({ requestType: "quote", topic: "Bulk order" })
       .expect(404);
     expect(mockPool.query).toHaveBeenCalledTimes(1);
+  });
+
+  it("notifies only the requester when a business responds, using public-safe copy and a customer CTA", async () => {
+    mockPool.query.mockResolvedValueOnce({
+      rows: [{
+        id: 61,
+        status: "quoted",
+        requester_user_id: DISTRIBUTOR_ID,
+        request_type: "quote",
+      }],
+    });
+
+    const response = await supertest(buildApp())
+      .patch(`/api/business/requests/61/status`)
+      .send({ status: "quoted", note: "Your quote is ready." })
+      .expect(200);
+
+    expect(response.body).toEqual({ id: 61, status: "quoted" });
+    expect(mockStorage.createNotification).toHaveBeenCalledTimes(1);
+    const notification = mockStorage.createNotification.mock.calls[0][0];
+    expect(notification).toMatchObject({
+      userId: DISTRIBUTOR_ID,
+      title: "North Star Retail responded to your quote request",
+      body: "Status: quoted.",
+      type: "business_request_response",
+      ctaUrl: "/business-requests",
+    });
+    expect(notification).not.toHaveProperty("ownerUserId");
+    expect(notification).not.toHaveProperty("owner_user_id");
+    expect(notification).not.toHaveProperty("ownerEmail");
+    expect(notification).not.toHaveProperty("owner_email");
+    expect(notification.body).not.toContain("Your quote is ready");
+  });
+
+  it("allows a note-only response without clearing an omitted note", async () => {
+    mockPool.query.mockResolvedValueOnce({
+      rows: [{
+        id: 62,
+        status: "contacted",
+        requester_user_id: DISTRIBUTOR_ID,
+        request_type: "inquiry",
+      }],
+    });
+
+    await supertest(buildApp())
+      .patch(`/api/business/requests/62/status`)
+      .send({ note: "We will follow up shortly." })
+      .expect(200);
+
+    expect(mockPool.query.mock.calls[0][0]).toContain("CASE WHEN $2::boolean THEN $3 ELSE business_note END");
+    expect(mockPool.query.mock.calls[0][1]).toEqual([null, true, "We will follow up shortly.", 62, BUSINESS_ACCOUNT_ID]);
+    expect(mockStorage.createNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not notify again when a duplicate retry changes nothing", async () => {
+    mockPool.query
+      .mockResolvedValueOnce({
+        rows: [{
+          id: 63,
+          status: "scheduled",
+          requester_user_id: DISTRIBUTOR_ID,
+          request_type: "appointment",
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ id: 63, status: "scheduled" }] });
+
+    await supertest(buildApp())
+      .patch(`/api/business/requests/63/status`)
+      .send({ status: "scheduled" })
+      .expect(200);
+    await supertest(buildApp())
+      .patch(`/api/business/requests/63/status`)
+      .send({ status: "scheduled" })
+      .expect(200);
+
+    expect(mockStorage.createNotification).toHaveBeenCalledTimes(1);
+    expect(mockPool.query.mock.calls[2][1]).toEqual([63, BUSINESS_ACCOUNT_ID]);
   });
 });
 

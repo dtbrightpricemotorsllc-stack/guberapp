@@ -1052,7 +1052,7 @@ export class DatabaseStorage implements IStorage {
       sendPushToUser(data.userId, {
         title: data.title,
         body: data.body,
-        url: data.jobId ? `/jobs/${data.jobId}` : "/",
+        url: data.ctaUrl || (data.jobId ? `/jobs/${data.jobId}` : "/"),
       }).catch(() => {});
     }).catch(() => {});
     return n;
