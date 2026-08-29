@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   AlertCircle,
@@ -8,10 +8,14 @@ import {
   CheckCircle2,
   Clock3,
   MessageSquare,
+  Check,
+  X,
 } from "lucide-react";
 import { GuberLayout } from "@/components/guber-layout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 type CustomerBusinessRequest = {
   source: "request" | "booking";
@@ -20,6 +24,7 @@ type CustomerBusinessRequest = {
   serviceName: string;
   requestedStartAt: string | null;
   proposedStartAt: string | null;
+  proposedEndAt: string | null;
   status: string;
   businessNote: string | null;
   businessName: string;
@@ -27,6 +32,12 @@ type CustomerBusinessRequest = {
   createdAt: string;
   updatedAt: string;
   nextAction: string;
+  proposalHistory: Array<{
+    startAt: string;
+    endAt: string;
+    status: string;
+    createdAt: string;
+  }>;
 };
 
 const REQUEST_TYPE_LABELS: Record<string, string> = {
@@ -79,6 +90,7 @@ function businessInitials(name: string) {
 }
 
 export default function MyBusinessRequests() {
+  const { toast } = useToast();
   const {
     data: requests = [],
     isLoading,
@@ -87,6 +99,33 @@ export default function MyBusinessRequests() {
   } = useQuery<CustomerBusinessRequest[]>({
     queryKey: ["/api/business/requests/mine"],
     retry: false,
+  });
+  const proposalResponse = useMutation({
+    mutationFn: ({
+      id,
+      decision,
+      proposedStartAt,
+      proposedEndAt,
+    }: {
+      id: number;
+      decision: "accept" | "decline";
+      proposedStartAt: string;
+      proposedEndAt: string;
+    }) => apiRequest("POST", `/api/business/bookings/${id}/proposal-response`, {
+      decision,
+      proposedStartAt,
+      proposedEndAt,
+    }),
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/business/requests/mine"] });
+      toast({
+        title: variables.decision === "accept" ? "Appointment time accepted" : "Proposed time declined",
+        description: variables.decision === "accept"
+          ? "Your appointment is now confirmed."
+          : "The business can propose another available time.",
+      });
+    },
+    onError: (error: Error) => toast({ title: "Unable to respond to proposal", description: error.message, variant: "destructive" }),
   });
 
   return (
@@ -186,6 +225,20 @@ export default function MyBusinessRequests() {
                       </div>
                     )}
 
+                    {request.proposalHistory?.length > 0 && (
+                      <div className="rounded-xl border bg-background p-3 text-sm">
+                        <p className="font-semibold">Proposed time history</p>
+                        <div className="mt-2 space-y-1.5 text-muted-foreground">
+                          {request.proposalHistory.map((proposal, index) => (
+                            <p key={`${proposal.createdAt}-${index}`}>
+                              {formatDate(proposal.startAt)}
+                              {" · Offered"}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex items-start gap-2 rounded-xl border bg-background p-3 text-sm">
                       {terminal
                         ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
@@ -195,6 +248,37 @@ export default function MyBusinessRequests() {
                         <p className="mt-0.5 text-muted-foreground">{request.nextAction}</p>
                       </div>
                     </div>
+                    {request.source === "booking" && request.status === "reschedule_proposed" && request.proposedStartAt && request.proposedEndAt && (
+                      <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
+                        <Button
+                          size="sm"
+                          onClick={() => proposalResponse.mutate({
+                            id: request.id,
+                            decision: "accept",
+                            proposedStartAt: request.proposedStartAt!,
+                            proposedEndAt: request.proposedEndAt!,
+                          })}
+                          disabled={proposalResponse.isPending}
+                          data-testid={`accept-proposed-time-${request.id}`}
+                        >
+                          <Check className="mr-1 h-4 w-4" /> Accept new time
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => proposalResponse.mutate({
+                            id: request.id,
+                            decision: "decline",
+                            proposedStartAt: request.proposedStartAt!,
+                            proposedEndAt: request.proposedEndAt!,
+                          })}
+                          disabled={proposalResponse.isPending}
+                          data-testid={`decline-proposed-time-${request.id}`}
+                        >
+                          <X className="mr-1 h-4 w-4" /> Decline new time
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </article>
               );

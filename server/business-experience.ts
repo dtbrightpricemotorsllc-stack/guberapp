@@ -778,10 +778,20 @@ export async function registerBusinessExperienceRoutes(
       `SELECT 'booking' AS source, b.id,
               CASE WHEN s.confirmation_mode = 'quote' THEN 'quote' ELSE 'appointment' END AS "requestType",
               s.name AS "serviceName", b.requested_start_at AS "requestedStartAt",
-              b.proposed_start_at AS "proposedStartAt", b.status,
+              b.proposed_start_at AS "proposedStartAt", b.proposed_end_at AS "proposedEndAt", b.status,
               b.business_note AS "businessNote", b.created_at AS "createdAt",
               b.updated_at AS "updatedAt", bp.company_name AS "businessName",
-              COALESCE(bp.company_logo, ba.company_logo) AS "businessLogo"
+              COALESCE(bp.company_logo, ba.company_logo) AS "businessLogo",
+              COALESCE((
+                SELECT json_agg(json_build_object(
+                  'startAt', e.proposed_start_at,
+                  'endAt', e.proposed_end_at,
+                  'status', e.to_status,
+                  'createdAt', e.created_at
+                ) ORDER BY e.created_at DESC)
+                FROM business_booking_events e
+                WHERE e.booking_id = b.id AND e.proposed_start_at IS NOT NULL
+              ), '[]'::json) AS "proposalHistory"
          FROM business_bookings b
          JOIN business_booking_services s ON s.id = b.service_id
          JOIN business_accounts ba ON ba.id = b.business_account_id

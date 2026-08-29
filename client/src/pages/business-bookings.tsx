@@ -42,6 +42,12 @@ type Booking = {
   quoted_price_cents: number | null;
   proposed_start_at: string | null;
   business_note: string | null;
+  proposal_history: Array<{
+    startAt: string;
+    endAt: string;
+    status: string;
+    createdAt: string;
+  }>;
 };
 
 const EMPTY_FORM = {
@@ -233,14 +239,105 @@ export default function BusinessBookings() {
           <Button className="mt-5" disabled={!form.name.trim() || saveService.isPending} onClick={() => saveService.mutate()}>{saveService.isPending ? "Saving…" : editing ? "Save service" : "Add service"}</Button>
         </section>
 
-        <section>
+         <section>
           <div className="mb-4 flex items-end justify-between"><div><h2 className="text-xl font-bold">Your services</h2><p className="mt-1 text-sm text-muted-foreground">Each service has its own booking method.</p></div><span className="text-xs text-muted-foreground">{services.length} configured</span></div>
           {servicesLoading ? <p className="text-sm text-muted-foreground">Loading services…</p> : services.length === 0 ? <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">Add your first service above.</div> : <div className="grid gap-3 md:grid-cols-2">{services.map((service) => <article key={service.id} className="rounded-2xl border bg-card p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold">{service.name}</h3><p className="mt-1 text-xs text-muted-foreground">{service.description || "No description yet."}</p></div><span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${service.active ? "bg-emerald-500/10 text-emerald-600" : "bg-muted text-muted-foreground"}`}>{service.active ? "Live" : "Hidden"}</span></div><div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground"><span className="rounded-full bg-muted px-2 py-1">{modeLabel(service.confirmation_mode)}</span><span className="rounded-full bg-muted px-2 py-1">{service.pricing_mode === "starting_at" ? `From ${money(service.price_cents)}` : service.pricing_mode === "fixed" ? money(service.price_cents) : "Quote"}</span><span className="rounded-full bg-muted px-2 py-1">{service.fulfillment_mode.replace("_", " ")}</span></div><div className="mt-4 flex gap-2"><Button variant="outline" size="sm" onClick={() => startEdit(service)}>Edit</Button><Button variant="ghost" size="sm" onClick={() => deleteService.mutate(service.id)} disabled={deleteService.isPending}>Hide</Button></div></article>)}</div>}
         </section>
 
         <section>
           <div className="mb-4"><h2 className="text-xl font-bold">Upcoming and requested</h2><p className="mt-1 text-sm text-muted-foreground">Customers are identified by Guber ID only. Personal names and usernames are not shown.</p></div>
-          {bookingsLoading ? <p className="text-sm text-muted-foreground">Loading bookings…</p> : bookings.length === 0 ? <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">No bookings yet.</div> : <div className="space-y-3">{bookings.map((booking) => <article key={booking.id} className="rounded-2xl border bg-card p-5"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold">{booking.service_name}</h3><span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${statusColor(booking.status)}`}>{booking.status.replace(/_/g, " ")}</span></div><p className="mt-2 text-xs text-muted-foreground">Customer Guber ID: {booking.customer_guber_id || "Guber member"}</p>{booking.requested_start_at && <p className="mt-1 flex items-center gap-1.5 text-sm"><Clock3 className="h-3.5 w-3.5 text-primary" />{new Date(booking.requested_start_at).toLocaleString()}</p>}{booking.customer_location && <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="h-3.5 w-3.5 text-primary" />{booking.customer_location}</p>}{booking.customer_note && <p className="mt-3 rounded-lg bg-muted p-3 text-xs leading-relaxed">{booking.customer_note}</p>}</div><div className="flex flex-wrap gap-2">{["requested", "reschedule_proposed"].includes(booking.status) && <><Button size="sm" onClick={() => updateBooking.mutate({ id: booking.id, status: "confirmed" })}><Check className="mr-1 h-4 w-4" /> Accept</Button><Button size="sm" variant="outline" onClick={() => updateBooking.mutate({ id: booking.id, status: "declined" })}>Decline</Button></>}{["requested", "confirmed", "reschedule_proposed"].includes(booking.status) && <Button size="sm" variant="outline" onClick={() => { setRescheduling(rescheduling === booking.id ? null : booking.id); setRescheduleStart(booking.requested_start_at ? new Date(booking.requested_start_at).toISOString().slice(0, 16) : ""); }}>Reschedule</Button>}{["confirmed", "reschedule_proposed"].includes(booking.status) && <Button size="sm" variant="outline" onClick={() => updateBooking.mutate({ id: booking.id, status: "completed" })}>Mark completed</Button>}{!["cancelled", "declined", "completed"].includes(booking.status) && <Button size="sm" variant="ghost" onClick={() => updateBooking.mutate({ id: booking.id, status: "cancelled" })}>Cancel</Button>}</div></div>{rescheduling === booking.id && <div className="mt-4 flex flex-col gap-2 rounded-xl bg-muted p-3 sm:flex-row sm:items-end"><div className="flex-1"><Label className="text-xs">Proposed date and time</Label><Input type="datetime-local" value={rescheduleStart} onChange={(e) => setRescheduleStart(e.target.value)} className="mt-1 bg-background" /></div><Button size="sm" disabled={!rescheduleStart || updateBooking.isPending} onClick={() => { updateBooking.mutate({ id: booking.id, status: "reschedule_proposed", proposedStartAt: rescheduleStart }); setRescheduling(null); }}>Send new time</Button></div>}</article>)}</div>}
+          {bookingsLoading ? (
+            <p className="text-sm text-muted-foreground">Loading bookings…</p>
+          ) : bookings.length === 0 ? (
+            <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">No bookings yet.</div>
+          ) : (
+            <div className="space-y-3">
+              {bookings.map((booking) => (
+                <article key={booking.id} className="rounded-2xl border bg-card p-5">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-bold">{booking.service_name}</h3>
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${statusColor(booking.status)}`}>
+                          {booking.status.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">Customer Guber ID: {booking.customer_guber_id || "Guber member"}</p>
+                      {booking.requested_start_at && (
+                        <p className="mt-1 flex items-center gap-1.5 text-sm">
+                          <Clock3 className="h-3.5 w-3.5 text-primary" />
+                          {new Date(booking.requested_start_at).toLocaleString()}
+                        </p>
+                      )}
+                      {booking.customer_location && (
+                        <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <MapPin className="h-3.5 w-3.5 text-primary" />
+                          {booking.customer_location}
+                        </p>
+                      )}
+                      {booking.customer_note && <p className="mt-3 rounded-lg bg-muted p-3 text-xs leading-relaxed">{booking.customer_note}</p>}
+                      {booking.proposal_history?.length > 0 && (
+                        <div className="mt-3 rounded-lg border bg-background p-3 text-xs">
+                          <p className="font-semibold">Proposed time history</p>
+                          <div className="mt-2 space-y-1 text-muted-foreground">
+                            {booking.proposal_history.map((proposal, index) => (
+                              <p key={`${proposal.createdAt}-${index}`}>{new Date(proposal.startAt).toLocaleString()} · Offered</p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {booking.status === "requested" && (
+                        <>
+                          <Button size="sm" onClick={() => updateBooking.mutate({ id: booking.id, status: "confirmed" })}>
+                            <Check className="mr-1 h-4 w-4" /> Accept
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => updateBooking.mutate({ id: booking.id, status: "declined" })}>Decline</Button>
+                        </>
+                      )}
+                      {["requested", "confirmed", "reschedule_proposed"].includes(booking.status) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setRescheduling(rescheduling === booking.id ? null : booking.id);
+                            setRescheduleStart(booking.requested_start_at ? new Date(booking.requested_start_at).toISOString().slice(0, 16) : "");
+                          }}
+                        >
+                          Reschedule
+                        </Button>
+                      )}
+                      {booking.status === "confirmed" && (
+                        <Button size="sm" variant="outline" onClick={() => updateBooking.mutate({ id: booking.id, status: "completed" })}>Mark completed</Button>
+                      )}
+                      {!["cancelled", "declined", "completed"].includes(booking.status) && (
+                        <Button size="sm" variant="ghost" onClick={() => updateBooking.mutate({ id: booking.id, status: "cancelled" })}>Cancel</Button>
+                      )}
+                    </div>
+                  </div>
+                  {rescheduling === booking.id && (
+                    <div className="mt-4 flex flex-col gap-2 rounded-xl bg-muted p-3 sm:flex-row sm:items-end">
+                      <div className="flex-1">
+                        <Label className="text-xs">Proposed date and time</Label>
+                        <Input type="datetime-local" value={rescheduleStart} onChange={(e) => setRescheduleStart(e.target.value)} className="mt-1 bg-background" />
+                      </div>
+                      <Button
+                        size="sm"
+                        disabled={!rescheduleStart || updateBooking.isPending}
+                        onClick={() => {
+                          updateBooking.mutate({ id: booking.id, status: "reschedule_proposed", proposedStartAt: rescheduleStart });
+                          setRescheduling(null);
+                        }}
+                      >
+                        Send new time
+                      </Button>
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </BizLayout>

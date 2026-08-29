@@ -62,11 +62,21 @@ async function notify(userId: number, title: string, body: string) {
   await storage.createNotification({ userId, title, body, type: "business_booking" }).catch(() => {});
 }
 
-async function recordEvent(client: { query: (query: string, values?: unknown[]) => Promise<any> }, bookingId: number, actorId: number | null, fromStatus: string | null, toStatus: string, note: string | null) {
+async function recordEvent(
+  client: { query: (query: string, values?: unknown[]) => Promise<any> },
+  bookingId: number,
+  actorId: number | null,
+  fromStatus: string | null,
+  toStatus: string,
+  note: string | null,
+  proposedStartAt: Date | null = null,
+  proposedEndAt: Date | null = null,
+) {
   await client.query(
-    `INSERT INTO business_booking_events (booking_id, actor_user_id, from_status, to_status, note)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [bookingId, actorId, fromStatus, toStatus, note],
+    `INSERT INTO business_booking_events
+       (booking_id, actor_user_id, from_status, to_status, note, proposed_start_at, proposed_end_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [bookingId, actorId, fromStatus, toStatus, note, proposedStartAt, proposedEndAt],
   );
 }
 
@@ -195,7 +205,17 @@ export function registerBusinessBookingRoutes(app: Express, guards: { requireAut
     if (error) return res.status(context ? 403 : 404).json({ message: error });
     const result = await pool.query(
       `SELECT b.*, s.name AS service_name, s.confirmation_mode, s.pricing_mode,
-              s.fulfillment_mode, u.guber_id AS customer_guber_id
+              s.fulfillment_mode, u.guber_id AS customer_guber_id,
+              COALESCE((
+                SELECT json_agg(json_build_object(
+                  'startAt', e.proposed_start_at,
+                  'endAt', e.proposed_end_at,
+                  'status', e.to_status,
+                  'createdAt', e.created_at
+                ) ORDER BY e.created_at DESC)
+                FROM business_booking_events e
+                WHERE e.booking_id = b.id AND e.proposed_start_at IS NOT NULL
+              ), '[]'::json) AS proposal_history
          FROM business_bookings b
          JOIN business_booking_services s ON s.id = b.service_id
          JOIN users u ON u.id = b.customer_user_id
@@ -209,7 +229,17 @@ export function registerBusinessBookingRoutes(app: Express, guards: { requireAut
   app.get("/api/business/bookings/mine", requireAuth, async (req, res) => {
     const result = await pool.query(
       `SELECT b.*, s.name AS service_name, s.confirmation_mode, s.pricing_mode,
-              s.fulfillment_mode, bp.company_name, COALESCE(bp.company_logo, ba.company_logo) AS company_logo
+              s.fulfillment_mode, bp.company_name, COALESCE(bp.company_logo, ba.company_logo) AS company_logo,
+              COALESCE((
+                SELECT json_agg(json_build_object(
+                  'startAt', e.proposed_start_at,
+                  'endAt', e.proposed_end_at,
+                  'status', e.to_status,
+                  'createdAt', e.created_at
+                ) ORDER BY e.created_at DESC)
+                FROM business_booking_events e
+                WHERE e.booking_id = b.id AND e.proposed_start_at IS NOT NULL
+              ), '[]'::json) AS proposal_history
          FROM business_bookings b
          JOIN business_booking_services s ON s.id = b.service_id
          JOIN business_accounts ba ON ba.id = b.business_account_id
@@ -231,9 +261,10 @@ export function registerBusinessBookingRoutes(app: Express, guards: { requireAut
     try {
       await client.query("BEGIN");
       const current = await client.query(
-        `SELECT b.*, s.name AS service_name, u.id AS customer_id
+         `SELECT b.*, s.name AS service_name, s.duration_minutes, ba.owner_user_id, u.id AS customer_id
            FROM business_bookings b
            JOIN business_booking_services s ON s.id = b.service_id
+            JOIN business_accounts ba ON ba.id = b.business_account_id
            JOIN users u ON u.id = b.customer_user_id
           WHERE b.id = $1 AND b.business_account_id = $2 FOR UPDATE`,
         [Number(req.params.id), context!.account.id],
@@ -243,19 +274,145 @@ export function registerBusinessBookingRoutes(app: Express, guards: { requireAut
         return res.status(404).json({ message: "Booking not found" });
       }
       const booking = current.rows[0];
+      if (booking.status === "reschedule_proposed" && ["confirmed", "declined", "completed"].includes(status)) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "The customer must respond to the proposed time" });
+      }
       const note = text(req.body.note, 1000) || null;
       const proposedStart = parseDate(req.body.proposedStartAt);
-      const proposedEnd = parseDate(req.body.proposedEndAt);
+       const proposedEnd = parseDate(req.body.proposedEndAt)
+         || (proposedStart && booking.duration_minutes
+           ? new Date(proposedStart.getTime() + Number(booking.duration_minutes) * 60000)
+           : null);
+       if (status === "reschedule_proposed" && (!proposedStart || !proposedEnd || proposedEnd <= proposedStart)) {
+         await client.query("ROLLBACK");
+         return res.status(400).json({ message: "A valid proposed appointment time is required" });
+       }
       await client.query(
         `UPDATE business_bookings
             SET status=$1, business_note=$2, proposed_start_at=$3, proposed_end_at=$4, updated_at=NOW()
           WHERE id=$5`,
         [status, note, proposedStart, proposedEnd, booking.id],
       );
-      await recordEvent(client, booking.id, req.session.userId!, booking.status, status, note);
+       await recordEvent(
+         client,
+         booking.id,
+         req.session.userId!,
+         booking.status,
+         status,
+         note,
+         status === "reschedule_proposed" ? proposedStart : null,
+         status === "reschedule_proposed" ? proposedEnd : null,
+       );
       await client.query("COMMIT");
       await notify(booking.customer_id, `Booking ${status.replace(/_/g, " ")}`, `${booking.service_name} has been updated by the business.`);
       res.json({ id: booking.id, status });
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+
+  app.post("/api/business/bookings/:id/proposal-response", requireAuth, async (req, res) => {
+    const decision = text(req.body.decision, 20);
+    if (!["accept", "decline"].includes(decision)) {
+      return res.status(400).json({ message: "Choose whether to accept or decline the proposed time" });
+    }
+    const expectedStart = parseDate(req.body.proposedStartAt);
+    const expectedEnd = parseDate(req.body.proposedEndAt);
+    if (!expectedStart || !expectedEnd || expectedEnd <= expectedStart) {
+      return res.status(400).json({ message: "The proposed appointment time is required" });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const current = await client.query(
+        `SELECT b.*, s.name AS service_name, ba.owner_user_id
+           FROM business_bookings b
+           JOIN business_booking_services s ON s.id = b.service_id
+           JOIN business_accounts ba ON ba.id = b.business_account_id
+          WHERE b.id = $1 AND b.customer_user_id = $2
+          FOR UPDATE`,
+        [Number(req.params.id), req.session.userId],
+      );
+      if (!current.rows[0]) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Booking not found" });
+      }
+
+      const booking = current.rows[0];
+      const currentStart = parseDate(booking.proposed_start_at);
+      const currentEnd = parseDate(booking.proposed_end_at);
+      if (
+        booking.status !== "reschedule_proposed"
+        || !currentStart
+        || !currentEnd
+        || currentEnd <= currentStart
+        || currentStart.getTime() !== expectedStart.getTime()
+        || currentEnd.getTime() !== expectedEnd.getTime()
+      ) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "This appointment proposal is no longer available" });
+      }
+
+      const nextStatus = decision === "accept" ? "confirmed" : "requested";
+      if (decision === "accept") {
+        await client.query(`SELECT pg_advisory_xact_lock($1)`, [booking.service_id]);
+        const conflict = await client.query(
+          `SELECT 1
+             FROM business_bookings
+            WHERE service_id = $1
+              AND id <> $2
+              AND status = 'confirmed'
+              AND requested_start_at < $4
+              AND COALESCE(requested_end_at, requested_start_at) > $3
+            LIMIT 1`,
+          [booking.service_id, booking.id, currentStart, currentEnd],
+        );
+        if (conflict.rows[0]) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ message: "That proposed time is no longer available" });
+        }
+        await client.query(
+          `UPDATE business_bookings
+              SET status = 'confirmed',
+                  requested_start_at = proposed_start_at,
+                  requested_end_at = proposed_end_at,
+                  proposed_start_at = NULL,
+                  proposed_end_at = NULL,
+                  updated_at = NOW()
+            WHERE id = $1`,
+          [booking.id],
+        );
+      } else {
+        await client.query(
+          `UPDATE business_bookings
+              SET status = 'requested',
+                  proposed_start_at = NULL,
+                  proposed_end_at = NULL,
+                  updated_at = NOW()
+            WHERE id = $1`,
+          [booking.id],
+        );
+      }
+      await recordEvent(
+        client,
+        booking.id,
+        req.session.userId!,
+        booking.status,
+        nextStatus,
+        decision === "accept" ? "Customer accepted the proposed appointment time" : "Customer declined the proposed appointment time",
+      );
+      await client.query("COMMIT");
+      await notify(
+        booking.owner_user_id,
+        decision === "accept" ? "Customer accepted the proposed time" : "Customer declined the proposed time",
+        `${booking.service_name} has a customer scheduling response.`,
+      );
+      res.json({ id: booking.id, status: nextStatus });
     } catch (err) {
       await client.query("ROLLBACK").catch(() => {});
       throw err;

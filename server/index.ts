@@ -2578,8 +2578,12 @@ app.use((req, res, next) => {
       from_status TEXT,
       to_status TEXT NOT NULL,
       note TEXT,
+      proposed_start_at TIMESTAMP,
+      proposed_end_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT NOW()
     );
+    ALTER TABLE business_booking_events ADD COLUMN IF NOT EXISTS proposed_start_at TIMESTAMP;
+    ALTER TABLE business_booking_events ADD COLUMN IF NOT EXISTS proposed_end_at TIMESTAMP;
     CREATE INDEX IF NOT EXISTS idx_booking_events_booking
       ON business_booking_events(booking_id, created_at);
   `).catch(e => console.error("[migration] business booking tables error:", e));
