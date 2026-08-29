@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildJacSystemPrompt } from "../jac-realtime";
+import { buildJacSystemPrompt } from "../jac-prompt-tools";
 import {
   gateJacRouteForConversation,
   hasGuestGoalSignal,
@@ -66,7 +66,7 @@ describe("Team GUBER concierge policy", () => {
     ])).toBe(true);
   });
 
-  it("carries the concierge policy into realtime voice", () => {
+  it("carries the concierge policy into the shared JAC prompt", () => {
     const prompt = buildJacSystemPrompt(null);
 
     expect(prompt).toContain("mall with many doors");

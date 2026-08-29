@@ -1,9 +1,8 @@
 /**
- * JAC concierge prompt and tool definitions.
+ * Transport-neutral JAC concierge prompt and tool definitions.
  *
- * The former OpenAI Realtime transport was retired. Audio sessions now use the
- * canonical ElevenLabs ConvAI path; this module only retains the prompt/tool
- * helpers that are still useful to server-side tests and shared behavior.
+ * Voice transport belongs to the canonical ElevenLabs ConvAI path. Keep these
+ * helpers independent so text and voice surfaces can share the same behavior.
  */
 
 import type { Pool } from "pg";

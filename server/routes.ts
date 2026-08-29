@@ -35583,7 +35583,7 @@ OUTPUT STYLE:
   // ── D.D. Formation Steps Builder ─────────────────────────────────────────
   // Generates a ordered list of real formation steps for the given business type
   // and state. Steps are persisted in dd_cases.steps and advanced by mark_dd_step_complete.
-  // buildDdFormationSteps is imported from ./dd-formation (shared with jac-realtime.ts)
+  // buildDdFormationSteps is imported from ./dd-formation (shared with JAC prompt/tool helpers)
 
   // ── D.D. Business Launch ──────────────────────────────────────────────────
   // GET /api/dd/status — returns whether the authenticated user has unlocked D.D.

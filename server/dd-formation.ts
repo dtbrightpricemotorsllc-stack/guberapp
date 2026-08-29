@@ -1,5 +1,5 @@
 /**
- * D.D. Formation Steps — shared between routes.ts (REST API) and jac-realtime.ts (voice tools).
+ * D.D. Formation Steps — shared between routes.ts and JAC prompt/tool helpers.
  *
  * Generates an ordered checklist of real formation steps for a given business type and state.
  * Steps are persisted in dd_cases.steps and advanced by mark_dd_step_complete / PATCH /api/dd/case/:id/step.
