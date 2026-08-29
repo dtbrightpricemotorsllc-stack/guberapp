@@ -13,23 +13,42 @@ import {
 export const BUSINESS_PLAN_CATALOG = [
   {
     planType: "business",
-    label: "Business",
+    label: "GUBER Business Free",
     monthlyPriceCents: 0,
-    entitlements: ["official_profile", "services", "local_discovery", "explore"],
+    entitlements: ["listing_discovery", "business_profile", "services_products", "hours_service_area"],
     platformFeeRate: 0.2,
   },
   {
     planType: "business_plus",
     label: "Business+",
     monthlyPriceCents: 1999,
-    entitlements: ["official_profile", "services", "local_discovery", "explore", "enhanced_storefront", "priority_promotion", "booking_appointments"],
+    entitlements: [
+      "listing_discovery",
+      "business_profile",
+      "services_products",
+      "hours_service_area",
+      "bookings_requests",
+      "payments_deposits",
+      "customer_history",
+    ],
     platformFeeRate: 0.2,
   },
   {
     planType: "business_pro",
     label: "Business Pro",
     monthlyPriceCents: 4999,
-    entitlements: ["official_profile", "services", "local_discovery", "explore", "enhanced_storefront", "priority_promotion", "lower_platform_fee", "booking_appointments"],
+    entitlements: [
+      "listing_discovery",
+      "business_profile",
+      "services_products",
+      "hours_service_area",
+      "bookings_requests",
+      "payments_deposits",
+      "customer_history",
+      "enhanced_storefront",
+      "priority_promotion",
+      "lower_platform_fee",
+    ],
     platformFeeRate: 0.15,
   },
 ] as const;
@@ -93,11 +112,86 @@ export const FOUNDING_LOCAL_OFFER = {
   terms: "Availability and terms may change. This offer is separate from Founder, Day-1 OG, and Studio products.",
 } as const;
 
+export type BusinessEntitlement = typeof BUSINESS_PLAN_CATALOG[number]["entitlements"][number];
+export type BusinessAccessTier = "unverified" | "free" | "founding" | "business_plus" | "business_pro";
+
+const ACTIVE_BUSINESS_PLAN_STATUSES = new Set(["active", "trialing"]);
+const FREE_BUSINESS_ENTITLEMENTS = BUSINESS_PLAN_CATALOG[0].entitlements;
+const PLUS_BUSINESS_ENTITLEMENTS = BUSINESS_PLAN_CATALOG[1].entitlements;
+const PRO_BUSINESS_ENTITLEMENTS = BUSINESS_PLAN_CATALOG[2].entitlements;
+
+type BusinessAccessAccount = { status?: string | null } | null | undefined;
+type BusinessAccessPlan = {
+  planType?: string | null;
+  plan_type?: string | null;
+  status?: string | null;
+  offerKey?: string | null;
+  offer_key?: string | null;
+} | null | undefined;
+
+export function resolveBusinessEntitlements(account: BusinessAccessAccount, plan: BusinessAccessPlan) {
+  const verified = account?.status === "verified_business";
+  const planType = plan?.planType ?? plan?.plan_type ?? "business";
+  const planStatus = plan?.status ?? null;
+  const offerKey = plan?.offerKey ?? plan?.offer_key ?? null;
+  const subscriptionActive = ACTIVE_BUSINESS_PLAN_STATUSES.has(planStatus || "");
+  const foundingOffer = offerKey === FOUNDING_LOCAL_OFFER.offerKey;
+  const plusPlan = planType === "business_plus";
+  const proPlan = planType === "business_pro";
+  const activityAccess = verified && subscriptionActive && (foundingOffer || plusPlan || proPlan);
+  const proAccess = activityAccess && proPlan && !foundingOffer;
+  const entitlements: readonly BusinessEntitlement[] = !verified
+    ? []
+    : proAccess
+      ? PRO_BUSINESS_ENTITLEMENTS
+      : activityAccess
+        ? PLUS_BUSINESS_ENTITLEMENTS
+        : FREE_BUSINESS_ENTITLEMENTS;
+  const accessTier: BusinessAccessTier = !verified
+    ? "unverified"
+    : proAccess
+      ? "business_pro"
+      : foundingOffer && activityAccess
+        ? "founding"
+        : activityAccess
+          ? "business_plus"
+          : "free";
+
+  return {
+    verified,
+    accessTier,
+    planType,
+    planStatus,
+    offerKey,
+    foundingOffer,
+    subscriptionActive,
+    paidPlanActive: activityAccess,
+    activityAccess,
+    proAccess,
+    entitlements: [...entitlements],
+  };
+}
+
+export function hasBusinessEntitlement(
+  account: BusinessAccessAccount,
+  plan: BusinessAccessPlan,
+  entitlement: BusinessEntitlement,
+) {
+  return resolveBusinessEntitlements(account, plan).entitlements.includes(entitlement);
+}
+
 export function getBusinessPlanFromCatalog(planType: string | null | undefined) {
   return BUSINESS_PLAN_CATALOG.find((plan) => plan.planType === planType);
 }
 export function businessPlatformFeeRate(planType: string | null | undefined) {
   return planType === "business_pro" ? 0.15 : 0.2;
+}
+
+export function businessPlatformFeeRateForAccess(
+  account: BusinessAccessAccount,
+  plan: BusinessAccessPlan,
+) {
+  return resolveBusinessEntitlements(account, plan).proAccess ? 0.15 : 0.2;
 }
 
 export function calculateBusinessPlatformFee(amount: number, planType: string | null | undefined) {
@@ -165,7 +259,7 @@ const INDUSTRY_ALIASES: Record<string, string> = {
   "Staffing / Recruiting": "Staffing",
 };
 
-const MODULES: Record<string, Array<{ key: string; label: string; description: string; href: string }>> = {
+const MODULES: Record<string, Array<{ key: string; label: string; description: string; href: string; requiredAccess?: "activity" | "pro" }>> = {
   Dealership: [
     { key: "inventory", label: "Vehicle Inventory", description: "Manage your dealership inventory in a business-scoped Marketplace view.", href: "/marketplace?business=mine&category=Vehicles" },
     { key: "marketplace", label: "Marketplace Tools", description: "Publish listings, answer requests, and manage buyer conversations.", href: "/marketplace?business=mine" },
@@ -174,17 +268,17 @@ const MODULES: Record<string, Array<{ key: string; label: string; description: s
   Barber: [
     { key: "services", label: "Services", description: "Present services and pricing so customers know what to request.", href: "/biz/account" },
     { key: "availability", label: "Availability", description: "Keep hours and service area current for local discovery.", href: "/business-onboarding" },
-    { key: "requests", label: "Customer Requests", description: "Review incoming service and quote requests.", href: "/biz/post-job" },
+     { key: "requests", label: "Customer Requests", description: "Review incoming service and quote requests.", href: "/biz/requests", requiredAccess: "activity" },
   ],
   Salon: [
     { key: "services", label: "Services", description: "Present services and pricing so customers know what to request.", href: "/biz/account" },
     { key: "availability", label: "Availability", description: "Keep hours and service area current for local discovery.", href: "/business-onboarding" },
-    { key: "requests", label: "Customer Requests", description: "Review incoming service and quote requests.", href: "/biz/post-job" },
+     { key: "requests", label: "Customer Requests", description: "Review incoming service and quote requests.", href: "/biz/requests", requiredAccess: "activity" },
   ],
   Contractor: [
     { key: "service_area", label: "Service Area", description: "Show where your team works and when you are available.", href: "/business-onboarding" },
     { key: "jobs", label: "Jobs & Assignments", description: "Post, track, and complete field assignments.", href: "/biz/post-job" },
-    { key: "quotes", label: "Quotes & Requests", description: "Turn customer requests into scoped work.", href: "/biz/offers" },
+     { key: "quotes", label: "Quotes & Requests", description: "Turn customer requests into scoped work.", href: "/biz/requests", requiredAccess: "activity" },
   ],
   Retail: [
     { key: "storefront", label: "Storefront", description: "Publish products and keep listings scoped to your business.", href: "/marketplace?business=mine" },
@@ -402,8 +496,9 @@ export async function registerBusinessExperienceRoutes(
     const account = await accountFor(req);
     if (!account) return res.status(404).json({ message: "No business account found" });
     const current = await storage.getBusinessPlan(account.id);
-    const currentHasAccess = Boolean(current && ["active", "trialing", "past_due"].includes(current.status));
+    const currentHasAccess = Boolean(current && businessPlanHasAccess(current.status));
     const effectiveCurrent = currentHasAccess ? current : null;
+    const access = resolveBusinessEntitlements(account, effectiveCurrent);
     res.json({
       current: effectiveCurrent ? {
         planType: effectiveCurrent.planType,
@@ -411,11 +506,12 @@ export async function registerBusinessExperienceRoutes(
         renewsAt: effectiveCurrent.renewsAt,
         cancelAtPeriodEnd: Boolean(effectiveCurrent.cancelAtPeriodEnd),
         offerKey: effectiveCurrent.offerKey,
-        entitlements: getBusinessPlanFromCatalog(effectiveCurrent.planType)?.entitlements || BUSINESS_PLAN_CATALOG[0].entitlements,
-      } : { planType: "business", status: "active", renewsAt: null, cancelAtPeriodEnd: false, offerKey: null, entitlements: BUSINESS_PLAN_CATALOG[0].entitlements },
+        entitlements: access.entitlements,
+      } : { planType: "business", status: null, renewsAt: null, cancelAtPeriodEnd: false, offerKey: null, entitlements: access.entitlements },
       catalog: BUSINESS_PLAN_CATALOG,
       foundingOffer: { ...FOUNDING_LOCAL_OFFER, eligible: isFoundingLocalOfferEligible(account) },
       canPurchase: account.status !== "pending_business",
+      access,
     });
   });
 
@@ -568,16 +664,27 @@ export async function registerBusinessExperienceRoutes(
       `SELECT ba.id AS business_account_id, bp.id, bp.company_name, bp.company_logo, bp.industry,
               bp.description, bp.address, bp.zip_code, bp.service_area, bp.website, bp.business_hours,
               bp.preferred_contact_method, bp.capabilities, bp.professional_category,
-              bp.specialties, bp.availability_note
+              bp.specialties, bp.availability_note,
+              plan.plan_type, plan.status AS plan_status, plan.offer_key
          FROM business_accounts ba
          JOIN business_profiles bp ON bp.user_id = ba.owner_user_id
+         LEFT JOIN business_plans plan ON plan.business_account_id = ba.id
         WHERE ${where.join(" AND ")}
         ORDER BY bp.company_name ASC LIMIT 100`,
       params,
     );
      res.json(result.rows.map((row) => ({
        ...row,
-       capabilities: normalizeBusinessCapabilities(row.capabilities),
+       capabilities: (() => {
+         const access = resolveBusinessEntitlements(
+           { status: "verified_business" },
+           { planType: row.plan_type, status: row.plan_status, offerKey: row.offer_key },
+         );
+         const selected = normalizeBusinessCapabilities(row.capabilities);
+         return access.activityAccess
+           ? selected
+           : selected.filter((capability) => ["public_profile", "service_availability"].includes(capability));
+       })(),
        specialties: Array.isArray(row.specialties) ? row.specialties : [],
        isOpen: isOpenNow(row.business_hours),
        kind: "official_business",
@@ -601,24 +708,43 @@ export async function registerBusinessExperienceRoutes(
     );
     if (!result.rows[0]) return res.status(404).json({ message: "Business not found" });
     const business = result.rows[0];
+    const plan = await storage.getBusinessPlan(business.business_account_id);
+    const access = resolveBusinessEntitlements({ status: business.accountStatus }, plan);
+    const selectedCapabilities = normalizeBusinessCapabilities(business.capabilities);
+    const publicActions = access.activityAccess
+      ? selectedCapabilities
+      : selectedCapabilities.filter((capability) => ["public_profile", "service_availability"].includes(capability));
+    // Ordinary marketplace inventory remains governed by marketplace rules.
+    // PRO controls the enhanced storefront presentation, not whether an item
+    // may exist in the ordinary marketplace.
     const inventory = await pool.query(
       `SELECT * FROM marketplace_items WHERE business_account_id = $1 AND status IN ('available', 'active') ORDER BY created_at DESC`,
       [business.business_account_id],
     );
      res.json({
        ...business,
-       capabilities: normalizeBusinessCapabilities(business.capabilities),
+       capabilities: publicActions,
        specialties: Array.isArray(business.specialties) ? business.specialties : [],
-       publicActions: normalizeBusinessCapabilities(business.capabilities),
+       publicActions,
        isOpen: isOpenNow(business.businessHours),
        kind: "official_business",
        inventory: inventory.rows,
+       enhancedStorefront: access.proAccess,
      });
   });
 
   app.get("/api/business/requests", requireAuth, async (req, res) => {
     const account = await accountFor(req);
     if (!account) return res.status(404).json({ message: "No business account found" });
+    const access = resolveBusinessEntitlements(account, await storage.getBusinessPlan(account.id));
+    if (!access.activityAccess) {
+      return res.status(403).json({
+        code: access.verified ? "BUSINESS_PLUS_REQUIRED" : "BUSINESS_VERIFICATION_REQUIRED",
+        message: access.verified
+          ? "Customer requests require BUSINESS+, BUSINESS PRO, or the Founding Local Business offer"
+          : "Business verification is required before using customer requests",
+      });
+    }
     const result = await pool.query(
       `SELECT r.id, r.request_type, r.topic, r.message, r.requested_start_at,
               r.customer_timezone, r.customer_location, r.status, r.business_note,
@@ -679,6 +805,15 @@ export async function registerBusinessExperienceRoutes(
   app.patch("/api/business/requests/:id/status", requireAuth, async (req, res) => {
     const account = await accountFor(req);
     if (!account) return res.status(404).json({ message: "No business account found" });
+    const access = resolveBusinessEntitlements(account, await storage.getBusinessPlan(account.id));
+    if (!access.activityAccess) {
+      return res.status(403).json({
+        code: access.verified ? "BUSINESS_PLUS_REQUIRED" : "BUSINESS_VERIFICATION_REQUIRED",
+        message: access.verified
+          ? "Customer requests require BUSINESS+, BUSINESS PRO, or the Founding Local Business offer"
+          : "Business verification is required before using customer requests",
+      });
+    }
     const status = String(req.body.status || "").trim();
     if (!["contacted", "scheduled", "quoted", "closed", "declined"].includes(status)) {
       return res.status(400).json({ message: "Choose a valid request status" });
@@ -712,6 +847,16 @@ export async function registerBusinessExperienceRoutes(
     const business = businessResult.rows[0];
     if (!business) return res.status(404).json({ message: "Business not found" });
     if (Number(business.owner_user_id) === requesterId) return res.status(400).json({ message: "A business cannot request from itself" });
+    const access = resolveBusinessEntitlements(
+      { status: business.status },
+      await storage.getBusinessPlan(business.id),
+    );
+    if (!access.activityAccess) {
+      return res.status(403).json({
+        code: "BUSINESS_PLUS_REQUIRED",
+        message: "This business does not currently accept requests through GUBER",
+      });
+    }
 
     const capabilities = normalizeBusinessCapabilities(business.capabilities);
     const capabilityForRequest: Record<string, BusinessCapability> = {
@@ -1034,7 +1179,7 @@ export async function qualifyBusinessReferral(businessAccountId: number, adminId
 }
 
 export function businessPlanHasAccess(status: string | null | undefined) {
-  return ["active", "trialing", "past_due"].includes(status || "");
+  return ACTIVE_BUSINESS_PLAN_STATUSES.has(status || "");
 }
 
 export function isFoundingLocalOfferEligible(

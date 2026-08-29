@@ -282,6 +282,10 @@ export default function BizTalentExplorer() {
 
   const queryString = queryParams.toString();
   const fetchUrl = queryString ? `/api/business/talent-explorer?${queryString}` : "/api/business/talent-explorer";
+  const { data: account } = useQuery<{ activityAccess?: boolean }>({
+    queryKey: ["/api/business/account"],
+    retry: false,
+  });
 
   const { data, isLoading } = useQuery<{
     candidates: any[];
@@ -291,6 +295,7 @@ export default function BizTalentExplorer() {
     accountStatus: string;
   }>({
     queryKey: [fetchUrl],
+    enabled: account?.activityAccess === true,
   });
 
   const unlockMutation = useMutation({
@@ -313,6 +318,19 @@ export default function BizTalentExplorer() {
 
   const activeCount = [filters.category, filters.mobilityType, filters.availability, filters.minJobs, filters.minRating].filter(Boolean).length +
     (filters.idVerified ? 1 : 0) + (filters.recentActivity ? 1 : 0) + (filters.backgroundVerified ? 1 : 0) + (filters.droneCertified ? 1 : 0);
+
+  if (account && !account.activityAccess) {
+    return (
+      <BizLayout>
+        <div className="mx-auto max-w-3xl rounded-3xl border bg-card p-8 md:p-12">
+          <Lock className="h-10 w-10" style={{ color: GOLD }} />
+          <p className="mt-6 text-xs font-bold uppercase tracking-[0.2em]" style={{ color: GOLD_DK }}>BUSINESS+ activity access</p>
+          <h1 className="mt-2 text-3xl font-black">Worker scouting is locked</h1>
+          <p className="mt-4 max-w-xl text-sm leading-relaxed" style={{ color: TEXT_SECONDARY }}>Verification alone does not unlock paid business activity tools. Manage your business plan on guberapp.com.</p>
+        </div>
+      </BizLayout>
+    );
+  }
 
   return (
     <BizLayout>
@@ -560,8 +578,8 @@ export default function BizTalentExplorer() {
               <p className="text-sm font-black text-foreground mb-2">Unlock Full Scouting Access</p>
               <p className="text-xs mb-1 leading-relaxed max-w-md mx-auto" style={{ color: TEXT_SECONDARY }}>
                 {isDemoUser || !canPurchase
-                  ? "Unlock full talent search, monthly profile unlocks, and direct outreach to proven workers."
-                  : "Subscribe to the Scout Plan ($99/mo) for full talent search, 20 monthly profile unlocks, and direct outreach to proven workers."}
+                  ? "BUSINESS+ activity access is required for worker scouting and direct outreach."
+                  : "BUSINESS+ activity access is required for worker scouting and direct outreach."}
               </p>
               {!isDemoUser && !canPurchase && (
                 <Link href="/earning-opportunities" className="inline-flex items-center gap-1.5 mt-3 text-xs font-display tracking-wider text-emerald-400/80 hover:text-emerald-400 transition-colors" data-testid="link-scout-earn">

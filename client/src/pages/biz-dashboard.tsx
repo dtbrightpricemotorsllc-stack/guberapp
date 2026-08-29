@@ -12,7 +12,7 @@ import { MobileReturnBanner } from "@/components/mobile-return-banner";
 import {
   Building2, Upload, FileText, ShoppingBag, ChevronRight, Eye, Search,
   ShieldCheck, Send, TrendingUp, Zap, CreditCard, CheckCircle2,
-  Flame, Sparkles, ArrowRight, Clock, Target, X, ScanSearch
+  Flame, Sparkles, ArrowRight, Clock, Target, X, ScanSearch, LockKeyhole
 } from "lucide-react";
 import type { Job, BusinessProfile } from "@shared/schema";
 import { isStoreBuild } from "@/lib/platform";
@@ -44,9 +44,9 @@ function StatCard({ label, value, sub, icon: Icon, iconColor }: { label: string;
   );
 }
 
-function QuickAction({ href, icon: Icon, label, sub, iconColor, badge }: { href: string; icon: any; label: string; sub: string; iconColor: string; badge?: string }) {
+function QuickAction({ href, icon: Icon, label, sub, iconColor, badge, locked }: { href: string; icon: any; label: string; sub: string; iconColor: string; badge?: string; locked?: boolean }) {
   return (
-    <Link href={href}>
+    <Link href={locked ? "/biz/dashboard" : href}>
       <button
         className="w-full text-left rounded-2xl p-4 flex items-center gap-3.5 transition-all group hover:border-white/[0.10] hover:bg-white/[0.01]"
         style={{ background: SURFACE, border: `1px solid ${BORDER}` }}
@@ -66,7 +66,7 @@ function QuickAction({ href, icon: Icon, label, sub, iconColor, badge }: { href:
           </div>
           <p style={{ color: TEXT_MUTED, fontSize: "11px", marginTop: 1 }}>{sub}</p>
         </div>
-        <ChevronRight className="w-4 h-4 flex-shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" style={{ color: TEXT_MUTED }} />
+        {locked ? <LockKeyhole className="w-4 h-4 flex-shrink-0" style={{ color: GOLD_DK }} /> : <ChevronRight className="w-4 h-4 flex-shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" style={{ color: TEXT_MUTED }} />}
       </button>
     </Link>
   );
@@ -238,7 +238,7 @@ export default function BizDashboard() {
   const isPending = account?.status === "pending_business";
   const isApproved = account?.status === "approved_limited";
   const isVerified = account?.status === "verified_business";
-  const hasPlan = account?.planActive;
+  const hasPlan = Boolean(account);
   const companyName = account?.companyName || profile?.companyName || "Your Business";
 
   const total = jobs?.length || 0;
@@ -250,7 +250,8 @@ export default function BizDashboard() {
   const isNewAccount = isPending || (isApproved && total === 0);
   const currentPlanType = businessPlans?.current?.planType || "business";
   const currentOfferKey = businessPlans?.current?.offerKey || null;
-  const paidPlanActive = Boolean(currentOfferKey || ["business_plus", "business_pro"].includes(currentPlanType));
+  const paidPlanActive = Boolean(account?.paidPlanActive);
+  const activityAccess = Boolean(account?.activityAccess);
 
   return (
     <BizLayout>
@@ -301,14 +302,21 @@ export default function BizDashboard() {
               <Link href={dashboardConfig.explore.href} className="text-xs font-semibold" style={{ color: GOLD }}>Explore GUBER →</Link>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
-              {dashboardConfig.modules.map((module: any) => (
-                <Link key={module.key} href={module.href}>
-                  <div className="h-full rounded-xl p-3 transition-colors hover:bg-white/[0.03]" style={{ border: `1px solid ${BORDER}` }}>
-                    <p className="text-sm font-semibold" style={{ color: TEXT_PRIMARY }}>{module.label}</p>
+              {dashboardConfig.modules.map((module: any) => {
+                const moduleAllowed = !module.requiredAccess || (module.requiredAccess === "activity" ? activityAccess : account?.proAccess);
+                return (
+                <Link key={module.key} href={moduleAllowed ? module.href : "/biz/dashboard"}>
+                  <div className="h-full rounded-xl p-3 transition-colors hover:bg-white/[0.03]" style={{ border: `1px solid ${BORDER}`, opacity: moduleAllowed ? 1 : 0.65 }}>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold" style={{ color: TEXT_PRIMARY }}>{module.label}</p>
+                      {!moduleAllowed && <LockKeyhole className="h-3.5 w-3.5" style={{ color: GOLD_DK }} />}
+                    </div>
                     <p className="mt-1 text-[11px] leading-relaxed" style={{ color: TEXT_MUTED }}>{module.description}</p>
+                    {!moduleAllowed && <p className="mt-2 text-[10px] font-semibold" style={{ color: GOLD_DK }}>BUSINESS+ required</p>}
                   </div>
                 </Link>
-              ))}
+                );
+              })}
             </div>
             {businessPlans && (
               <div className="mt-4 rounded-xl p-3" style={{ background: "rgba(198,168,92,0.05)", border: `1px solid ${GOLD_BORDER}` }}>
@@ -316,8 +324,8 @@ export default function BizDashboard() {
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: GOLD_DK }}>Current plan</p>
                     <p className="mt-1 text-sm font-semibold" style={{ color: TEXT_PRIMARY }}>
-                      {currentOfferKey ? businessPlans.foundingOffer?.label : currentPlanType === "business_pro" ? "Business Pro" : currentPlanType === "business_plus" ? "Business+" : "Business"}
-                      <span className="text-xs font-normal" style={{ color: TEXT_MUTED }}> · {businessPlans.current?.status || "active"}</span>
+                      {currentOfferKey ? businessPlans.foundingOffer?.label : currentPlanType === "business_pro" ? "Business Pro" : currentPlanType === "business_plus" ? "Business+" : "GUBER Business Free"}
+                      <span className="text-xs font-normal" style={{ color: TEXT_MUTED }}> · {paidPlanActive ? (businessPlans.current?.status || "active") : "listing access"}</span>
                     </p>
                   </div>
                   <div className="flex items-center gap-2 sm:justify-end">
@@ -373,7 +381,11 @@ export default function BizDashboard() {
                             {plan.monthlyPriceCents === 0 ? "Free" : `$${(plan.monthlyPriceCents / 100).toFixed(2)}/mo`}
                           </p>
                           <p className="mt-1 min-h-8 text-[10px] leading-relaxed" style={{ color: TEXT_MUTED }}>
-                            {plan.entitlements.slice(-2).map((entitlement: string) => entitlement.replace(/_/g, " ")).join(" · ")}
+                            {plan.planType === "business"
+                              ? "Get listed & discovered · Profile · Services/products · Hours + service area"
+                              : plan.planType === "business_plus"
+                                ? "Bookings/requests · Payments/deposits · Customer history"
+                                : "BUSINESS+ plus enhanced storefront · Priority promotion · Lower platform fee"}
                           </p>
                           <Button
                             size="sm"
@@ -495,7 +507,7 @@ export default function BizDashboard() {
           <p className="text-[9px] font-bold tracking-[0.22em] uppercase mb-4" style={{ color: TEXT_MUTED }}>Scouting</p>
 
           {/* Primary Talent Explorer card */}
-          <Link href="/biz/talent-explorer">
+          <Link href={activityAccess ? "/biz/talent-explorer" : "/biz/dashboard"}>
             <div
               className="rounded-2xl p-7 mb-3 cursor-pointer transition-all group"
               style={{ background: SURFACE, border: `1px solid ${BORDER}` }}
@@ -520,16 +532,16 @@ export default function BizDashboard() {
                   <p className="text-[13px] leading-relaxed mb-1" style={{ color: TEXT_SECONDARY }}>
                     Discover proven people through performance, reliability, and real-world work.
                   </p>
-                  <p className="text-xs" style={{ color: TEXT_MUTED }}>Search by category, region, mobility, and trust signals.</p>
+                  <p className="text-xs" style={{ color: TEXT_MUTED }}>{activityAccess ? "Search by category, region, mobility, and trust signals." : "BUSINESS+ activity access is required for worker scouting."}</p>
                 </div>
-                <ChevronRight className="w-5 h-5 flex-shrink-0 mt-1 opacity-20 group-hover:opacity-50 transition-opacity" style={{ color: TEXT_PRIMARY }} />
+                {activityAccess ? <ChevronRight className="w-5 h-5 flex-shrink-0 mt-1 opacity-20 group-hover:opacity-50 transition-opacity" style={{ color: TEXT_PRIMARY }} /> : <LockKeyhole className="w-5 h-5 flex-shrink-0 mt-1" style={{ color: GOLD_DK }} />}
               </div>
             </div>
           </Link>
 
           {/* Secondary row: Sent Offers + Verification */}
           <div className="grid grid-cols-2 gap-3">
-            <QuickAction href="/biz/offers" icon={Send} label="Sent Offers" sub={total > 0 ? "Track your outreach" : "No outreach yet"} iconColor="#60A5FA" />
+            <QuickAction href="/biz/offers" icon={Send} label="Sent Offers" sub={activityAccess ? (total > 0 ? "Track your outreach" : "No outreach yet") : "BUSINESS+ activity access required"} iconColor="#60A5FA" locked={!activityAccess} />
             <QuickAction href="/biz/verification" icon={ShieldCheck} label="Business Verification" sub={isVerified ? "Verified" : "Required for full access"} iconColor={isVerified ? SUCCESS : "#A1A1A1"} />
           </div>
 

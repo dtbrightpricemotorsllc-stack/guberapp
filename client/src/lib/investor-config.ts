@@ -204,7 +204,7 @@ export const INVESTOR_CONFIG = {
       {
         label: "Business Features",
         color: "#00bfff",
-        items: ["$99/mo Business Scout (20 talent unlocks)", "$49 one-time business verification", "Barter & direct offer rails"],
+        items: ["Business+ $19.99/mo", "Business Pro $49.99/mo", "Founding Local Business $9.99/mo while eligible"],
         status: "Live",
       },
       {
@@ -322,7 +322,7 @@ export const INVESTOR_CONFIG = {
       { label: "Cash Drops", body: "Sponsored geo-rewards drive installs and word-of-mouth." },
       { label: "Referral Loops", body: "Every completed job is a story worth sharing." },
       { label: "Verify & Inspect Demand", body: "B2B pull from buyers, dealers, insurers, lenders." },
-      { label: "Business Partnerships", body: "Local businesses unlock talent via Scout Plan." },
+      { label: "Business Partnerships", body: "Verified local businesses can be discovered for free, with paid activity and Pro storefront tools." },
       { label: "Social Media", body: "Organic reach across our channels — zero paid spend." },
     ],
     closer: "Growth driven by visibility and participation.",

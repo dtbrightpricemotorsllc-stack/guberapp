@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { pool } from "./db";
 import { storage } from "./storage";
-import { businessPlanHasAccess } from "./business-experience";
+import { resolveBusinessEntitlements } from "./business-experience";
 
 type Guard = (req: Request, res: Response, next: Function) => unknown;
 
@@ -38,11 +38,7 @@ function parseDate(value: unknown) {
 }
 
 function paidBookingPlan(plan: any) {
-  return Boolean(
-    plan &&
-    businessPlanHasAccess(plan.status) &&
-    (["business_plus", "business_pro"].includes(plan.plan_type) || plan.offer_key),
-  );
+  return resolveBusinessEntitlements({ status: "verified_business" }, plan).activityAccess;
 }
 
 async function getBusinessContext(userId: number) {
@@ -308,8 +304,8 @@ export function registerBusinessBookingRoutes(app: Express, guards: { requireAut
          JOIN business_profiles bp ON bp.user_id = ba.owner_user_id
          JOIN business_plans plan ON plan.business_account_id = ba.id
         WHERE ba.id = $1 AND ba.status = 'verified_business'
-          AND plan.status IN ('active','trialing','past_due')
-          AND (plan.plan_type IN ('business_plus','business_pro') OR plan.offer_key IS NOT NULL)
+          AND plan.status IN ('active','trialing')
+          AND (plan.plan_type IN ('business_plus','business_pro') OR plan.offer_key = 'founding_local_business')
         LIMIT 1`,
       [businessId],
     );
@@ -336,8 +332,8 @@ export function registerBusinessBookingRoutes(app: Express, guards: { requireAut
          JOIN business_accounts ba ON ba.id = s.business_account_id
          JOIN business_plans plan ON plan.business_account_id = ba.id
         WHERE s.id=$1 AND s.business_account_id=$2 AND s.active=true AND ba.status='verified_business'
-          AND plan.status IN ('active','trialing','past_due')
-          AND (plan.plan_type IN ('business_plus','business_pro') OR plan.offer_key IS NOT NULL)
+          AND plan.status IN ('active','trialing')
+          AND (plan.plan_type IN ('business_plus','business_pro') OR plan.offer_key = 'founding_local_business')
         LIMIT 1`,
       [serviceId, businessId],
     );

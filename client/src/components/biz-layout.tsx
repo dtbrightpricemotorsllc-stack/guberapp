@@ -1,17 +1,18 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, FileText, Settings, LogOut,
   Menu, X, Building2, ChevronRight, ChevronLeft, Flame, Search,
-   ShieldCheck, Send, ClipboardList, Eye, CalendarClock, MessageSquare
+   ShieldCheck, Send, ClipboardList, Eye, CalendarClock, MessageSquare, LockKeyhole
 } from "lucide-react";
 
 const GOLD = "#C6A85C";
 const GOLD_DK = "#A88A43";
 
 type NavItem =
-  | { label: string; href: string; icon: any }
+  | { label: string; href: string; icon: any; requiredAccess?: "activity" | "pro" }
   | { section: "divider" }
   | { sectionLabel: string };
 
@@ -19,14 +20,14 @@ const NAV: NavItem[] = [
   { label: "Dashboard", href: "/biz/dashboard", icon: LayoutDashboard },
   { section: "divider" },
   { sectionLabel: "SCOUTING" },
-  { label: "Find Workers", href: "/biz/talent-explorer", icon: Search },
-  { label: "Sent Offers", href: "/biz/offers", icon: Send },
+  { label: "Find Workers", href: "/biz/talent-explorer", icon: Search, requiredAccess: "activity" },
+  { label: "Sent Offers", href: "/biz/offers", icon: Send, requiredAccess: "activity" },
   { label: "Business Verification", href: "/biz/verification", icon: ShieldCheck },
   { section: "divider" },
   { sectionLabel: "OPERATIONS" },
   { label: "Assignments", href: "/biz/post-job", icon: ClipboardList },
-  { label: "Customer Requests", href: "/biz/requests", icon: MessageSquare },
-  { label: "Bookings", href: "/biz/bookings", icon: CalendarClock },
+  { label: "Customer Requests", href: "/biz/requests", icon: MessageSquare, requiredAccess: "activity" },
+  { label: "Bookings", href: "/biz/bookings", icon: CalendarClock, requiredAccess: "activity" },
   { label: "Inspection Standards", href: "/biz/templates", icon: FileText },
   { section: "divider" },
   { sectionLabel: "CAMPAIGNS" },
@@ -39,6 +40,13 @@ const NAV: NavItem[] = [
 function BizSidebar({ onClose }: { onClose?: () => void }) {
   const [location] = useLocation();
   const { logout } = useAuth();
+  const { data: account } = useQuery<{
+    activityAccess?: boolean;
+    proAccess?: boolean;
+  }>({
+    queryKey: ["/api/business/account"],
+    retry: false,
+  });
 
   return (
     <div
@@ -83,10 +91,12 @@ function BizSidebar({ onClose }: { onClose?: () => void }) {
               </p>
             );
           }
-          const { label, href, icon: Icon } = item;
-          const active = location === href || (href !== "/biz/dashboard" && location.startsWith(href));
+          const { label, href, icon: Icon, requiredAccess } = item;
+          const allowed = !requiredAccess ||
+            (requiredAccess === "activity" ? account?.activityAccess : account?.proAccess);
+          const active = allowed && (location === href || (href !== "/biz/dashboard" && location.startsWith(href)));
           return (
-            <Link key={href} href={href} onClick={onClose}>
+            <Link key={href} href={allowed ? href : "/biz/dashboard"} onClick={onClose}>
               <button
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-left group relative"
                 style={{
@@ -103,8 +113,9 @@ function BizSidebar({ onClose }: { onClose?: () => void }) {
                 )}
                 <Icon className="w-[15px] h-[15px] flex-shrink-0" style={{ opacity: active ? 1 : 0.7 }} />
                 <span style={{ fontSize: "12.5px", fontWeight: active ? 600 : 400, letterSpacing: "0.01em" }}>
-                  {label}
+                  {label}{!allowed && " · Locked"}
                 </span>
+                {!allowed && <LockKeyhole className="ml-auto w-3 h-3" style={{ color: GOLD_DK, opacity: 0.8 }} />}
                 {active && (
                   <span className="ml-auto w-1 h-1 rounded-full" style={{ background: GOLD }} />
                 )}

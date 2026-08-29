@@ -18,10 +18,10 @@ describe("getPurchaseToast — purchase-type to toast-props mapping", () => {
     expect(t.duration).toBeGreaterThan(0);
   });
 
-  it("business_scout: shows Scout Plan activated title", () => {
+  it("business_scout: shows business plan activated title", () => {
     const t = getPurchaseToast("business_scout");
-    expect(t.title).toBe("Scout Plan activated!");
-    expect(t.description).toContain("search and contact workers");
+    expect(t.title).toBe("Business plan activated!");
+    expect(t.description).toContain("paid GUBER Business entitlements");
     expect(t.duration).toBeGreaterThan(0);
   });
 
@@ -101,10 +101,10 @@ describe("parsePurchaseUrl — NativeDeepLinkHandler guber://purchase-complete w
     expect(t!.title).toBe("Trust Box activated!");
   });
 
-  it("business_scout deep link → Scout Plan activated toast", () => {
+  it("business_scout deep link → business plan activated toast", () => {
     const t = parsePurchaseUrl("guber://purchase-complete?type=business_scout");
     expect(t).not.toBeNull();
-    expect(t!.title).toBe("Scout Plan activated!");
+    expect(t!.title).toBe("Business plan activated!");
   });
 
   it("business_unlock deep link → Profile unlocks added toast", () => {

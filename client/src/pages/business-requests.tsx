@@ -3,6 +3,8 @@ import { BizLayout } from "@/components/biz-layout";
 import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Check, Clock3, MessageSquare, X } from "lucide-react";
+import { Link } from "wouter";
+import { isStoreBuild } from "@/lib/platform";
 
 type RequestItem = {
   id: number;
@@ -32,9 +34,14 @@ function statusClass(status: string) {
 }
 
 export default function BusinessRequests() {
+  const { data: account } = useQuery<{ activityAccess?: boolean }>({
+    queryKey: ["/api/business/account"],
+    retry: false,
+  });
   const { data: requests = [], isLoading } = useQuery<RequestItem[]>({
     queryKey: ["/api/business/requests"],
     retry: false,
+    enabled: account?.activityAccess === true,
   });
   const update = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) =>
@@ -44,6 +51,19 @@ export default function BusinessRequests() {
 
   return (
     <BizLayout>
+      {account && !account.activityAccess ? (
+        <div className="mx-auto max-w-3xl rounded-3xl border bg-card p-8 md:p-12">
+          <MessageSquare className="h-10 w-10 text-primary" />
+          <p className="mt-6 text-xs font-bold uppercase tracking-[0.2em] text-primary">BUSINESS+ feature</p>
+          <h1 className="mt-2 text-3xl font-black">Customer requests</h1>
+          <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground">Bookings and requests, payments and deposits, and business customer history require BUSINESS+, BUSINESS PRO, or the Founding Local Business offer.</p>
+          {isStoreBuild ? (
+            <p className="mt-6 rounded-xl bg-muted p-4 text-xs text-muted-foreground">Your access is recognized here. Subscriptions and billing are managed on guberapp.com.</p>
+          ) : (
+            <Button asChild className="mt-6"><Link href="/biz/dashboard">View business plans</Link></Button>
+          )}
+        </div>
+      ) : (
       <div className="mx-auto max-w-5xl space-y-8 pb-12">
         <header>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">Customer connections</p>
@@ -82,6 +102,7 @@ export default function BusinessRequests() {
           </div>
         )}
       </div>
+      )}
     </BizLayout>
   );
 }

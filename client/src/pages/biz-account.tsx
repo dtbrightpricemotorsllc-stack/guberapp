@@ -61,6 +61,13 @@ export default function BizAccount() {
     queryKey: ["/api/business/profile"],
     retry: false,
   });
+  const { data: businessAccount } = useQuery<{
+    activityAccess?: boolean;
+    proAccess?: boolean;
+  }>({
+    queryKey: ["/api/business/account"],
+    retry: false,
+  });
 
   const [form, setForm] = useState({
     companyName: "", billingEmail: "", companyLogo: "",
@@ -224,11 +231,13 @@ export default function BizAccount() {
             <div className="grid gap-2 sm:grid-cols-2">
               {BUSINESS_CAPABILITIES.map((capability) => {
                 const checked = form.capabilities.includes(capability.key);
+                const activityCapability = ["customer_inquiries", "quote_requests", "consultation_requests", "appointments", "booking"].includes(capability.key);
+                const locked = activityCapability && !businessAccount?.activityAccess;
                 return (
-                  <label key={capability.key} className="flex gap-2.5 rounded-lg p-2.5 cursor-pointer" style={{ background: checked ? "rgba(201,168,76,0.09)" : "rgba(255,255,255,0.02)", border: `1px solid ${checked ? "rgba(201,168,76,0.28)" : BORDER}` }}>
-                    <input type="checkbox" checked={checked} disabled={capability.key === "public_profile"} onChange={() => toggleCapability(capability.key)} className="mt-0.5 accent-amber-500" data-testid={`checkbox-capability-${capability.key}`} />
+                  <label key={capability.key} className="flex gap-2.5 rounded-lg p-2.5" style={{ background: checked ? "rgba(201,168,76,0.09)" : "rgba(255,255,255,0.02)", border: `1px solid ${checked ? "rgba(201,168,76,0.28)" : BORDER}`, opacity: locked ? 0.65 : 1 }}>
+                    <input type="checkbox" checked={checked} disabled={capability.key === "public_profile" || locked} onChange={() => toggleCapability(capability.key)} className="mt-0.5 accent-amber-500" data-testid={`checkbox-capability-${capability.key}`} />
                     <span>
-                      <span style={{ color: TEXT_PRIMARY, fontSize: "11px", fontWeight: 600 }}>{capability.label}{capability.key === "booking" ? " (paid)" : ""}</span>
+                      <span style={{ color: TEXT_PRIMARY, fontSize: "11px", fontWeight: 600 }}>{capability.label}{locked ? " (BUSINESS+)" : ""}</span>
                       <span style={{ color: TEXT_SECONDARY, fontSize: "10px", lineHeight: 1.35, display: "block", marginTop: "2px" }}>{capability.description}</span>
                     </span>
                   </label>

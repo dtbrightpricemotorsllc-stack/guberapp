@@ -85,9 +85,9 @@ import {
   recordBusinessReferral,
   qualifyBusinessReferral,
   submitBusinessRegistrationEvidence,
-  businessPlatformFeeRate,
+  businessPlatformFeeRateForAccess,
   FOUNDING_LOCAL_OFFER,
-  businessPlanHasAccess,
+  resolveBusinessEntitlements,
   getBusinessPlanFromCatalog,
   isFoundingLocalOfferEligible,
   normalizeBusinessCapabilities,
@@ -3051,12 +3051,19 @@ export async function registerRoutes(
     const acct = await storage.getBusinessAccount(req.session.userId);
     if (!acct) return res.status(404).json({ message: "No business account found" });
     const plan = await storage.getBusinessPlan(acct.id);
-    const planHasAccess = plan && businessPlanHasAccess(plan.status);
+    const access = resolveBusinessEntitlements(acct, plan);
     res.json({
       ...acct,
-      planActive: Boolean(planHasAccess),
-      unlockBalance: planHasAccess ? (plan?.currentUnlockBalance || 0) : 0,
-      planType: planHasAccess ? (plan?.planType || "business") : "business",
+      planActive: access.paidPlanActive,
+      paidPlanActive: access.paidPlanActive,
+      unlockBalance: access.activityAccess ? (plan?.currentUnlockBalance || 0) : 0,
+      planType: access.accessTier === "free" ? "business" : access.planType,
+      accessTier: access.accessTier,
+      entitlements: access.entitlements,
+      activityAccess: access.activityAccess,
+      proAccess: access.proAccess,
+      foundingOffer: access.foundingOffer,
+      planStatus: access.planStatus,
     });
   });
 
@@ -3064,7 +3071,15 @@ export async function registerRoutes(
     if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
     const acct = await storage.getBusinessAccount(req.session.userId);
     if (!acct) return res.status(404).json({ message: "No business account found" });
-    const updated = await storage.updateBusinessAccount(acct.id, req.body);
+    const allowed = ["businessName", "industry", "companyNeedsSummary", "phone", "billingEmail", "businessAddress", "authorizedContactName", "companyLogo"] as const;
+    const update: Record<string, unknown> = {};
+    for (const field of allowed) {
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, field)) update[field] = req.body[field];
+    }
+    if (Object.keys(update).length === 0) {
+      return res.status(400).json({ message: "No editable business account fields were provided" });
+    }
+    const updated = await storage.updateBusinessAccount(acct.id, update);
     res.json(updated);
   });
 
@@ -3346,6 +3361,15 @@ export async function registerRoutes(
     if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
     const acct = await storage.getBusinessAccount(req.session.userId);
     if (!acct) return res.status(404).json({ message: "No business account found" });
+    const access = resolveBusinessEntitlements(acct, await storage.getBusinessPlan(acct.id));
+    if (!access.activityAccess) {
+      return res.status(403).json({
+        code: access.verified ? "BUSINESS_PLUS_REQUIRED" : "BUSINESS_VERIFICATION_REQUIRED",
+        message: access.verified
+          ? "Candidate access requires BUSINESS+, BUSINESS PRO, or the Founding Local Business offer"
+          : "Business verification required before purchasing candidate access",
+      });
+    }
 
     const qty = Math.max(1, Math.min(50, parseInt(req.body.quantity) || 1));
 
@@ -3399,6 +3423,15 @@ export async function registerRoutes(
     if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
     const acct = await storage.getBusinessAccount(req.session.userId);
     if (!acct) return res.status(404).json({ message: "No business account found" });
+    const access = resolveBusinessEntitlements(acct, await storage.getBusinessPlan(acct.id));
+    if (!access.activityAccess) {
+      return res.status(403).json({
+        code: access.verified ? "BUSINESS_PLUS_REQUIRED" : "BUSINESS_VERIFICATION_REQUIRED",
+        message: access.verified
+          ? "Worker scouting is available with BUSINESS+, BUSINESS PRO, or the Founding Local Business offer"
+          : "Business verification is required before worker scouting",
+      });
+    }
 
     const filters: any = {};
     if (req.query.lat) filters.lat = parseFloat(req.query.lat as string);
@@ -3425,6 +3458,7 @@ export async function registerRoutes(
     const results = await storage.searchWorkerProjections(filters);
 
     const plan = await storage.getBusinessPlan(acct.id);
+    if (!plan) return res.status(403).json({ code: "BUSINESS_PLUS_REQUIRED", message: "An active BUSINESS+ plan is required" });
     const unlocks = await storage.getBusinessUnlocks(acct.id);
     const unlockedUserIds = new Set(unlocks.map(u => u.userId));
 
@@ -3459,7 +3493,10 @@ export async function registerRoutes(
       candidates,
       totalUnlocks: unlocks.length,
       unlockBalance: plan?.currentUnlockBalance || 0,
-      planActive: businessPlanHasAccess(plan?.status),
+      planActive: access.paidPlanActive,
+      activityAccess: access.activityAccess,
+      proAccess: access.proAccess,
+      accessTier: access.accessTier,
       accountStatus: acct.status,
     });
   });
@@ -3474,9 +3511,16 @@ export async function registerRoutes(
     }
 
     const plan = await storage.getBusinessPlan(acct.id);
-    if (!plan || !businessPlanHasAccess(plan.status)) {
-      return res.status(403).json({ message: "An active Business plan is required to unlock profiles" });
+    const access = resolveBusinessEntitlements(acct, plan);
+    if (!access.activityAccess) {
+      return res.status(403).json({
+        code: access.verified ? "BUSINESS_PLUS_REQUIRED" : "BUSINESS_VERIFICATION_REQUIRED",
+        message: access.verified
+          ? "Candidate access requires BUSINESS+, BUSINESS PRO, or the Founding Local Business offer"
+          : "Business verification required to unlock profiles",
+      });
     }
+    if (!plan) return res.status(403).json({ code: "BUSINESS_PLUS_REQUIRED", message: "An active BUSINESS+ plan is required" });
 
     const targetUserId = parseInt(req.body.userId);
     if (!targetUserId) return res.status(400).json({ message: "User ID required" });
@@ -3503,6 +3547,8 @@ export async function registerRoutes(
     if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
     const acct = await storage.getBusinessAccount(req.session.userId);
     if (!acct) return res.status(404).json({ message: "No business account found" });
+    const access = resolveBusinessEntitlements(acct, await storage.getBusinessPlan(acct.id));
+    if (!access.activityAccess) return res.status(403).json({ code: "BUSINESS_PLUS_REQUIRED", message: "Candidate access requires BUSINESS+, BUSINESS PRO, or the Founding Local Business offer" });
 
     const targetUserId = parseInt(req.params.userId);
     const projection = await storage.getWorkerProjection(targetUserId);
@@ -3532,6 +3578,8 @@ export async function registerRoutes(
     if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
     const acct = await storage.getBusinessAccount(req.session.userId);
     if (!acct) return res.status(404).json({ message: "No business account found" });
+    const access = resolveBusinessEntitlements(acct, await storage.getBusinessPlan(acct.id));
+    if (!access.activityAccess) return res.status(403).json({ code: "BUSINESS_PLUS_REQUIRED", message: "Candidate access requires BUSINESS+, BUSINESS PRO, or the Founding Local Business offer" });
     const unlocks = await storage.getBusinessUnlocks(acct.id);
     const projections = await Promise.all(
       unlocks.map(async u => {
@@ -3549,7 +3597,8 @@ export async function registerRoutes(
     if (acct.status !== "verified_business") return res.status(403).json({ message: "Business verification required" });
 
     const plan = await storage.getBusinessPlan(acct.id);
-    if (!plan || !businessPlanHasAccess(plan.status)) return res.status(403).json({ message: "An active Business plan is required" });
+    const access = resolveBusinessEntitlements(acct, plan);
+    if (!access.activityAccess) return res.status(403).json({ code: "BUSINESS_PLUS_REQUIRED", message: "Direct offers require BUSINESS+, BUSINESS PRO, or the Founding Local Business offer" });
 
     const parsed = businessOfferSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
@@ -3578,6 +3627,8 @@ export async function registerRoutes(
     if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
     const acct = await storage.getBusinessAccount(req.session.userId);
     if (!acct) return res.status(404).json({ message: "No business account found" });
+    const access = resolveBusinessEntitlements(acct, await storage.getBusinessPlan(acct.id));
+    if (!access.activityAccess) return res.status(403).json({ code: "BUSINESS_PLUS_REQUIRED", message: "Business offers require BUSINESS+, BUSINESS PRO, or the Founding Local Business offer" });
     const offers = await storage.getBusinessOffers(acct.id);
     res.json(offers);
   });
@@ -6065,7 +6116,7 @@ export async function registerRoutes(
               const offerBusinessAccount = await storage.getBusinessAccount(offer.hirerUserId);
               const offerBusinessPlan = offerBusinessAccount ? await storage.getBusinessPlan(offerBusinessAccount.id) : null;
               const effectiveOfferFeeRate = offerBusinessAccount
-                ? businessPlatformFeeRate(offerBusinessPlan?.planType)
+                ? businessPlatformFeeRateForAccess(offerBusinessAccount, offerBusinessPlan)
                 : feeConfig.platformFeeRate;
               const offerAmount = offer.currentOfferAmount;
               const workerShare = Math.round(offerAmount * (1 - effectiveOfferFeeRate) * 100) / 100;
@@ -11482,7 +11533,7 @@ export async function registerRoutes(
       const posterBusinessAccount = await storage.getBusinessAccount(poster.id);
       const posterBusinessPlan = posterBusinessAccount ? await storage.getBusinessPlan(posterBusinessAccount.id) : null;
       const effectivePlatformFeeRate = posterBusinessAccount
-        ? businessPlatformFeeRate(posterBusinessPlan?.planType)
+        ? businessPlatformFeeRateForAccess(posterBusinessAccount, posterBusinessPlan)
         : feeConfig.platformFeeRate;
 
       // Snapshot one cents-based calculation. A standard job is a Stripe
@@ -30620,7 +30671,7 @@ OUTPUT STYLE:
       const offerBusinessAccount = await storage.getBusinessAccount(offer.hirerUserId);
       const offerBusinessPlan = offerBusinessAccount ? await storage.getBusinessPlan(offerBusinessAccount.id) : null;
       const effectiveOfferFeeRate = offerBusinessAccount
-        ? businessPlatformFeeRate(offerBusinessPlan?.planType)
+        ? businessPlatformFeeRateForAccess(offerBusinessAccount, offerBusinessPlan)
         : feeConfig.platformFeeRate;
 
       const offerAmount = offer.currentOfferAmount;
@@ -30746,7 +30797,7 @@ OUTPUT STYLE:
       const offerBusinessAccount = await storage.getBusinessAccount(offer.hirerUserId);
       const offerBusinessPlan = offerBusinessAccount ? await storage.getBusinessPlan(offerBusinessAccount.id) : null;
       const effectiveOfferFeeRate = offerBusinessAccount
-        ? businessPlatformFeeRate(offerBusinessPlan?.planType)
+        ? businessPlatformFeeRateForAccess(offerBusinessAccount, offerBusinessPlan)
         : feeConfig.platformFeeRate;
       const offerAmount = offer.currentOfferAmount;
       const workerShare = Math.round(offerAmount * (1 - effectiveOfferFeeRate) * 100) / 100;

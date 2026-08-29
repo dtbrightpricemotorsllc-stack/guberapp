@@ -1580,7 +1580,7 @@ app.use((req, res, next) => {
       ('general','Is GUBER free to use',
         '["is guber free","does guber cost money","how much does guber cost","is it free to sign up","free to join"]'::jsonb,
         '["free","cost","price","sign up","join"]'::jsonb,
-        'Signing up and posting jobs is free. Workers earn from completed jobs. GUBER takes a small platform fee on completed transactions. Premium features like Studio credits, Scout Plan, and Day-1 OG have their own pricing.',
+        'Signing up and posting jobs is free. Workers earn from completed jobs. GUBER takes a small platform fee on completed transactions. GUBER Business has a free verified listing tier, BUSINESS+ customer-activity tools, and BUSINESS PRO storefront and fee benefits.',
         '[{"label":"See Day-1 OG","message":"What is Day-1 OG?"},{"label":"Find work","message":"How do I start earning?"}]'::jsonb,
         'system'),
       ('jobs','How to post a job',

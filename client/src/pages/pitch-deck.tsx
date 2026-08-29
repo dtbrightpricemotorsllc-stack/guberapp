@@ -284,7 +284,7 @@ function Slide07Model() {
     { label: "Platform Fees", color: NG, items: ["20% on every completed job", "18% for Day-1 OG members", "+3.2% payment processing"], status: "Live" },
     { label: "See For Me / V&I", color: NP, items: ["20% platform fee per inspection", "Inspector earns $40–$120+ per job", "Buyer Order documents"], status: "Live" },
     { label: "Load Board", color: NC, items: ["20% fee on completed loads", "Verified carrier network", "Escrow + proof of delivery"], status: "Live" },
-    { label: "Business Tools", color: NA, items: ["$99/mo Scout Plan (20 unlocks)", "$49 one-time business verification", "Direct offer and barter rails"], status: "Live" },
+    { label: "Business Tools", color: NA, items: ["Business+ $19.99/mo", "Business Pro $49.99/mo", "Founding Local Business $9.99/mo while eligible"], status: "Live" },
     { label: "GUBER Studio", color: "#f472b6", items: ["AI media credit packs $5–$200", "Tiers: $10.99 / $37.99 / $99/mo", "Text-to-video, motion, music"], status: "Live" },
     { label: "Premium + Drops", color: "#a855f7", items: ["$4.99/mo Trust Box", "~60% margin on Cash Drop sponsorships", "Observation marketplace (20%)"], status: "Live" },
   ];
@@ -357,7 +357,7 @@ function Slide09GTM() {
     { icon: "🏙", label: "Activate city supply first", body: "Workers, transporters, inspectors, and service providers via missions, inspection jobs, and general labor postings." },
     { icon: "🤖", label: "JAC-guided onboarding", body: "Every new user is guided instantly from signup to first action. No confusion, no search bars, no learning curve." },
     { icon: "💰", label: "Cash Drops drive installs", body: "Geo-sponsored cash rewards create organic word-of-mouth and installs. Real winners photographed and posted publicly." },
-    { icon: "🏢", label: "Business partnerships", body: "Local businesses, dealerships, and property owners unlock talent and verification services via Scout Plan and V&I." },
+    { icon: "🏢", label: "Business partnerships", body: "Verified local businesses can be discovered for free, with paid customer-activity and Pro storefront tools." },
     { icon: "🔄", label: "Referral loops compound", body: "Every completed job is a shareable proof of income. Workers recruit workers. Hirers share results." },
     { icon: "📈", label: "City by city, then national", body: "Build density before breadth. Document what works. Roll the playbook forward market by market." },
   ];

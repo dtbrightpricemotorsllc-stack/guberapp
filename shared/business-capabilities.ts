@@ -39,7 +39,6 @@ export const BUSINESS_CAPABILITIES = [
 export type BusinessCapability = typeof BUSINESS_CAPABILITIES[number]["key"];
 export const DEFAULT_BUSINESS_CAPABILITIES: BusinessCapability[] = [
   "public_profile",
-  "customer_inquiries",
   "service_availability",
 ];
 

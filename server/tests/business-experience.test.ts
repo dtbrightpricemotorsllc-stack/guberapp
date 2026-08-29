@@ -3,6 +3,7 @@ import {
   BUSINESS_PLAN_CATALOG,
   FOUNDING_LOCAL_OFFER,
   calculateBusinessPlatformFee,
+  businessPlatformFeeRateForAccess,
   getBusinessReferralCashoutBlock,
   getBusinessPlanFromCatalog,
   getBusinessRequirementsForIndustry,
@@ -11,6 +12,7 @@ import {
   normalizeBusinessCapabilities,
   safeProfessionalRequestMessage,
   isFoundingLocalOfferEligible,
+  resolveBusinessEntitlements,
   resolveBusinessReferralPayoutOwner,
 } from "../business-experience";
 
@@ -26,6 +28,66 @@ describe("business handout promises", () => {
     expect(BUSINESS_PLAN_CATALOG.find((plan) => plan.planType === "business_pro")?.monthlyPriceCents).toBe(4999);
     expect(FOUNDING_LOCAL_OFFER.monthlyPriceCents).toBe(999);
     expect(FOUNDING_LOCAL_OFFER.eligibility).toContain("verification");
+    expect(BUSINESS_PLAN_CATALOG[0].entitlements).toEqual([
+      "listing_discovery",
+      "business_profile",
+      "services_products",
+      "hours_service_area",
+    ]);
+    expect(BUSINESS_PLAN_CATALOG[1].entitlements.slice(-3)).toEqual([
+      "bookings_requests",
+      "payments_deposits",
+      "customer_history",
+    ]);
+    expect(BUSINESS_PLAN_CATALOG[2].entitlements.slice(-3)).toEqual([
+      "enhanced_storefront",
+      "priority_promotion",
+      "lower_platform_fee",
+    ]);
+  });
+
+  it("keeps verification separate from paid activity access", () => {
+    const verified = { status: "verified_business" };
+    expect(resolveBusinessEntitlements(verified, null)).toMatchObject({
+      accessTier: "free",
+      activityAccess: false,
+      proAccess: false,
+    });
+    expect(resolveBusinessEntitlements(verified, { planType: "business", status: "active" }).activityAccess).toBe(false);
+    expect(resolveBusinessEntitlements(verified, { planType: "business_plus", status: "active" })).toMatchObject({
+      accessTier: "business_plus",
+      activityAccess: true,
+      proAccess: false,
+    });
+    expect(resolveBusinessEntitlements(verified, {
+      planType: "business",
+      status: "active",
+      offerKey: FOUNDING_LOCAL_OFFER.offerKey,
+    })).toMatchObject({
+      accessTier: "founding",
+      activityAccess: true,
+      proAccess: false,
+    });
+    expect(resolveBusinessEntitlements(verified, { planType: "business_pro", status: "active" })).toMatchObject({
+      accessTier: "business_pro",
+      activityAccess: true,
+      proAccess: true,
+    });
+  });
+
+  it("does not treat unverified or past-due businesses as active paid access", () => {
+    expect(resolveBusinessEntitlements(
+      { status: "approved_limited" },
+      { planType: "business_pro", status: "active" },
+    ).entitlements).toEqual([]);
+    expect(resolveBusinessEntitlements(
+      { status: "verified_business" },
+      { planType: "business_pro", status: "past_due" },
+    )).toMatchObject({
+      accessTier: "free",
+      activityAccess: false,
+      proAccess: false,
+    });
   });
 
   it("applies the lower Business Pro platform fee consistently", () => {
@@ -41,6 +103,25 @@ describe("business handout promises", () => {
       platformFee: 15,
       netAmount: 85,
     });
+  });
+
+  it("applies the lower fee only to a verified business with active PRO access", () => {
+    expect(businessPlatformFeeRateForAccess(
+      { status: "verified_business" },
+      { planType: "business_pro", status: "active" },
+    )).toBe(0.15);
+    expect(businessPlatformFeeRateForAccess(
+      { status: "verified_business" },
+      { planType: "business_pro", status: "past_due" },
+    )).toBe(0.2);
+    expect(businessPlatformFeeRateForAccess(
+      { status: "approved_limited" },
+      { planType: "business_pro", status: "active" },
+    )).toBe(0.2);
+    expect(businessPlatformFeeRateForAccess(
+      { status: "verified_business" },
+      { planType: "business", status: "active", offerKey: FOUNDING_LOCAL_OFFER.offerKey },
+    )).toBe(0.2);
   });
 
   it("requires extra official evidence for regulated business types", () => {
@@ -132,7 +213,6 @@ describe("universal business capabilities", () => {
     ]);
     expect(normalizeBusinessCapabilities([])).toEqual([
       "public_profile",
-      "customer_inquiries",
       "service_availability",
     ]);
   });

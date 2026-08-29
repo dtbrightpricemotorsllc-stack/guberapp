@@ -1450,7 +1450,7 @@ export const businessProfiles = pgTable("business_profiles", {
   socialLinks: jsonb("social_links"),
   photoUrls: jsonb("photo_urls"),
   preferredContactMethod: text("preferred_contact_method"),
-  capabilities: jsonb("capabilities").$type<string[]>().default(["public_profile", "customer_inquiries", "service_availability"]),
+  capabilities: jsonb("capabilities").$type<string[]>().default(["public_profile", "service_availability"]),
   professionalCategory: text("professional_category"),
   specialties: jsonb("specialties").$type<string[]>(),
   availabilityNote: text("availability_note"),

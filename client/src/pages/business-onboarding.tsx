@@ -98,6 +98,10 @@ export default function BusinessOnboarding() {
     queryKey: ["/api/business/profile"],
     retry: false,
   });
+  const { data: businessAccount } = useQuery<{ activityAccess?: boolean }>({
+    queryKey: ["/api/business/account"],
+    retry: false,
+  });
 
   const [step, setStep] = useState(0);
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
@@ -314,18 +318,20 @@ export default function BusinessOnboarding() {
         <div className="grid gap-2 sm:grid-cols-2">
           {BUSINESS_CAPABILITIES.map((capability) => {
             const checked = form.capabilities.includes(capability.key);
+            const activityCapability = ["customer_inquiries", "quote_requests", "consultation_requests", "appointments", "booking"].includes(capability.key);
+            const locked = activityCapability && !businessAccount?.activityAccess;
             return (
-              <label key={capability.key} className={`flex gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${checked ? "border-primary/50 bg-primary/10" : "border-border/30 hover:border-primary/30"}`}>
+              <label key={capability.key} className={`flex gap-3 rounded-xl border p-3 transition-colors ${locked ? "opacity-60" : "cursor-pointer"} ${checked ? "border-primary/50 bg-primary/10" : "border-border/30 hover:border-primary/30"}`}>
                 <input
                   type="checkbox"
                   checked={checked}
-                  disabled={capability.key === "public_profile"}
+                  disabled={capability.key === "public_profile" || locked}
                   onChange={() => toggleCapability(capability.key)}
                   className="mt-1 h-4 w-4 accent-primary"
                   data-testid={`checkbox-capability-${capability.key}`}
                 />
                 <span>
-                  <span className="block text-xs font-semibold">{capability.label}{capability.key === "booking" ? " (paid feature)" : ""}</span>
+                  <span className="block text-xs font-semibold">{capability.label}{locked ? " (BUSINESS+)" : ""}</span>
                   <span className="mt-1 block text-[10px] leading-relaxed text-muted-foreground">{capability.description}</span>
                 </span>
               </label>

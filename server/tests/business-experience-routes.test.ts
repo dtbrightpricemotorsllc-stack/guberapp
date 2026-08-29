@@ -15,6 +15,7 @@ const mockPool = vi.hoisted(() => ({
 const mockStorage = vi.hoisted(() => ({
   getBusinessAccount: vi.fn(),
   getBusinessAccountById: vi.fn(),
+  getBusinessPlan: vi.fn(),
   getBusinessProfile: vi.fn(),
   updateBusinessAccount: vi.fn(),
   createAuditLog: vi.fn(),
@@ -76,6 +77,7 @@ beforeEach(() => {
   mockStorage.getBusinessAccount.mockResolvedValue(businessAccount);
   mockStorage.getBusinessAccountById.mockResolvedValue(businessAccount);
   mockStorage.getBusinessProfile.mockResolvedValue({ companyName: businessAccount.businessName });
+  mockStorage.getBusinessPlan.mockResolvedValue({ planType: "business_plus", status: "active", offerKey: null, currentUnlockBalance: 20 });
   mockStorage.updateBusinessAccount.mockResolvedValue(businessAccount);
   mockStorage.createAuditLog.mockResolvedValue(undefined);
   mockStorage.createNotification.mockResolvedValue(undefined);
@@ -362,6 +364,28 @@ describe("business-scoped inventory", () => {
 });
 
 describe("universal business customer requests", () => {
+  it("does not let verification alone receive customer requests", async () => {
+    mockStorage.getBusinessPlan.mockResolvedValueOnce({ planType: "business", status: "active", offerKey: null });
+    mockPool.query.mockResolvedValueOnce({
+      rows: [{
+        id: BUSINESS_ACCOUNT_ID,
+        owner_user_id: BUSINESS_OWNER_ID,
+        status: "verified_business",
+        industry: "Legal / Professional Services",
+        professional_category: "legal_practice",
+        capabilities: ["public_profile", "consultation_requests"],
+      }],
+    });
+
+    const response = await supertest(buildApp(DISTRIBUTOR_ID))
+      .post(`/api/public/businesses/${BUSINESS_ACCOUNT_ID}/request`)
+      .send({ requestType: "consultation", topic: "Initial consultation" })
+      .expect(403);
+
+    expect(response.body.code).toBe("BUSINESS_PLUS_REQUIRED");
+    expect(mockPool.query).toHaveBeenCalledTimes(1);
+  });
+
   it("returns one customer-scoped history without owner identity fields", async () => {
     mockPool.query
       .mockResolvedValueOnce({

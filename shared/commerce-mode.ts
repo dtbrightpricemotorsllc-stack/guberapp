@@ -35,7 +35,7 @@ export const DEFAULT_COMMERCE_MODE: CommerceMode = "EARNED_CREDITS_ONLY";
 export type TransactionCategory =
   | "REAL_WORLD_SERVICE"      // Job pay, task compensation, transport quotes, deposits, refunds
   | "MARKETPLACE_TRANSACTION" // Marketplace sale prices, buyer/seller agreements
-  | "GUBER_DIGITAL_BENEFIT"   // Platform access, boosts, Studio credits, memberships, Trust Box, Scout Plan
+  | "GUBER_DIGITAL_BENEFIT"   // Platform access, boosts, Studio credits, memberships, Trust Box, business plans
   | "GUBER_REWARD_CREDIT";    // Credit earnings from missions, referrals, tasks
 
 // ─── Reward type ──────────────────────────────────────────────────────────────

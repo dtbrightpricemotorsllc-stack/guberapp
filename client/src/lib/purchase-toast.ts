@@ -56,8 +56,8 @@ export function getPurchaseToast(
   }
   if (type === "business_scout") {
     return {
-      title: "Scout Plan activated!",
-      description: "You can now search and contact workers directly.",
+      title: "Business plan activated!",
+      description: "Your paid GUBER Business entitlements are now available.",
       duration: 5000,
     };
   }
