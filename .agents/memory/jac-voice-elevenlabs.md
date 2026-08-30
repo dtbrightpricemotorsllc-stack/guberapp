@@ -1,7 +1,15 @@
 ---
-name: JAC voice on ElevenLabs (custom LLM)
-description: Invariants for the JAC voice-AI migration to ElevenLabs Conversational AI via a custom-LLM adapter — read before touching the voice pipeline or guber-assist brain.
+name: JAC voice transport split
+description: JAC's canonical brain and legacy ElevenLabs invariants, alongside the active OpenAI Realtime speech transport.
 ---
+
+## Current transport status
+
+The primary homepage/live JAC surface uses the OpenAI Realtime WebSocket relay
+(`server/jac-realtime-relay.ts`) and its same-origin ephemeral-token routes. The
+legacy ElevenLabs ConvAI controller and direct ElevenLabs TTS path remain for
+older/internal surfaces and health/compatibility checks; an ElevenLabs health
+probe succeeding does not prove the homepage Realtime path works.
 
 ## One brain, never forked
 JAC's brain lives in a single function `runGuberAssistBrain(sessionUser, sanitized, voiceMode)` inside the `registerRoutes` closure in `server/routes.ts`. BOTH the text route (`POST /api/ai/guber-assist`) and the ElevenLabs custom-LLM adapter (`POST /api/jac/convai/llm`) call it.
