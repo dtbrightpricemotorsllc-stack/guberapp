@@ -103,10 +103,52 @@ export async function claimActiveCampaignSession(sessionId = getActiveCampaignSe
   return response.json() as Promise<CampaignSession>;
 }
 
+export async function transferGuestSessionBeforeClaim(): Promise<boolean> {
+  let guestSessionId: string | null = null;
+  try {
+    const { getGuestSessionId } = await import("@/hooks/use-guest-jac-session");
+    guestSessionId = getGuestSessionId();
+  } catch {
+    return false;
+  }
+  if (!guestSessionId || guestSessionId === "guest-no-storage") return false;
+  try {
+    const response = await fetch("/api/jac/guest-transfer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ guest_session_id: guestSessionId }),
+    });
+    if (!response.ok) return false;
+    const body = await response.json().catch(() => ({}));
+    if (body.success) {
+      const { clearGuestSessionId } = await import("@/hooks/use-guest-jac-session");
+      clearGuestSessionId();
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+function authenticatedDestination(path: string | null | undefined, fallback: string): string {
+  if (!path || !path.startsWith("/") || path.startsWith("//")) return fallback;
+  const url = new URL(path, window.location.origin);
+  if (["/login", "/signup", "/business-signup", "/auth-success"].includes(url.pathname)) {
+    const returnTo = url.searchParams.get("returnTo");
+    return returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")
+      ? returnTo
+      : fallback;
+  }
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
 export async function claimAndResolveCampaignPath(fallback: string) {
+  await transferGuestSessionBeforeClaim();
   const session = await claimActiveCampaignSession();
   if (!session) return fallback;
-  const destination = session.kind === "business" ? "/biz/dashboard" : session.resumePath || fallback;
+  const destination = session.kind === "business"
+    ? "/biz/dashboard"
+    : authenticatedDestination(session.resumePath, fallback);
   await recordCampaignEvent(session.sessionId, "flow_resumed", `flow_resumed:${destination}`, { destination });
   return withCampaignSession(destination, session.sessionId) || fallback;
 }

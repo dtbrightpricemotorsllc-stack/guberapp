@@ -38,6 +38,57 @@ function safeText(value: unknown, max = 120): string | null {
   return text || null;
 }
 
+function normalizeContext(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const source = value as Record<string, unknown>;
+  const context: Record<string, unknown> = {};
+
+  const lastUserMessage = safeText(source.lastUserMessage, 300);
+  if (lastUserMessage) context.lastUserMessage = lastUserMessage;
+
+  if (Array.isArray(source.conversation)) {
+    context.conversation = source.conversation
+      .filter((message): message is { role: "user" | "assistant"; content: string } =>
+        !!message &&
+        typeof message === "object" &&
+        ["user", "assistant"].includes((message as any).role) &&
+        typeof (message as any).content === "string" &&
+        (message as any).content.trim(),
+      )
+      .slice(-12)
+      .map((message) => ({
+        role: message.role,
+        content: message.content.trim().slice(0, 500),
+      }));
+  }
+
+  const guestDraft = source.guestDraft;
+  if (
+    guestDraft &&
+    typeof guestDraft === "object" &&
+    !Array.isArray(guestDraft) &&
+    typeof (guestDraft as any).type === "string"
+  ) {
+    context.guestDraft = {
+      type: String((guestDraft as any).type).slice(0, 80),
+      data: (guestDraft as any).data && typeof (guestDraft as any).data === "object"
+        ? (guestDraft as any).data
+        : {},
+    };
+  }
+
+  if (source.tracking && typeof source.tracking === "object" && !Array.isArray(source.tracking)) {
+    const tracking = source.tracking as Record<string, unknown>;
+    context.tracking = {
+      intent: safeText(tracking.intent, 120),
+      userType: safeText(tracking.userType, 80) || safeText(tracking.user_type, 80),
+      serviceRequested: safeText(tracking.serviceRequested, 160) || safeText(tracking.service_requested, 160),
+    };
+  }
+
+  return context;
+}
+
 function publicSession(row: any) {
   return {
     sessionId: row.session_id,
@@ -145,9 +196,7 @@ export function registerCampaignOnboardingRoutes(
       }
 
       const sessionId = randomBytes(16).toString("hex");
-      const context = req.body?.context && typeof req.body.context === "object"
-        ? req.body.context
-        : {};
+      const context = normalizeContext(req.body?.context);
       const result = await pool.query(
         `INSERT INTO campaign_onboarding_sessions
           (session_id, campaign_kind, source, referral_code, invitation_code,
@@ -194,9 +243,7 @@ export function registerCampaignOnboardingRoutes(
       const resumePath = req.body?.resumePath == null
         ? null
         : safePath(req.body.resumePath, "/dashboard");
-      const context = req.body?.context && typeof req.body.context === "object"
-        ? req.body.context
-        : {};
+      const context = normalizeContext(req.body?.context);
       const result = await pool.query(
         `UPDATE campaign_onboarding_sessions
             SET original_intent = COALESCE(original_intent, $2),

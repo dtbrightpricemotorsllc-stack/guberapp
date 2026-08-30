@@ -125,7 +125,10 @@ export default function Login() {
           setGoogleAuthPhase("completing");
           // Navigate immediately — the global overlay survives the route change
           // and is cleared once the destination has had time to mount.
-          setLocation(returnTo || (result.accountType === "business" ? "/biz/dashboard" : "/dashboard"), { replace: true });
+          setLocation(
+            await claimAndResolveCampaignPath(returnTo || (result.accountType === "business" ? "/biz/dashboard" : "/dashboard")),
+            { replace: true },
+          );
           setTimeout(() => setGoogleAuthPhase(null), 600);
         } else if (result.reason === "plugin_not_available") {
           // Only the genuine "plugin missing from build" path falls back to
@@ -141,7 +144,10 @@ export default function Login() {
           });
           if (browserResult.ok) {
             setGoogleAuthPhase("completing");
-            setLocation(returnTo || (browserResult.accountType === "business" ? "/biz/dashboard" : "/dashboard"), { replace: true });
+            setLocation(
+              await claimAndResolveCampaignPath(returnTo || (browserResult.accountType === "business" ? "/biz/dashboard" : "/dashboard")),
+              { replace: true },
+            );
             setTimeout(() => setGoogleAuthPhase(null), 600);
           } else if (browserResult.reason !== "cancelled") {
             setGoogleAuthPhase(null);
@@ -188,7 +194,7 @@ export default function Login() {
     try {
       const result = await nativeAppleSignIn();
       if (result.ok) {
-        setLocation(returnTo || "/dashboard", { replace: true });
+        setLocation(await claimAndResolveCampaignPath(returnTo || "/dashboard"), { replace: true });
       } else if (result.reason !== "cancelled") {
         toast({ title: "Sign-In Failed", description: result.message || "Please try again.", variant: "destructive" });
       }

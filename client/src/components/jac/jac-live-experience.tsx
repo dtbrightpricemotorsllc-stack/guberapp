@@ -14,7 +14,7 @@ import {
   useState, useEffect, useRef, useCallback, useId,
 } from "react";
 import {
-  Mic, MicOff, Send, Loader2, RefreshCw, ChevronDown,
+  Mic, MicOff, Send, Loader2, RefreshCw, ChevronDown, Check, X,
   ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -54,6 +54,7 @@ interface Msg {
   text: string;
   buttons?: Array<{ label: string; message: string }>;
   surface?: Surface2Kind;
+  pendingAction?: PendingAction;
 }
 
 type Surface2Kind =
@@ -67,7 +68,14 @@ type Surface2Kind =
   | "services"
   | "offer-service"
   | "signup"
-  | "draft";
+  | "draft"
+  | "confirmation";
+
+interface PendingAction {
+  id: number;
+  type: string;
+  summary: string;
+}
 
 interface Surface2State {
   kind: Surface2Kind;
@@ -124,7 +132,61 @@ function inferSurface(text: string): Surface2Kind {
 }
 
 // ── Surface 2 content renderer ───────────────────────────────────────────────
-function Surface2({ surface, onChipClick }: { surface: Surface2State; onChipClick: (msg: string) => void }) {
+function Surface2({
+  surface,
+  onChipClick,
+  onConfirmAction,
+  onCancelAction,
+  actionLoading,
+}: {
+  surface: Surface2State;
+  onChipClick: (msg: string) => void;
+  onConfirmAction: () => void;
+  onCancelAction: () => void;
+  actionLoading: boolean;
+}) {
+  if (surface.kind === "confirmation" && surface.data?.pendingAction) {
+    const pendingAction = surface.data.pendingAction as PendingAction;
+    return (
+      <div className="flex flex-col gap-4 justify-center h-full" data-testid="jac-live-confirmation">
+        <span className="text-[10px] font-display font-black tracking-[0.2em]" style={{ color: "hsl(45 90% 68%)" }}>
+          READY FOR YOUR APPROVAL
+        </span>
+        <div
+          className="rounded-xl p-4"
+          style={{ background: "hsl(45 60% 8%)", border: "1px solid hsl(45 90% 60% / 0.25)" }}
+        >
+          <p className="text-sm font-semibold text-white">JAC prepared this action</p>
+          <p className="text-sm mt-2 text-white/70" data-testid="jac-live-confirmation-summary">
+            {pendingAction.summary}
+          </p>
+          <p className="text-xs mt-3 text-white/45">Nothing will be submitted until you approve it.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={onCancelAction}
+            disabled={actionLoading}
+            className="py-2.5 rounded-xl text-xs font-display font-bold flex items-center justify-center gap-1.5 disabled:opacity-40"
+            style={{ background: "hsl(222 47% 10%)", border: "1px solid hsl(222 47% 22%)", color: "white" }}
+            data-testid="button-jac-live-cancel"
+          >
+            <X className="w-3.5 h-3.5" /> Not now
+          </button>
+          <button
+            onClick={onConfirmAction}
+            disabled={actionLoading}
+            className="py-2.5 rounded-xl text-xs font-display font-bold flex items-center justify-center gap-1.5 disabled:opacity-40"
+            style={{ background: "linear-gradient(135deg,hsl(270 100% 65%),hsl(152 100% 44%))", color: "black" }}
+            data-testid="button-jac-live-confirm"
+          >
+            {actionLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            Approve
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (surface.kind === "welcome") {
     return (
       <div className="flex flex-col gap-4 h-full justify-center px-2">
@@ -319,7 +381,7 @@ function Surface2({ surface, onChipClick }: { surface: Surface2State; onChipClic
         </div>
         <div className="flex flex-col gap-2 w-full max-w-[220px]">
           <Link
-            href="/get-started"
+            href={surface.route || "/get-started"}
             className="flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-display font-black transition-all active:scale-95"
             style={{ background: "linear-gradient(135deg,hsl(270 100% 65%),hsl(152 100% 44%))", color: "black" }}
           >
@@ -404,12 +466,15 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   const [showTranscript, setShowTranscript] = useState(false);
   const [voicePhase, setVoicePhase] = useState<JacRealtimePhase>("idle");
   const [voiceActive, setVoiceActive] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
   const transcriptEndRef        = useRef<HTMLDivElement>(null);
   const inputRef                = useRef<HTMLInputElement>(null);
   const textId                  = useId();
   const { guestSessionId, saveGuestDraft } = useGuestJacSession();
   const [campaignSessionId] = useState(() => getActiveCampaignSessionId());
   const campaignStartedRef = useRef(false);
+  const campaignKindRef = useRef<"consumer" | "business" | null>(null);
 
   // Persist messages
   useEffect(() => { saveMsgs(msgs); }, [msgs]);
@@ -461,13 +526,23 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       if (!res.ok) throw new Error(`${res.status}`);
       const data = await res.json();
       const reply = (data.message || data.reply || "").trim();
+      const modelRoute = typeof data.route === "string" && data.route ? data.route : null;
+      const rawRoute = campaignKindRef.current === "business" &&
+        !isAuthenticated &&
+        modelRoute?.startsWith("/signup")
+        ? "/business-signup"
+        : modelRoute;
+      const nextPendingAction = data.pendingAction &&
+        Number.isInteger(data.pendingAction.id) &&
+        typeof data.pendingAction.summary === "string"
+        ? data.pendingAction as PendingAction
+        : null;
       if (!isAuthenticated && data.guestDraft?.type === "service_offer") {
         const collected = data.guestDraft.data || {};
         saveServiceOfferPrefill(collected);
         void saveGuestDraft("service_offer", collected);
       }
       if (reply) {
-        const rawRoute = typeof data.route === "string" && data.route ? data.route : null;
         const route = withCampaignSession(rawRoute, campaignSessionId);
         if (campaignSessionId) {
           const intent = typeof data.intent === "string"
@@ -475,11 +550,16 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
             : typeof data.tracking?.intent === "string"
               ? data.tracking.intent
               : undefined;
-          void updateCampaignSession(campaignSessionId, {
+          await updateCampaignSession(campaignSessionId, {
             intent,
             resumePath: rawRoute || undefined,
-            context: { lastUserMessage: trimmed.slice(0, 300) },
-            guestSessionId,
+            context: {
+              lastUserMessage: trimmed.slice(0, 300),
+              conversation: [...history, { role: "assistant", content: reply }].slice(-12),
+              guestDraft: data.guestDraft || undefined,
+              tracking: data.tracking || undefined,
+            },
+            guestSessionId: isAuthenticated ? undefined : guestSessionId,
           });
         }
         const kind = data.guestDraft?.type === "service_offer" || route?.startsWith("/offer-service")
@@ -491,8 +571,12 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
           text: reply,
           buttons: data.buttons,
           surface: kind,
+          pendingAction: nextPendingAction || undefined,
         });
-        setSurface({ kind, route });
+        setPendingAction(nextPendingAction);
+        setSurface(nextPendingAction
+          ? { kind: "confirmation", data: { pendingAction: nextPendingAction } }
+          : { kind, route });
         if (pendingVoiceReplyRef.current) {
           pendingVoiceReplyRef.current = false;
           sessionRef.current?.speakApprovedText(reply);
@@ -504,6 +588,37 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       setTextLoading(false);
     }
   }, [campaignSessionId, guestSessionId, isAuthenticated, msgs, textLoading]);
+
+  const resolvePendingAction = useCallback(async (operation: "confirm" | "cancel") => {
+    if (!pendingAction || actionLoading) return;
+    setActionLoading(true);
+    try {
+      const response = await fetch(`/api/jac/actions/${pendingAction.id}/${operation}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || "That action could not be updated.");
+      setPendingAction(null);
+      setSurface({ kind: "welcome" });
+      addMsg({
+        id: uid(),
+        role: "assistant",
+        text: operation === "confirm"
+          ? (body.result?.message || body.summary || "Approved. I’ll take you to the next step.")
+          : "Okay — I left that action untouched. We can revise it or start something else.",
+      });
+    } catch (error: any) {
+      addMsg({
+        id: uid(),
+        role: "assistant",
+        text: error?.message || "I couldn't update that action. Nothing was submitted.",
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  }, [actionLoading, pendingAction]);
 
   const startVoice = useCallback(() => {
     voiceRequestedRef.current = true;
@@ -588,6 +703,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     void (async () => {
       const session = await getCampaignSession(campaignSessionId);
       if (!session) return;
+      campaignKindRef.current = session.kind;
       const marker = `guber_campaign_jac_started:${campaignSessionId}`;
       try {
         if (sessionStorage.getItem(marker)) return;
@@ -840,7 +956,13 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
           }}
           data-testid="jac-live-surface"
         >
-          <Surface2 surface={surface} onChipClick={handleChipClick} />
+          <Surface2
+            surface={surface}
+            onChipClick={handleChipClick}
+            onConfirmAction={() => void resolvePendingAction("confirm")}
+            onCancelAction={() => void resolvePendingAction("cancel")}
+            actionLoading={actionLoading}
+          />
         </div>
       </div>
 

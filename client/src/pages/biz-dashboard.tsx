@@ -299,7 +299,7 @@ export default function BizDashboard() {
                 <h2 className="mt-1 text-base font-bold" style={{ color: TEXT_PRIMARY }}>{dashboardConfig.businessType} tools for {companyName}</h2>
                 <p className="mt-1 text-xs" style={{ color: TEXT_MUTED }}>Your dashboard is focused by business type. Explore keeps the rest of GUBER one click away.</p>
               </div>
-              <Link href={dashboardConfig.explore.href} className="text-xs font-semibold" style={{ color: GOLD }}>Explore GUBER →</Link>
+              <Link href="/map" className="text-xs font-semibold" style={{ color: GOLD }}>Explore GUBER →</Link>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               {dashboardConfig.modules.map((module: any) => {

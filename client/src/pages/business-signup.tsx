@@ -123,9 +123,15 @@ export default function BusinessSignup() {
     if (!campaignSessionId) return;
     void (async () => {
       const session = await getCampaignSession(campaignSessionId);
-      if (session?.kind === "business" && session.invitationCode) {
+      if (session?.kind !== "business") return;
+      const draft = session.context?.guestDraft as { data?: Record<string, unknown> } | undefined;
+      const data = draft?.data || {};
+      if (session.invitationCode || Object.keys(data).length > 0) {
         setForm((current) => ({
           ...current,
+          businessName: current.businessName || String(data.businessName || data.business_name || data.name || ""),
+          industry: current.industry || String(data.industry || data.businessType || data.business_type || ""),
+          companyNeedsSummary: current.companyNeedsSummary || String(data.companyNeedsSummary || data.needs || data.description || ""),
           invitationCode: current.invitationCode || session.invitationCode || "",
         }));
       }

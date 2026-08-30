@@ -5,23 +5,7 @@ import { getToken, setToken, clearToken } from "./token-storage";
 import { signOutFromGoogle } from "./native-google-sign-in";
 import { Capacitor } from "@capacitor/core";
 import type { User } from "@shared/schema";
-import { getGuestSessionId, clearGuestSessionId } from "@/hooks/use-guest-jac-session";
-import { claimAndResolveCampaignPath } from "./campaign-onboarding";
-
-/** Fire-and-forget: transfer any JAC guest drafts to the newly authenticated user. */
-async function transferJacGuestSession(): Promise<void> {
-  const guestId = getGuestSessionId();
-  if (!guestId || guestId === "guest-no-storage") return;
-  try {
-    const res = await fetch("/api/jac/guest-transfer", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ guest_session_id: guestId }),
-    });
-    if (res.ok) clearGuestSessionId();
-  } catch { /* non-fatal — drafts can be re-entered */ }
-}
+import { claimAndResolveCampaignPath, transferGuestSessionBeforeClaim } from "./campaign-onboarding";
 
 type AuthContextType = {
   user: User | null;
@@ -74,17 +58,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data.token) await setToken(data.token);
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      // Transfer any JAC guest drafts to the newly authenticated session (fire-and-forget)
-      transferJacGuestSession().catch(() => {});
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
     },
   });
 
   useEffect(() => {
     if (!user?.id) return;
-    void transferJacGuestSession();
     void (async () => {
+      // Complete the guest-to-user handoff before resolving the campaign
+      // destination. This prevents a fast redirect from racing draft transfer.
+      await transferGuestSessionBeforeClaim();
       const authPaths = new Set(["/login", "/signup", "/business-signup", "/auth-success"]);
       const fallback = user.accountType === "business" ? "/biz/dashboard" : "/dashboard";
       const destination = await claimAndResolveCampaignPath(fallback);
@@ -100,10 +85,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const body = await res.json();
       if (body.token) await setToken(body.token);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      // Transfer any JAC guest drafts to the newly authenticated session (fire-and-forget)
-      transferJacGuestSession().catch(() => {});
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
     },
   });
 

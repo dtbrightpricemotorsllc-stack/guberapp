@@ -128,7 +128,7 @@ export default function Signup() {
       const result = await nativeAppleSignIn();
       if (result.ok) {
         localStorage.removeItem("guber_ref");
-        setLocation(returnTo || "/dashboard", { replace: true });
+        setLocation(await claimAndResolveCampaignPath(returnTo || "/dashboard"), { replace: true });
       } else if (result.reason !== "cancelled") {
         toast({ title: "Sign-In Failed", description: result.message || "Please try again.", variant: "destructive" });
       }
@@ -153,7 +153,7 @@ export default function Signup() {
         if (result.ok) {
           setGoogleAuthPhase("completing");
           localStorage.removeItem("guber_ref");
-          setLocation(returnTo || "/dashboard", { replace: true });
+          setLocation(await claimAndResolveCampaignPath(returnTo || "/dashboard"), { replace: true });
           setTimeout(() => setGoogleAuthPhase(null), 600);
         } else if (result.reason === "plugin_not_available") {
           // Only the genuine "plugin missing from build" path falls back to
@@ -169,7 +169,7 @@ export default function Signup() {
           if (browserResult.ok) {
             setGoogleAuthPhase("completing");
             localStorage.removeItem("guber_ref");
-            setLocation(returnTo || "/dashboard", { replace: true });
+            setLocation(await claimAndResolveCampaignPath(returnTo || "/dashboard"), { replace: true });
             setTimeout(() => setGoogleAuthPhase(null), 600);
           } else if (browserResult.reason !== "cancelled") {
             setGoogleAuthPhase(null);
