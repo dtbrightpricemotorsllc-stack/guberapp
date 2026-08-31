@@ -16,6 +16,30 @@ const MAX_UPGRADES_PER_MINUTE = 10;
 const IDLE_TIMEOUT_MS = 90_000;
 const MAX_LIFETIME_MS = 15 * 60 * 1000;
 
+type JacRealtimeEnvironment = {
+  [key: string]: string | undefined;
+  OPENAI_REALTIME_API_KEY?: string;
+  OPENAI_API_KEY?: string;
+  OPENAI_REALTIME_BASE_URL?: string;
+  JAC_OPENAI_REALTIME_MODEL?: string;
+};
+
+export function resolveJacRealtimeConfig(env: JacRealtimeEnvironment = process.env) {
+  const apiKey =
+    env.OPENAI_REALTIME_API_KEY ||
+    env.OPENAI_API_KEY;
+  if (!apiKey || /[\r\n]/.test(apiKey)) return null;
+
+  return {
+    apiKey,
+    // Replit's managed HTTP integration does not accept WebSocket upgrades and
+    // its proxy credential is not a direct OpenAI key. Only dedicated/direct
+    // realtime credentials may use this relay.
+    baseUrl: env.OPENAI_REALTIME_BASE_URL || "https://api.openai.com/v1",
+    model: env.JAC_OPENAI_REALTIME_MODEL || "gpt-realtime",
+  };
+}
+
 export const JAC_REALTIME_CLIENT_EVENT_TYPES = new Set([
   "input_audio_buffer.append",
   "input_audio_buffer.commit",
@@ -220,19 +244,14 @@ export function registerJacRealtimeRelay(httpServer: Server): void {
     ) {
       return rejectUpgrade(socket, 401, "Invalid or expired realtime token");
     }
-    const apiKey = process.env.OPENAI_REALTIME_API_KEY || process.env.OPENAI_API_KEY;
-    if (!apiKey || /[\r\n]/.test(apiKey)) {
+    const realtimeConfig = resolveJacRealtimeConfig();
+    if (!realtimeConfig) {
       return rejectUpgrade(socket, 503, "Realtime voice is not configured");
     }
 
     let upstreamUrl: string;
     try {
-      // Replit's managed OpenAI HTTP base currently rejects WebSocket upgrades.
-      // The same server-held credential is valid at OpenAI's Realtime endpoint.
-      // Keep a dedicated override for compatible gateways without reusing the
-      // ordinary chat/completions base URL.
-      const realtimeBaseUrl = process.env.OPENAI_REALTIME_BASE_URL || "https://api.openai.com/v1";
-      upstreamUrl = buildOpenAiRealtimeUrl(realtimeBaseUrl, process.env.JAC_OPENAI_REALTIME_MODEL || "gpt-realtime");
+      upstreamUrl = buildOpenAiRealtimeUrl(realtimeConfig.baseUrl, realtimeConfig.model);
     } catch {
       return rejectUpgrade(socket, 503, "Realtime voice is not configured");
     }
@@ -241,7 +260,7 @@ export function registerJacRealtimeRelay(httpServer: Server): void {
     for (const [nonce, exp] of usedNonces) if (exp < now) usedNonces.delete(nonce);
     socketsByIp.set(ip, (socketsByIp.get(ip) || 0) + 1);
     wss.handleUpgrade(req, socket, head, (browser) => {
-      connectionContext.set(browser, { ip, upstreamUrl, apiKey });
+      connectionContext.set(browser, { ip, upstreamUrl, apiKey: realtimeConfig.apiKey });
       wss.emit("connection", browser, req);
     });
   });

@@ -14,6 +14,7 @@
 import {
   useState, useEffect, useRef, useCallback, useId,
 } from "react";
+import { ConversationProvider } from "@elevenlabs/react";
 import {
   Mic, MicOff, Send, Loader2, RefreshCw, ChevronDown, Check, X,
   ArrowRight,
@@ -28,6 +29,10 @@ import {
   JacOpenAIRealtimeSession,
   type JacOpenAIRealtimeSessionHandle,
 } from "@/components/jac/jac-openai-realtime-session";
+import {
+  JacConvaiSession,
+  type JacConvaiSessionHandle,
+} from "@/components/jac/jac-convai-session";
 import type { JacRealtimePhase } from "@/lib/jac-openai-realtime-transport";
 import {
   appendSharedJacMessage,
@@ -448,6 +453,8 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   const voiceRequestedRef = useRef(false);
   const intentionalEndRef = useRef(false);
   const sessionRef = useRef<JacOpenAIRealtimeSessionHandle>(null);
+  const convaiSessionRef = useRef<JacConvaiSessionHandle>(null);
+  const voiceTransportRef = useRef<"openai" | "convai">("openai");
   const statusRef = useRef<JacRealtimePhase>("idle");
   const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recoveryAttemptsRef = useRef(0);
@@ -468,6 +475,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   const [showTranscript, setShowTranscript] = useState(false);
   const [voicePhase, setVoicePhase] = useState<JacRealtimePhase>("idle");
   const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceTransport, setVoiceTransport] = useState<"openai" | "convai">("openai");
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const transcriptEndRef        = useRef<HTMLDivElement>(null);
@@ -581,7 +589,9 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
           : { kind, route });
         if (pendingVoiceReplyRef.current) {
           pendingVoiceReplyRef.current = false;
-          sessionRef.current?.speakApprovedText(reply);
+          if (voiceTransportRef.current === "openai") {
+            sessionRef.current?.speakApprovedText(reply);
+          }
         }
       }
     } catch {
@@ -671,6 +681,20 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
 
   const onVoiceError = useCallback((message: string) => {
     setVoicePhase("error");
+    if (
+      voiceTransportRef.current === "openai" &&
+      voiceRequestedRef.current &&
+      !voiceConnectedRef.current &&
+      !intentionalEndRef.current
+    ) {
+      voiceTransportRef.current = "convai";
+      setVoiceTransport("convai");
+      setVoicePhase("connecting");
+      setError(null);
+      setEnded(false);
+      setReconnecting(false);
+      return;
+    }
     if (voiceConnectedRef.current && voiceRequestedRef.current && !intentionalEndRef.current) {
       scheduleRecovery(message);
     } else {
@@ -733,7 +757,8 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
 
   const toggleMute = useCallback(() => {
     if (!connected) return;
-    sessionRef.current?.toggleMute();
+    if (voiceTransportRef.current === "convai") convaiSessionRef.current?.toggleMute();
+    else sessionRef.current?.toggleMute();
     setMutedLocal(next => !next);
   }, [connected]);
 
@@ -752,7 +777,8 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     setTimeout(() => {
       intentionalEndRef.current = false;
       setVoiceActive(true);
-      sessionRef.current?.reconnect();
+      if (voiceTransportRef.current === "convai") convaiSessionRef.current?.reconnect();
+      else sessionRef.current?.reconnect();
     }, 400);
   }, []);
 
@@ -784,21 +810,42 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
         flexDirection: "column",
       }}
     >
-      <JacOpenAIRealtimeSession
-        ref={sessionRef}
-        e2eTarget="homepage"
-        active={voiceActive}
-        sessionEndpoint={sessionEndpoint}
-        onPhaseChange={onVoicePhaseChange}
-        onUserTranscript={(text) => {
-          pendingVoiceReplyRef.current = true;
-          void sendText(text);
-        }}
-        // Realtime speech is only accepted after the onboard brain has approved
-        // and appended it above; never duplicate it in the transcript.
-        onJacResponse={() => {}}
-        onError={onVoiceError}
-      />
+      {voiceTransport === "openai" ? (
+        <JacOpenAIRealtimeSession
+          ref={sessionRef}
+          e2eTarget="homepage"
+          active={voiceActive}
+          sessionEndpoint={sessionEndpoint}
+          onPhaseChange={onVoicePhaseChange}
+          onUserTranscript={(text) => {
+            pendingVoiceReplyRef.current = true;
+            void sendText(text);
+          }}
+          // Realtime speech is only accepted after the onboard brain has approved
+          // and appended it above; never duplicate it in the transcript.
+          onJacResponse={() => {}}
+          onError={onVoiceError}
+        />
+      ) : (
+        <ConversationProvider>
+          <JacConvaiSession
+            ref={convaiSessionRef}
+            active={voiceActive}
+            e2eTarget="homepage"
+            sessionEndpoint={isAuthenticated ? "/api/jac/convai/session" : "/api/jac/convai/public-session"}
+            onPhaseChange={onVoicePhaseChange}
+            onUserTranscript={(text) => {
+              addMsg({ id: uid(), role: "user", text });
+            }}
+            onJacResponse={(text) => {
+              const kind = inferSurface(text);
+              addMsg({ id: uid(), role: "assistant", text, surface: kind });
+              setSurface({ kind });
+            }}
+            onError={onVoiceError}
+          />
+        </ConversationProvider>
+      )}
       {/* ── Two-surface layout ────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row flex-1 gap-0 lg:gap-6 items-stretch">
 

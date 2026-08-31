@@ -134,8 +134,8 @@ test("JAC takes a real user from greeting to a safe action across login", async 
   await page.route("**/api/jac/pending-draft-card", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ card: null }) }));
 
-  // A first voice outage does not reconnect automatically and never takes text
-  // chat away. The user can explicitly retry.
+  // A first OpenAI outage switches once to the configured ConvAI transport
+  // without showing a terminal error or taking text chat away.
   await page.goto("/?jac_e2e=1");
   await expect(page.getByTestId("page-home")).toBeVisible();
   const startVoice = page.getByRole("button", { name: "Start voice" });
@@ -146,16 +146,14 @@ test("JAC takes a real user from greeting to a safe action across login", async 
     });
   }
   await emitVoice(page, "homepage", "error", "temporary voice outage");
-  await expect(page.getByTestId("jac-live-voice-error")).toContainText("Voice is unavailable right now");
-  await expect(page.getByTestId("jac-live-voice-error")).toContainText("Text chat is still available");
-  await page.getByTestId("button-jac-live-reconnect").click();
-  await page.waitForTimeout(450);
+  await expect(page.getByTestId("jac-live-voice-status")).toHaveText("Connecting…");
 
-  // The deterministic provider seam emits the same callbacks the live transport
-  // uses. User speech goes through the canonical onboard endpoint.
+  // The deterministic provider seam emits the same callbacks as the backup
+  // transport, including the approved assistant response.
   await emitVoice(page, "homepage", "connect");
   await expect(page.getByTestId("jac-live-voice-status")).toHaveText("Listening…");
   await emitVoice(page, "homepage", "user-transcript", "Please remember that I need account guidance.");
+  await emitVoice(page, "homepage", "assistant-response", PUBLIC_TEXT_REPLY);
   await emitVoice(page, "homepage", "speaking");
   await expect(page.getByTestId("jac-live-voice-status")).toHaveText("JAC is speaking");
 

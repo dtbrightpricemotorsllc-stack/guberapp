@@ -6,6 +6,7 @@ import {
   JAC_REALTIME_CLIENT_EVENT_TYPES,
   JAC_REALTIME_TOKEN_TTL_MS,
   JAC_REALTIME_VOICE,
+  resolveJacRealtimeConfig,
   sanitizeJacRealtimeClientEvent,
 } from "../jac-realtime-relay";
 
@@ -22,6 +23,23 @@ describe("JAC OpenAI Realtime relay security helpers", () => {
     expect(() => buildOpenAiRealtimeUrl("file:///tmp/key")).toThrow(/HTTP/);
     expect(() => buildOpenAiRealtimeUrl("http://api.openai.com/v1")).toThrow(/HTTPS/);
     expect(() => buildOpenAiRealtimeUrl("https://user:pass@example.com/v1")).toThrow(/credentials/);
+  });
+
+  it("does not mistake the managed HTTP proxy credential for a direct realtime key", () => {
+    expect(resolveJacRealtimeConfig({
+      AI_INTEGRATIONS_OPENAI_API_KEY: "managed-proxy-test-key",
+    })).toBeNull();
+
+    expect(resolveJacRealtimeConfig({
+      OPENAI_REALTIME_API_KEY: "dedicated-test-key",
+      OPENAI_API_KEY: "standard-test-key",
+      OPENAI_REALTIME_BASE_URL: "https://compatible.example/v1",
+      JAC_OPENAI_REALTIME_MODEL: "realtime-custom",
+    })).toEqual({
+      apiKey: "dedicated-test-key",
+      baseUrl: "https://compatible.example/v1",
+      model: "realtime-custom",
+    });
   });
 
   it("builds a speech-only pcm16 session with server VAD auto-response disabled", () => {

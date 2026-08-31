@@ -366,6 +366,7 @@ interface MicLostToken {
 interface Props {
   active: boolean;
   sessionEndpoint?: string;
+  e2eTarget?: "homepage" | "assistant";
   suppressFirstMessage?: boolean;
   onPhaseChange(phase: ConvaiPhase): void;
   onUserTranscript(text: string): void;
@@ -374,7 +375,7 @@ interface Props {
 }
 
 export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
-  function JacConvaiSession({ active, sessionEndpoint = "/api/jac/convai/session", suppressFirstMessage = false, onPhaseChange, onUserTranscript, onJacResponse, onError }, ref) {
+  function JacConvaiSession({ active, sessionEndpoint = "/api/jac/convai/session", e2eTarget = "assistant", suppressFirstMessage = false, onPhaseChange, onUserTranscript, onJacResponse, onError }, ref) {
     const cbRef = useRef({ onPhaseChange, onUserTranscript, onJacResponse, onError });
     useEffect(() => {
       cbRef.current = { onPhaseChange, onUserTranscript, onJacResponse, onError };
@@ -525,7 +526,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
     });
 
     const connected = e2eHarnessEnabled ? e2eConnected : status === "connected";
-    useEffect(() => subscribeToJacE2EVoiceEvents("assistant", (event) => {
+    useEffect(() => subscribeToJacE2EVoiceEvents(e2eTarget, (event) => {
       if (event.kind === "connect" || event.kind === "listening") {
         intentionalReconnectRef.current = false;
         setE2EConnected(true);
@@ -554,7 +555,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         setE2EConnected(false);
         cbRef.current.onError("Voice disconnected. Tap the mic to retry.");
       }
-    }), []);
+    }), [e2eTarget]);
 
     // Report phase changes — never call setState during render, always via effect
     const prevPhaseRef = useRef<ConvaiPhase>("idle");

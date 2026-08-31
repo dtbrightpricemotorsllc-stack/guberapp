@@ -1,15 +1,30 @@
 ---
 name: JAC voice transport split
-description: JAC's canonical brain and legacy ElevenLabs invariants, alongside the active OpenAI Realtime speech transport.
+description: JAC's shared brain and voice invariants across direct OpenAI Realtime and the signed ConvAI fallback.
 ---
 
 ## Current transport status
 
-The primary homepage/live JAC surface uses the OpenAI Realtime WebSocket relay
-(`server/jac-realtime-relay.ts`) and its same-origin ephemeral-token routes. The
-legacy ElevenLabs ConvAI controller and direct ElevenLabs TTS path remain for
-older/internal surfaces and health/compatibility checks; an ElevenLabs health
-probe succeeding does not prove the homepage Realtime path works.
+The homepage/live JAC surface tries the OpenAI Realtime WebSocket relay first.
+If that initial transport fails before connecting, it switches once to the
+signed ElevenLabs ConvAI session; it must never mount both active transports or
+loop between them. A failure of the backup transport returns to the explicit
+Start voice control while text remains available.
+
+Replit's managed OpenAI HTTP integration credential is a proxy credential, not
+a direct OpenAI API key. Its HTTP base rejects realtime WebSocket upgrades and
+the credential is rejected at OpenAI's direct realtime endpoint. Only a genuine
+`OPENAI_REALTIME_API_KEY` or direct `OPENAI_API_KEY` may activate the relay;
+never treat `AI_INTEGRATIONS_OPENAI_API_KEY` as realtime-capable.
+
+**Why:** Otherwise mobile browsers successfully open the microphone, then the
+relay fails immediately and the homepage misleadingly settles on "Voice
+unavailable" even though the configured ConvAI path is healthy.
+
+**How to apply:** Keep OpenAI as the preferred speech renderer when directly
+configured. On an initial pre-connect failure, unmount it and activate ConvAI
+once. ConvAI must stay inside `ConversationProvider`, use its signed WebSocket,
+and preserve the approved voice lock. Do not auto-retry a failed backup.
 
 ## One brain, never forked
 JAC's brain lives in a single function `runGuberAssistBrain(sessionUser, sanitized, voiceMode)` inside the `registerRoutes` closure in `server/routes.ts`. BOTH the text route (`POST /api/ai/guber-assist`) and the ElevenLabs custom-LLM adapter (`POST /api/jac/convai/llm`) call it.
