@@ -23,6 +23,16 @@ function json(route: Route, body: unknown, status = 200) {
   });
 }
 
+async function enterCanonicalJac(page: Page) {
+  const doorEntry = page.getByRole("button", { name: "Enter Team GUBER" });
+  if (await doorEntry.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await doorEntry.click();
+    await page.getByRole("button", { name: "Type to JAC instead" }).click();
+    await page.getByRole("button", { name: "Go to full app" }).click();
+  }
+  await expect(page.getByLabel("Message JAC")).toBeVisible();
+}
+
 async function installContinuityFixtures(
   page: Page,
   session: ContinuitySession | null,
@@ -86,11 +96,31 @@ async function installContinuityFixtures(
     authenticated = true;
     console.log("[continuity] signup", route.request().postDataJSON());
     onSignup?.(route.request().postDataJSON());
-    await json(route, { token: "test-token" });
+    await json(route, {
+      id: 812,
+      email: "continuity@example.test",
+      username: "continuity_test",
+      fullName: "Continuity Test",
+      firstName: "Continuity",
+      role: "user",
+      accountType: "individual",
+      token: "test-token",
+    });
   });
   await page.route("**/api/auth/business-access-request", async (route) => {
     authenticated = true;
-    await json(route, { ok: true });
+    await json(route, {
+      user: {
+        id: 812,
+        email: "continuity@example.test",
+        username: "continuity_test",
+        fullName: "Continuity Test",
+        firstName: "Continuity",
+        role: "user",
+        accountType: "business",
+      },
+      businessAccount: { id: 91 },
+    });
   });
 
   return { patches, claims, transfers, isAuthenticated: () => authenticated };
@@ -139,6 +169,7 @@ test.describe("onboarding continuity acceptance", () => {
 
     await page.goto("/join/FLYER42");
     await expect(page.getByTestId("page-home")).toBeVisible();
+    await enterCanonicalJac(page);
     await page.getByLabel("Message JAC").fill("I want to offer a repair service.");
     await page.getByLabel("Message JAC").press("Enter");
     await expect(page.getByRole("link", { name: "Publish your service", exact: true })).toBeVisible();
@@ -195,7 +226,7 @@ test.describe("onboarding continuity acceptance", () => {
 
     await page.goto("/business-join/INVITE42");
     await expect(page.getByTestId("page-home")).toBeVisible();
-    await expect(page.getByLabel("Message JAC")).toBeVisible();
+    await enterCanonicalJac(page);
     await expect.poll(() => requests.length).toBeGreaterThan(0);
     await expect(page.getByRole("link", { name: "Create Account", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Create Account", exact: true }).click();

@@ -51,6 +51,13 @@ async function dismissDashboardOverlays(page: Page) {
   }
 }
 
+async function enterThroughTeamGuberDoor(page: Page) {
+  await page.getByRole("button", { name: "Enter Team GUBER" }).click();
+  await page.getByRole("button", { name: "Type to JAC instead" }).click();
+  await page.getByRole("button", { name: "Go to full app" }).click();
+  await expect(page.getByRole("button", { name: "Start voice" })).toBeVisible();
+}
+
 test("JAC takes a real user from greeting to a safe action across login", async ({ page }) => {
   const origin = new URL(process.env.E2E_BASE_URL || "http://localhost:5000").origin;
   await page.context().grantPermissions(["microphone"], { origin });
@@ -137,6 +144,7 @@ test("JAC takes a real user from greeting to a safe action across login", async 
   // chat away. The user can explicitly retry.
   await page.goto("/?jac_e2e=1");
   await expect(page.getByTestId("page-home")).toBeVisible();
+  await enterThroughTeamGuberDoor(page);
   await page.getByRole("button", { name: "Start voice" }).click();
   await emitVoice(page, "homepage", "error", "temporary voice outage");
   await expect(page.getByTestId("jac-live-voice-error")).toContainText("Voice is unavailable right now");

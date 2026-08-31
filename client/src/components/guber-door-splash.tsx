@@ -22,6 +22,12 @@ import { JacAnimatedCharacter, type JacState } from "@/components/jac/jac-animat
 import { SignupCard } from "@/components/jac/jac-signup-card";
 import { getGuestSessionId } from "@/hooks/use-guest-jac-session";
 import { saveServiceOfferPrefill } from "@/lib/jac-listing-prefill";
+import {
+  claimAndResolveCampaignPath,
+  getActiveCampaignSessionId,
+  updateCampaignSession,
+  withCampaignSession,
+} from "@/lib/campaign-onboarding";
 
 // ── Greeting guard: fires at most once per browser tab session ────────────────
 let _greetingHasFired = false;
@@ -101,6 +107,15 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const [realtimeActive, setRealtimeActive] = useState(false);
   const [showSignup,   setShowSignup]   = useState(false);
   const [signupReturnTo, setSignupReturnTo] = useState<string | undefined>();
+  const [campaignSessionId] = useState(() => getActiveCampaignSessionId());
+  const [campaignKind] = useState<"consumer" | "business" | null>(() => {
+    try {
+      const value = new URLSearchParams(window.location.search).get("campaignKind");
+      return value === "consumer" || value === "business" ? value : null;
+    } catch {
+      return null;
+    }
+  });
 
   // JAC character dimensions (responsive to viewport)
   const [jacHeightPx, setJacHeightPx]  = useState(380);
@@ -221,12 +236,43 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
       const res = await fetch("/api/jac/onboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history, mode: "homepage", surface: "door", guest_session_id: getGuestSessionId() }),
+        body: JSON.stringify({
+          messages: history,
+          mode: "homepage",
+          surface: "door",
+          guest_session_id: getGuestSessionId(),
+          ...(campaignSessionId ? { campaign_session_id: campaignSessionId } : {}),
+        }),
       });
       const data = await res.json();
+      const modelRoute = typeof data.route === "string" && data.route ? data.route : null;
+      const rawRoute = campaignKind === "business" && modelRoute?.startsWith("/signup")
+        ? "/business-signup"
+        : modelRoute;
+      const campaignRoute = withCampaignSession(rawRoute, campaignSessionId);
+      const reply = (data.message || data.reply || "").trim();
+
+      if (campaignSessionId && reply) {
+        const intent = typeof data.intent === "string"
+          ? data.intent
+          : typeof data.tracking?.intent === "string"
+            ? data.tracking.intent
+            : undefined;
+        await updateCampaignSession(campaignSessionId, {
+          intent,
+          resumePath: rawRoute || undefined,
+          context: {
+            lastUserMessage: text.slice(0, 300),
+            conversation: [...history, { role: "assistant", content: reply }].slice(-12),
+            guestDraft: data.guestDraft || undefined,
+            tracking: data.tracking || undefined,
+          },
+          guestSessionId: getGuestSessionId(),
+        });
+      }
       if (data.guestDraft?.type === "service_offer") {
         saveServiceOfferPrefill(data.guestDraft.data || {});
-        setSignupReturnTo("/offer-service");
+        setSignupReturnTo(campaignRoute || "/offer-service");
         if (!signupOffered.current) {
           signupOffered.current = true;
           setShowSignup(true);
@@ -237,9 +283,9 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
       if (!signupOffered.current &&
           Array.isArray(data.actions) && data.actions.some((a: any) => a?.action === "show_signup")) {
         signupOffered.current = true;
+        if (campaignRoute) setSignupReturnTo(campaignRoute);
         setShowSignup(true);
       }
-      const reply = (data.message || data.reply || "").trim();
       if (reply) {
         setMessages(prev => [...prev, { role: "jac", text: reply }]);
         setJacSpeakingTx(true);
@@ -816,14 +862,16 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                     <SignupCard
                       returnTo={signupReturnTo}
                       onDismiss={() => setShowSignup(false)}
-                      onAuthed={(accountType) => {
+                      onAuthed={async (accountType) => {
                         // Door scene exits → standard new-user onboarding/dashboard
+                        const fallback = signupReturnTo || (accountType === "business" ? "/biz/dashboard" : "/dashboard");
+                        const destination = await claimAndResolveCampaignPath(fallback);
                         setPhase("exiting");
                         setRealtimeActive(false);
                         cancelAllJacAudio();
                         schedule(() => {
                           setMounted(false);
-                          window.location.href = signupReturnTo || (accountType === "business" ? "/biz/dashboard" : "/dashboard");
+                          window.location.href = destination;
                         }, 440);
                       }}
                     />
