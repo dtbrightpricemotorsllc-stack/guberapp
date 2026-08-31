@@ -658,6 +658,8 @@ export function NativeDeepLinkHandler() {
 // signature GUBER ping (once per tab session). This is gated by
 // sessionStorage so it never replays on hot reloads, route changes, or
 // in-app loading splashes — only the true app-launch moment. iOS
+const COLD_START_PING_KEY = "guber_cold_start_ping_played";
+
 function SplashWrapper({ onDone }: { onDone: () => void }) {
   const { isLoading } = useAuth();
   useEffect(() => {

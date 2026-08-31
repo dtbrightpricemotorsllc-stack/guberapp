@@ -1,11 +1,10 @@
-import { createContext, useContext, useCallback, useMemo, useEffect } from "react";
+import { createContext, useContext, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "./queryClient";
 import { getToken, setToken, clearToken } from "./token-storage";
 import { signOutFromGoogle } from "./native-google-sign-in";
 import { Capacitor } from "@capacitor/core";
 import type { User } from "@shared/schema";
-import { claimAndResolveCampaignPath, transferGuestSessionBeforeClaim } from "./campaign-onboarding";
 
 type AuthContextType = {
   user: User | null;
@@ -63,27 +62,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     onSuccess: async (authenticatedUser) => {
       if (authenticatedUser) {
+        await queryClient.cancelQueries({ queryKey: ["/api/auth/me"] });
         queryClient.setQueryData(["/api/auth/me"], authenticatedUser);
+        return;
       }
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       await queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
     },
   });
-
-  useEffect(() => {
-    if (!user?.id) return;
-    void (async () => {
-      // Complete the guest-to-user handoff before resolving the campaign
-      // destination. This prevents a fast redirect from racing draft transfer.
-      await transferGuestSessionBeforeClaim();
-      const authPaths = new Set(["/login", "/signup", "/business-signup", "/auth-success"]);
-      const fallback = user.accountType === "business" ? "/biz/dashboard" : "/dashboard";
-      const destination = await claimAndResolveCampaignPath(fallback);
-      if (destination !== fallback && authPaths.has(window.location.pathname)) {
-        window.location.replace(destination);
-      }
-    })();
-  }, [user?.id, user?.accountType]);
 
   const signupMutation = useMutation({
     mutationFn: async (data: { email: string; username: string; fullName: string; password: string; zipcode?: string }): Promise<User | null> => {
@@ -96,7 +82,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     onSuccess: async (authenticatedUser) => {
       if (authenticatedUser) {
+        await queryClient.cancelQueries({ queryKey: ["/api/auth/me"] });
         queryClient.setQueryData(["/api/auth/me"], authenticatedUser);
+        return;
       }
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       await queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
