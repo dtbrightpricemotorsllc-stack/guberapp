@@ -140,7 +140,7 @@ test("JAC takes a real user from greeting to a safe action across login", async 
   await expect(page.getByTestId("page-home")).toBeVisible();
   const startVoice = page.getByRole("button", { name: "Start voice" });
   if (await startVoice.isVisible({ timeout: 1_000 }).catch(() => false)) {
-    await startVoice.click().catch(() => {
+    await startVoice.click({ timeout: 1_000 }).catch(() => {
       // Permission-ready browsers may auto-start and replace this button
       // between the visibility check and click.
     });

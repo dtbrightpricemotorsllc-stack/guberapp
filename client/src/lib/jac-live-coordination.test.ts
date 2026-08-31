@@ -43,8 +43,8 @@ describe("JAC live coordination", () => {
     const anonymousEndpoint = getJacLiveSessionEndpoint(false);
     const authenticatedEndpoint = getJacLiveSessionEndpoint(true);
 
-    expect(anonymousEndpoint).toBe("/api/jac/convai/public-session");
-    expect(authenticatedEndpoint).toBe("/api/jac/convai/session");
+    expect(anonymousEndpoint).toBe("/api/jac/realtime-token/guest");
+    expect(authenticatedEndpoint).toBe("/api/jac/realtime-token/session");
     expect(authenticatedEndpoint).not.toBe(anonymousEndpoint);
   });
 
