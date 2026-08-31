@@ -53,11 +53,9 @@ describe("JacLiveExperience realtime voice", () => {
     }));
   });
 
-  it("uses realtime token endpoints and starts web voice only explicitly", async () => {
+  it("auto-starts web voice when microphone access is already granted", async () => {
     const view = render(<JacLiveExperience />);
     expect(getJacLiveSessionEndpoint(false)).toBe("/api/jac/realtime-token/guest");
-    expect(realtimeProps.current.active).toBe(false);
-    fireEvent.click(view.getByRole("button", { name: /start voice/i }));
     await waitFor(() => expect(realtimeProps.current.active).toBe(true));
     expect(realtimeProps.current.sessionEndpoint).toBe("/api/jac/realtime-token/guest");
     expect(realtimeProps.current.e2eTarget).toBe("homepage");
@@ -65,6 +63,15 @@ describe("JacLiveExperience realtime voice", () => {
     view.rerender(<JacLiveExperience />);
     await waitFor(() => expect(realtimeHandle.end).toHaveBeenCalled());
     expect(realtimeProps.current.sessionEndpoint).toBe("/api/jac/realtime-token/session");
+  });
+
+  it("keeps text available without attempting voice when permission is not ready", async () => {
+    microphoneReady.mockResolvedValue(false);
+    const view = render(<JacLiveExperience />);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(realtimeProps.current.active).toBe(false);
+    expect(view.getByRole("button", { name: /start voice/i })).toBeVisible();
+    expect(view.getByLabel("Message JAC")).toBeVisible();
   });
 
   it("routes a voice transcript through onboard once and speaks only approved text", async () => {

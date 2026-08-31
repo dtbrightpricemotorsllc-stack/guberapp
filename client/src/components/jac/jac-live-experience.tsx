@@ -5,7 +5,8 @@
  *   Surface 1 (left / top)   — JAC character + conversation controls
  *   Surface 2 (right / bottom) — context-driven action area
  *
- * Voice: OpenAI Realtime, starts only from the explicit mic control.
+ * Voice: OpenAI Realtime, starts automatically only when microphone permission
+ * is already granted; otherwise it starts from the explicit mic control.
  * Text:  /api/jac/onboard with full conversation history.
  * Both modes share the same message history and Surface 2 state.
  */
@@ -23,7 +24,6 @@ import { JacCharacterRenderer, type JacState } from "@/components/jac/jac-charac
 import { Link } from "wouter";
 import { useGuestJacSession } from "@/hooks/use-guest-jac-session";
 import { cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
-import { isNativeApp } from "@/lib/platform";
 import {
   JacOpenAIRealtimeSession,
   type JacOpenAIRealtimeSessionHandle,
@@ -35,6 +35,7 @@ import {
   getJacQuickActions,
   isServiceDiscoveryIntent,
   isJacMicrophoneReady,
+  createJacAutomaticVoiceStartClaim,
   JAC_WELCOME_GREETING,
   readSharedJacConversation,
 } from "@/lib/jac-live-coordination";
@@ -453,6 +454,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
   const voiceConnectedRef = useRef(false);
   const recoveryRef = useRef<((reason: string) => void) | null>(null);
   const pendingVoiceReplyRef = useRef(false);
+  const automaticVoiceStartClaimRef = useRef(createJacAutomaticVoiceStartClaim());
 
   const [msgs, setMsgs]         = useState<Msg[]>(loadMsgs);
   const [surface, setSurface]   = useState<Surface2State>({ kind: "welcome" });
@@ -682,11 +684,19 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     mountedRef.current = true;
     claimJacWelcomeGreeting();
     let cancelled = false;
-    if (isNativeApp) {
-      void isJacMicrophoneReady().then(ready => {
-        if (ready && !cancelled) startVoice();
-      });
-    }
+    // Do not prompt for the microphone on page load. If the user has already
+    // granted access (including an installed PWA revisit), starting voice is
+    // safe and restores the hands-free experience. Browsers that cannot prove
+    // readiness stay text-first with the Start voice button.
+    void isJacMicrophoneReady().then(ready => {
+      if (
+        ready &&
+        !cancelled &&
+        automaticVoiceStartClaimRef.current()
+      ) {
+        startVoice();
+      }
+    });
     return () => {
       cancelled = true;
       mountedRef.current = false;
@@ -755,8 +765,8 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
 
   const phaseLabel =
     reconnecting ? "Reconnecting…" :
-    error      ? "Connection error" :
     ended      ? "Ended" :
+    error      ? "Voice unavailable — text is ready" :
     muted      ? "Muted" :
     voiceIsSpeaking ? "JAC is speaking" :
     voiceIsListening ? "Listening…" :

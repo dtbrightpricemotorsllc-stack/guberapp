@@ -662,6 +662,8 @@ const COLD_START_PING_KEY = "guber_cold_start_ping_played";
 
 function SplashWrapper({ onDone }: { onDone: () => void }) {
   const { isLoading } = useAuth();
+  const [splashTimedOut, setSplashTimedOut] = useState(false);
+
   useEffect(() => {
     try {
       if (sessionStorage.getItem(COLD_START_PING_KEY) === "1") return;
@@ -673,7 +675,22 @@ function SplashWrapper({ onDone }: { onDone: () => void }) {
       .then(({ playGuberPing }) => playGuberPing())
       .catch(() => {});
   }, []);
-  return <LoadingSplash loading={isLoading} onDone={onDone} />;
+
+  // Authentication is useful to route guards, but it must never block the
+  // public homepage or JAC. Slow mobile networks and sleeping PWAs can leave
+  // /api/auth/me pending long after the public app is ready.
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSplashTimedOut(true), 1_200);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  return (
+    <LoadingSplash
+      loading={isLoading && !splashTimedOut}
+      minVisibleMs={900}
+      onDone={onDone}
+    />
+  );
 }
 
 // Resume an in-progress live-location task after a reload / app relaunch. Only
