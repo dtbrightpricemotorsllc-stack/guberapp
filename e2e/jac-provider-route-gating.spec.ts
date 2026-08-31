@@ -137,6 +137,9 @@ async function dismissDashboardOverlays(page: Page) {
 }
 
 test("guest JAC asks whether to browse or post before showing a destination", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("guberDoorSplashSeen", "1");
+  });
   const requests = await installJacResponses(page, "guest");
   const voiceRequests: string[] = [];
   page.on("request", (request) => {

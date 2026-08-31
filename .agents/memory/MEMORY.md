@@ -53,7 +53,7 @@
 - [JAC in-scene signup card](jac-inline-signup.md) — show_signup action is door-surface-only, slot-reserved before the 4-action cap, once per guest session; guest KB-shortcut bypass must stay.
 - [JAC Door Scene](jac-door-scene.md) — GuberDoorSplash is sole web entry (no mascot loader); 4 JAC states via JacAnimatedCharacter + canvas mouth overlay; _greetingHasFired guards replay; ConvAI handles continuous turns.
 - [Release check baseline](release-check-baseline.md) — keep strict checks green by quarantining only documented legacy diagnostics; new TypeScript errors must fail the gate.
-- [JAC browser E2E fixtures](jac-route-e2e-fixtures.md) — avoid listing-intent wording, dismiss overlays, and never rely on CI fake-mic availability for deterministic voice acceptance.
+- [JAC browser E2E fixtures](jac-route-e2e-fixtures.md) — seed the returning-visitor door marker when testing downstream canonical JAC behavior; avoid ambiguous intents and CI mic reliance.
 - [JAC mouth live amplitude](jac-mouth-live-amplitude.md) — real-audio mouth needs gesture-unlocked analyser ctx; cross-context local streams read silent in Chromium — test via WebRTC loopback.
 - [Day-1 OG limited-time campaign](day1og-limited-time-campaign.md) — offer availability is time-bound, not ZIP- or city-capped; earned status remains permanent.
 - [Business verification and referral rail](business-verification-referrals.md) — business verification is requirement-based with auditable admin review; distributor rewards stay separate cash obligations.

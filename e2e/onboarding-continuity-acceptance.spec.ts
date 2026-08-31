@@ -38,6 +38,11 @@ async function installContinuityFixtures(
   session: ContinuitySession | null,
   onSignup?: (body: any) => void,
 ) {
+  // These tests cover campaign persistence after the public landing page.
+  // The dedicated door-entry suite owns first-visit door coverage.
+  await page.addInitScript(() => {
+    localStorage.setItem("guberDoorSplashSeen", "1");
+  });
   let authenticated = false;
   const patches: any[] = [];
   const claims: any[] = [];

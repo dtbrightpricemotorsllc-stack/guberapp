@@ -64,6 +64,7 @@ test("JAC takes a real user from greeting to a safe action across login", async 
   await page.addInitScript(() => {
     localStorage.setItem("guber_alert_status", "granted");
     localStorage.setItem("guber_alert_modal_autoshown", "true");
+    localStorage.setItem("guberDoorSplashSeen", "1");
   });
 
   const unsafeRequests: string[] = [];

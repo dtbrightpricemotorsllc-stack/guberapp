@@ -14,3 +14,9 @@ For voice acceptance, do not depend on host microphone availability. Use a devel
 **Why:** Browser fake-media flags and granted permission do not guarantee microphone access in hosted CI. A provider seam avoids external flakiness, while active route blocking protects shared demo data.
 
 **How to apply:** Keep production builds unable to activate the harness. In browser tests, assert public/authenticated endpoint selection, explicitly inject provider lifecycle events, and make unsafe route guards fail the test if reached.
+
+Public-home tests that exercise the canonical JAC surface after the first-visit experience should explicitly seed the returning-visitor door marker. Dedicated door tests must start with a cleared marker so they cover the real gate.
+
+**Why:** The Team GUBER door intentionally prevents the canonical surface from mounting on a fresh browser context; downstream assistant tests otherwise fail before reaching the behavior they are meant to verify.
+
+**How to apply:** Set `guberDoorSplashSeen` to `"1"` in the test init script for canonical-home consumers, and reserve cleared-marker contexts for first-visit, forced-door, and campaign-join door coverage.
