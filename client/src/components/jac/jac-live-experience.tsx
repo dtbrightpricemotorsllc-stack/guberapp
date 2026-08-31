@@ -765,8 +765,8 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
 
   const phaseLabel =
     reconnecting ? "Reconnecting…" :
-    ended      ? "Ended" :
     error      ? "Voice unavailable — text is ready" :
+    ended      ? "Ended" :
     muted      ? "Muted" :
     voiceIsSpeaking ? "JAC is speaking" :
     voiceIsListening ? "Listening…" :

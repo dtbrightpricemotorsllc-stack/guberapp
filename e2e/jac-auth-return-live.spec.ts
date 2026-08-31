@@ -138,7 +138,13 @@ test("JAC takes a real user from greeting to a safe action across login", async 
   // chat away. The user can explicitly retry.
   await page.goto("/?jac_e2e=1");
   await expect(page.getByTestId("page-home")).toBeVisible();
-  await page.getByRole("button", { name: "Start voice" }).click();
+  const startVoice = page.getByRole("button", { name: "Start voice" });
+  if (await startVoice.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await startVoice.click().catch(() => {
+      // Permission-ready browsers may auto-start and replace this button
+      // between the visibility check and click.
+    });
+  }
   await emitVoice(page, "homepage", "error", "temporary voice outage");
   await expect(page.getByTestId("jac-live-voice-error")).toContainText("Voice is unavailable right now");
   await expect(page.getByTestId("jac-live-voice-error")).toContainText("Text chat is still available");

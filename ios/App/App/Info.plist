@@ -56,7 +56,7 @@
         <key>NSPhotoLibraryAddUsageDescription</key>
         <string>GUBER saves proof photos and downloaded media you choose to keep to your photo library.</string>
         <key>NSMicrophoneUsageDescription</key>
-        <string>GUBER uses the microphone to record audio with video proof submissions and hands-free See For Me captures.</string>
+        <string>GUBER uses the microphone when you talk with JAC, record audio with video proof submissions, or use hands-free See For Me captures.</string>
         <key>NSFaceIDUsageDescription</key>
         <string>GUBER uses Face ID to quickly and securely unlock your account.</string>
         <key>ITSAppUsesNonExemptEncryption</key>

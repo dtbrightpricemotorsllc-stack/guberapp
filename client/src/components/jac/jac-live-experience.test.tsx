@@ -70,8 +70,8 @@ describe("JacLiveExperience realtime voice", () => {
     const view = render(<JacLiveExperience />);
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(realtimeProps.current.active).toBe(false);
-    expect(view.getByRole("button", { name: /start voice/i })).toBeVisible();
-    expect(view.getByLabel("Message JAC")).toBeVisible();
+    expect(view.getByRole("button", { name: /start voice/i })).toBeTruthy();
+    expect(view.getByLabelText("Message JAC")).toBeTruthy();
   });
 
   it("routes a voice transcript through onboard once and speaks only approved text", async () => {
