@@ -2610,6 +2610,74 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_jac_session_updated ON jac_session_state (updated_at DESC);
   `).catch(e => console.error("[migration] jac_session_state table error:", e));
 
+  // Fixed-baseline signup promotion. The counter is advanced only by the
+  // signup promotion service, which locks the singleton config row. Entries
+  // and winners are permanent audit records; account status changes never
+  // rewrite their original eligibility or ordinal.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS signup_promotion_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      baseline INTEGER NOT NULL DEFAULT 517 CHECK (baseline >= 0),
+      milestone_interval INTEGER NOT NULL DEFAULT 500 CHECK (milestone_interval > 0),
+      prize_cents INTEGER NOT NULL DEFAULT 5000 CHECK (prize_cents > 0),
+      enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      activated_at TIMESTAMPTZ,
+      eligible_signup_count INTEGER NOT NULL DEFAULT 0 CHECK (eligible_signup_count >= 0),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_by INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS signup_promotion_entries (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE RESTRICT,
+      normalized_email TEXT,
+      eligible BOOLEAN NOT NULL,
+      reason TEXT,
+      sequence_number INTEGER,
+      global_signup_number INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_signup_promotion_entries_email
+      ON signup_promotion_entries (normalized_email) WHERE eligible = TRUE;
+    CREATE TABLE IF NOT EXISTS signup_promotion_winners (
+      id SERIAL PRIMARY KEY,
+      entry_id INTEGER NOT NULL UNIQUE REFERENCES signup_promotion_entries(id) ON DELETE RESTRICT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      global_signup_number INTEGER NOT NULL UNIQUE,
+      prize_cents INTEGER NOT NULL DEFAULT 5000,
+      status TEXT NOT NULL DEFAULT 'pending_claim',
+      payout_method TEXT,
+      payout_handle TEXT,
+      claimed_at TIMESTAMPTZ,
+      paid_at TIMESTAMPTZ,
+      paid_by INTEGER,
+      disqualification_reason TEXT,
+      admin_notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT signup_promotion_winner_status_check
+        CHECK (status IN ('pending_claim', 'claimed', 'paid', 'disqualified')),
+      CONSTRAINT signup_promotion_payout_method_check
+        CHECK (payout_method IS NULL OR payout_method IN ('cash_app', 'venmo'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_signup_promotion_winners_status
+      ON signup_promotion_winners (status, created_at DESC);
+    CREATE TABLE IF NOT EXISTS signup_promotion_alerts (
+      id SERIAL PRIMARY KEY,
+      winner_id INTEGER NOT NULL UNIQUE REFERENCES signup_promotion_winners(id) ON DELETE RESTRICT,
+      status TEXT NOT NULL DEFAULT 'open',
+      details JSONB NOT NULL DEFAULT '{}'::jsonb,
+      acknowledged_at TIMESTAMPTZ,
+      acknowledged_by INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_signup_promotion_alerts_status
+      ON signup_promotion_alerts (status, created_at DESC);
+    INSERT INTO signup_promotion_config
+      (id, baseline, milestone_interval, prize_cents, enabled, activated_at)
+    VALUES (1, 517, 500, 5000, TRUE, NOW())
+    ON CONFLICT (id) DO NOTHING;
+  `).catch(e => console.error("[migration] signup promotion tables error:", e));
+
   const shutdown = () => {
     clearInterval(elevenLabsProbeInterval);
     httpServer.close(() => process.exit(0));

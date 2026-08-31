@@ -141,6 +141,7 @@ export interface SignupDeps {
     userId: number,
     kind: "og+tb" | "og" | "tb" | "default",
   ) => Promise<void>;
+  onUserCreated?: (user: AuthUser) => Promise<void>;
   runBackgroundCheck?: (userId: number, fullName: string) => void;
 }
 
@@ -313,6 +314,9 @@ export function handleSignup(storage: AuthStorage, deps: SignupDeps = {}) {
       createPayload.studioTier = "free";
 
       const user = await storage.createUser(createPayload);
+      if (deps.onUserCreated) {
+        await deps.onUserCreated(user);
+      }
 
       if (referrerId && deps.recordReferral) {
         await deps.recordReferral(referrerId, user.id);

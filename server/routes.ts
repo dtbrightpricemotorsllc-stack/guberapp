@@ -99,6 +99,14 @@ import {
   claimCampaignSession,
   registerCampaignOnboardingRoutes,
 } from "./campaign-onboarding";
+import {
+  getPromotionForUser,
+  getPromotionStatus,
+  listPromotionWinners,
+  recordSignupPromotionForNewUser,
+  updatePromotionConfig,
+  updatePromotionWinner,
+} from "./signup-promotion";
 import * as assetCustody from "./asset-custody";
 import {
   PROTECTION_PACKAGES,
@@ -2884,6 +2892,9 @@ export async function registerRoutes(
         await storage.createNotification({ userId, title: "Welcome to GUBER!", body: "Your account has been created. Complete your profile to start posting and accepting jobs.", type: "system" });
       }
     },
+    onUserCreated: async (user) => {
+      await recordSignupPromotionForNewUser(user);
+    },
     runBackgroundCheck: (userId, fullName) => {
       runNSOPWBackgroundCheck(userId, fullName).catch(() => {});
     },
@@ -3845,6 +3856,138 @@ export async function registerRoutes(
 
   app.get("/api/auth/me", handleMe(storage));
 
+  // ── Fixed-baseline signup promotion ───────────────────────────────────────
+  // Ordinary users receive only a boolean winner result. Payout details are
+  // returned exclusively to the authenticated winner and administrators.
+  app.get("/api/signup-promotion/me", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const entry = await getPromotionForUser(req.session.userId!);
+      if (!entry?.winner) return res.json({ isWinner: false });
+      return res.json({
+        isWinner: true,
+        globalSignupNumber: entry.globalSignupNumber,
+        prizeCents: entry.winner.prizeCents,
+        status: entry.winner.status,
+        payoutMethod: entry.winner.payoutMethod,
+        payoutHandle: entry.winner.payoutHandle,
+        claimedAt: entry.winner.claimedAt,
+        paidAt: entry.winner.paidAt,
+        disqualificationReason: entry.winner.disqualificationReason,
+        adminNotes: entry.winner.adminNotes,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message || "Could not load signup promotion status" });
+    }
+  });
+
+  app.patch("/api/signup-promotion/me/claim", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const entry = await getPromotionForUser(req.session.userId!);
+      if (!entry?.winner) return res.status(404).json({ message: "No signup promotion prize found" });
+      if (entry.winner.status === "paid") return res.status(409).json({ message: "This prize has already been paid" });
+      if (entry.winner.status === "disqualified") return res.status(409).json({ message: "This prize is no longer eligible for payout" });
+
+      const payoutMethod = req.body?.payoutMethod;
+      const payoutHandle = typeof req.body?.payoutHandle === "string" ? req.body.payoutHandle.trim() : "";
+      if (payoutMethod !== "cash_app" && payoutMethod !== "venmo") {
+        return res.status(400).json({ message: "Choose Cash App or Venmo" });
+      }
+      if (!/^[$@]?[A-Za-z0-9._-]{1,50}$/.test(payoutHandle)) {
+        return res.status(400).json({ message: "Enter a valid Cash App or Venmo handle" });
+      }
+
+      const updated = await updatePromotionWinner(entry.winner.id, {
+        status: "claimed",
+        payoutMethod,
+        payoutHandle,
+      });
+      if (!updated) return res.status(404).json({ message: "Prize not found" });
+      return res.json({
+        ok: true,
+        status: updated.status,
+        payoutMethod: updated.payout_method,
+        payoutHandle: updated.payout_handle,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message || "Could not save payout details" });
+    }
+  });
+
+  app.get("/api/admin/signup-promotion", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const [status, winners] = await Promise.all([
+        getPromotionStatus(),
+        listPromotionWinners(),
+      ]);
+      res.json({ status, winners });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message || "Could not load signup promotion" });
+    }
+  });
+
+  app.patch("/api/admin/signup-promotion", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      if (typeof req.body?.enabled !== "boolean") {
+        return res.status(400).json({ message: "enabled must be a boolean" });
+      }
+      const status = await updatePromotionConfig(req.body.enabled, req.session.userId!);
+      await storage.createAuditLog({
+        userId: req.session.userId!,
+        action: "admin_signup_promotion_toggle",
+        details: `Signup promotion ${req.body.enabled ? "enabled" : "disabled"}`,
+      });
+      res.json(status);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message || "Could not update signup promotion" });
+    }
+  });
+
+  app.patch("/api/admin/signup-promotion/winners/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const winnerId = Number(req.params.id);
+      if (!Number.isInteger(winnerId) || winnerId <= 0) {
+        return res.status(400).json({ message: "Invalid winner id" });
+      }
+      const allowedStatuses = ["pending_claim", "claimed", "paid", "disqualified"];
+      const status = req.body?.status;
+      if (status !== undefined && !allowedStatuses.includes(status)) {
+        return res.status(400).json({ message: "Invalid winner status" });
+      }
+      const payoutMethod = req.body?.payoutMethod;
+      if (payoutMethod !== undefined && payoutMethod !== null && !["cash_app", "venmo"].includes(payoutMethod)) {
+        return res.status(400).json({ message: "Invalid payout method" });
+      }
+      const payoutHandle = req.body?.payoutHandle;
+      if (payoutHandle !== undefined && payoutHandle !== null &&
+          (typeof payoutHandle !== "string" || !/^[$@]?[A-Za-z0-9._-]{1,50}$/.test(payoutHandle.trim()))) {
+        return res.status(400).json({ message: "Invalid payout handle" });
+      }
+      const disqualificationReason = req.body?.disqualificationReason;
+      if (status === "disqualified" &&
+          (typeof disqualificationReason !== "string" || !disqualificationReason.trim())) {
+        return res.status(400).json({ message: "A disqualification reason is required" });
+      }
+      const updated = await updatePromotionWinner(winnerId, {
+        status,
+        payoutMethod,
+        payoutHandle: typeof payoutHandle === "string" ? payoutHandle.trim() : payoutHandle,
+        disqualificationReason: typeof disqualificationReason === "string" ? disqualificationReason.trim() : disqualificationReason,
+        adminNotes: typeof req.body?.adminNotes === "string" ? req.body.adminNotes.trim() : req.body?.adminNotes,
+        paidBy: status === "paid" ? req.session.userId! : undefined,
+      });
+      if (!updated) return res.status(404).json({ message: "Winner not found" });
+
+      await storage.createAuditLog({
+        userId: req.session.userId!,
+        action: "admin_signup_promotion_winner_update",
+        details: `Updated signup promotion winner ${winnerId}${status ? ` to ${status}` : ""}`,
+      });
+      res.json({ ok: true, winner: updated });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message || "Could not update winner" });
+    }
+  });
+
   const getBaseUrl = (req: Request) => {
     if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL.replace(/\/$/, "");
     const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
@@ -3926,6 +4069,7 @@ export async function registerRoutes(
         performanceShareWindowEndsAt: psWindowEnd,
         performanceShareEligible: !!referrerId,
       } as any);
+       await recordSignupPromotionForNewUser(user);
 
       if (referrerId) {
         await db.insert(referrals).values({ referrerId, referredId: user.id, status: "pending" }).onConflictDoNothing();
@@ -4056,6 +4200,7 @@ export async function registerRoutes(
         performanceShareWindowEndsAt: psWindowEnd,
         performanceShareEligible: !!referrerId,
       } as any);
+       await recordSignupPromotionForNewUser(user);
 
       if (referrerId) {
         await db.insert(referrals).values({ referrerId, referredId: user.id, status: "pending" }).onConflictDoNothing();

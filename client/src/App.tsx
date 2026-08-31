@@ -62,6 +62,7 @@ const Profile = lazy(() => import("@/pages/profile"));
 const AccountSettings = lazy(() => import("@/pages/account-settings"));
 const MyBusinessRequests = lazy(() => import("@/pages/my-business-requests"));
 const NotificationsPage = lazy(() => import("@/pages/notifications-page"));
+const SignupPromotionPage = lazy(() => import("@/pages/signup-promotion"));
 const WalletPage = lazy(() => import("@/pages/wallet"));
 const JobPaymentSuccess = lazy(() => import("@/pages/job-payment-success"));
 const OGSuccess = lazy(() => import("@/pages/og-success"));
@@ -390,6 +391,7 @@ function Router() {
       <Route path="/account-settings" component={() => <ConsumerRoute component={AccountSettings} />} />
       <Route path="/business-requests" component={() => <ConsumerRoute component={MyBusinessRequests} />} />
       <Route path="/notifications" component={() => <ProtectedRoute component={NotificationsPage} />} />
+       <Route path="/signup-promotion" component={() => <ProtectedRoute component={SignupPromotionPage} />} />
       <Route path="/os/command-center" component={() => <OSAdminRoute component={OSCommandCenter} />} />
       <Route path="/os/briefing" component={() => <OSAdminRoute component={OSBriefing} />} />
       <Route path="/os/coo" component={() => <OSAdminRoute component={OSCOOAgent} />} />

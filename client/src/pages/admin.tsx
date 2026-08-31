@@ -35,6 +35,7 @@ import {
   type DisputeIssueType,
 } from "@shared/dispute";
 import { Day1OGLogo } from "@/components/trust-badge";
+import { AdminSignupPromotionTab } from "@/components/admin-signup-promotion";
 
 const RESTRICTION_CATEGORIES = [
 "Skilled Labor", "On-Demand Help", "General Labor", "Barter Labor", "Marketplace", "Verify & Inspect"
@@ -7456,6 +7457,7 @@ return (
 <TabsTrigger value="og" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-og">Day-1 OG</TabsTrigger>
 <TabsTrigger value="trustbox" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-trustbox">Trust Box</TabsTrigger>
 <TabsTrigger value="broadcast" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-broadcast">Broadcast</TabsTrigger>
+<TabsTrigger value="signup-promotion" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-signup-promotion">Signup prizes</TabsTrigger>
 <TabsTrigger value="cashdrop" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-cashdrop">⚡ Cash Drop</TabsTrigger>
 <TabsTrigger value="areas" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-activeareas">📍 Active Areas</TabsTrigger>
 <TabsTrigger value="hostdrops" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-hostdrops">💰 Host Drops</TabsTrigger>
@@ -8261,6 +8263,9 @@ data-testid={`button-resolve-dispute-${j.id}`}
 
 <TabsContent value="broadcast">
 <BroadcastTab />
+</TabsContent>
+<TabsContent value="signup-promotion">
+<AdminSignupPromotionTab />
 </TabsContent>
 <TabsContent value="cashdrop">
 <CashDropTab sponsorPrefill={sponsorPrefill} onSponsorPrefillUsed={() => setSponsorPrefill(null)} />
