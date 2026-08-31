@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { useAuth } from "@/lib/auth-context";
+import { queryClient } from "@/lib/queryClient";
 import { GuberLogo } from "@/components/guber-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -108,9 +109,15 @@ export default function Signup() {
       if (campaignSessionId) {
         void recordCampaignEvent(campaignSessionId, "auth_started", "auth_started:signup");
       }
-      await signup({ ...form, referralCode: refCode || undefined } as any);
+      const authenticatedUser = await signup({ ...form, referralCode: refCode || undefined } as any);
       localStorage.removeItem("guber_ref");
-      setLocation(await claimAndResolveCampaignPath(returnTo || "/dashboard"));
+      const destination = await claimAndResolveCampaignPath(returnTo || "/dashboard");
+      if (authenticatedUser) {
+        queryClient.setQueryData(["/api/auth/me"], authenticatedUser);
+        window.location.replace(destination);
+        return;
+      }
+      setLocation(destination);
     } catch (err: any) {
       toast({ title: "Signup Failed", description: err.message || "Please try again", variant: "destructive" });
     } finally {

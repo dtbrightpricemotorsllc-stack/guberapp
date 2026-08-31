@@ -11,7 +11,7 @@ type AuthContextType = {
   isLoading: boolean;
   isDemoUser: boolean;
   login: (email: string, password: string) => Promise<User | null>;
-  signup: (data: { email: string; username: string; fullName: string; password: string; zipcode?: string }) => Promise<void>;
+  signup: (data: { email: string; username: string; fullName: string; password: string; zipcode?: string }) => Promise<User | null>;
   logout: () => Promise<void>;
   // Liability protection (Task #318): one-time global disclaimer.
   acceptLiabilityDisclaimer: () => Promise<void>;
@@ -77,13 +77,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const body = await res.json();
       if (body.token) await setToken(body.token);
       // `/api/auth/signup` returns the sanitized user at the top level.
-      // Keep the cache authoritative before any protected destination mounts.
+      // Signup pages publish it after campaign/guest handoff completes.
       return (body.user ?? (body.id ? body : null)) as User | null;
     },
     onSuccess: async (authenticatedUser) => {
       if (authenticatedUser) {
         await queryClient.cancelQueries({ queryKey: ["/api/auth/me"] });
-        queryClient.setQueryData(["/api/auth/me"], authenticatedUser);
+        // Signup pages must finish their campaign/guest handoff before
+        // publishing the user to PublicOnly. Otherwise PublicOnly can redirect
+        // to returnTo before the campaign session is claimed.
         return;
       }
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
@@ -126,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loginMutation]);
 
   const signup = useCallback(async (data: { email: string; username: string; fullName: string; password: string; zipcode?: string }) => {
-    await signupMutation.mutateAsync(data);
+    return signupMutation.mutateAsync(data);
   }, [signupMutation]);
 
   const logout = useCallback(async () => {

@@ -2,6 +2,8 @@ import { test, expect, type Page, type Route } from "@playwright/test";
 
 const CONSUMER_SESSION = "c".repeat(32);
 const BUSINESS_SESSION = "b".repeat(32);
+const AUTH_TOKEN = "continuity-test-token";
+const AUTH_COOKIE = "continuity-test-session";
 
 type ContinuitySession = {
   sessionId: string;
@@ -15,10 +17,11 @@ type ContinuitySession = {
   status: "active" | "claimed";
 };
 
-function json(route: Route, body: unknown, status = 200) {
+function json(route: Route, body: unknown, status = 200, headers?: Record<string, string>) {
   return route.fulfill({
     status,
     contentType: "application/json",
+    headers,
     body: JSON.stringify(body),
   });
 }
@@ -42,15 +45,31 @@ async function installContinuityFixtures(
   // The dedicated door-entry suite owns first-visit door coverage.
   await page.addInitScript(() => {
     localStorage.setItem("guberDoorSplashSeen", "1");
+    localStorage.setItem("jac_guest_session_id", "continuity-guest-session");
   });
   let authenticated = false;
   const patches: any[] = [];
   const claims: any[] = [];
   const transfers: any[] = [];
+  const authenticatedRequests: Array<{
+    path: string;
+    authorization: string;
+    cookie: string;
+  }> = [];
+  const sessionCookie = `${AUTH_COOKIE}=1`;
+  const sessionHeaders = {
+    "Set-Cookie": `${sessionCookie}; Path=/; HttpOnly; SameSite=Lax`,
+  };
+
+  const hasValidAuth = (route: Route) => {
+    const headers = route.request().headers();
+    return headers.authorization === `Bearer ${AUTH_TOKEN}`
+      || headers.cookie?.split("; ").includes(sessionCookie);
+  };
 
   await page.route("**/api/auth/me", (route) => {
-    console.log("[continuity] auth/me", authenticated);
-    return json(route, authenticated
+    const validAuth = authenticated && hasValidAuth(route);
+    return json(route, validAuth
       ? {
         id: 812,
         email: "continuity@example.test",
@@ -60,11 +79,15 @@ async function installContinuityFixtures(
         role: "user",
         accountType: session?.kind === "business" ? "business" : "individual",
         }
-      : null, authenticated ? 200 : 401);
+      : null, validAuth ? 200 : 401);
   });
 
   await page.route("**/api/jac/guest-transfer", async (route) => {
     transfers.push(route.request().postDataJSON());
+    if (!authenticated || !hasValidAuth(route)) {
+      await json(route, { message: "Mock session handoff missing" }, 401);
+      return;
+    }
     await json(route, { success: true, transferred: 1 });
   });
 
@@ -90,16 +113,23 @@ async function installContinuityFixtures(
       await json(route, session);
     });
     await page.route(`**/api/onboarding/campaign-session/${session.sessionId}/claim`, async (route) => {
-      claims.push(route.request().postDataJSON() || {});
+      const requestHeaders = route.request().headers();
+      claims.push({
+        ...(route.request().postDataJSON() || {}),
+        authorization: requestHeaders.authorization || "",
+        cookie: requestHeaders.cookie || "",
+      });
+      if (!authenticated || !hasValidAuth(route)) {
+        await json(route, { message: "Mock session handoff missing" }, 401);
+        return;
+      }
       session.status = "claimed";
-      authenticated = true;
       await json(route, session);
     });
   }
 
   await page.route("**/api/auth/signup", async (route) => {
     authenticated = true;
-    console.log("[continuity] signup", route.request().postDataJSON());
     onSignup?.(route.request().postDataJSON());
     await json(route, {
       id: 812,
@@ -109,8 +139,8 @@ async function installContinuityFixtures(
       firstName: "Continuity",
       role: "user",
       accountType: "individual",
-      token: "test-token",
-    });
+      token: AUTH_TOKEN,
+    }, 201, sessionHeaders);
   });
   await page.route("**/api/auth/business-access-request", async (route) => {
     authenticated = true;
@@ -125,10 +155,49 @@ async function installContinuityFixtures(
         accountType: "business",
       },
       businessAccount: { id: 91 },
-    });
+    }, 201, sessionHeaders);
   });
 
-  return { patches, claims, transfers, isAuthenticated: () => authenticated };
+  // Register the shared protected endpoints last so this handler remains the
+  // authoritative mock when the page has several overlapping route fixtures.
+  await page.route(
+    /\/api\/(?:jac\/profile|me\/popup|service-offers\/mine|business\/profile|business\/jobs|business\/account|my-jobs|map-jobs|workers\/map|cash-drops\/active|users\/me\/referral|geocode|users\/812|notifications(?:\/.*)?|jac\/pending-nav)(?:\?.*)?$/,
+    async (route) => {
+      const requestHeaders = route.request().headers();
+      const path = new URL(route.request().url()).pathname;
+      if (!authenticated || !hasValidAuth(route)) {
+        await json(route, { message: "Mock session handoff missing" }, 401);
+        return;
+      }
+      authenticatedRequests.push({
+        path,
+        authorization: requestHeaders.authorization || "",
+        cookie: requestHeaders.cookie || "",
+      });
+      const body = path === "/api/business/profile"
+        ? { id: 91, companyName: "Acme Field Services", industry: "Field Services" }
+        : path === "/api/business/account"
+          ? { activityAccess: false, proAccess: false }
+          : path === "/api/users/me/referral"
+            ? { code: "CONTINUITY", link: "/join/CONTINUITY", referredCount: 0 }
+            : path === "/api/geocode"
+              ? { address: null, zip: null }
+              : ["/api/jac/profile", "/api/me/popup"].includes(path)
+                ? {}
+                : path === "/api/jac/pending-nav"
+                  ? { pending: false }
+                : [];
+      await json(route, body);
+    },
+  );
+
+  return {
+    patches,
+    claims,
+    transfers,
+    authenticatedRequests,
+    isAuthenticated: () => authenticated,
+  };
 }
 
 async function installOnboardFixture(page: Page, responseFor: (message: string) => any) {
@@ -143,6 +212,8 @@ async function installOnboardFixture(page: Page, responseFor: (message: string) 
   });
   return requests;
 }
+
+test.use({ serviceWorkers: "block" });
 
 test.describe("onboarding continuity acceptance", () => {
   test("consumer flyer keeps referral, intent, draft context, destination, and guidance", async ({ page }) => {
@@ -193,6 +264,10 @@ test.describe("onboarding continuity acceptance", () => {
 
     await expect(page).toHaveURL(new RegExp(`/offer-service\\?campaignSession=${CONSUMER_SESSION}`));
     expect(fixture.claims).toHaveLength(1);
+    expect(fixture.claims[0].cookie).toContain(`${AUTH_COOKIE}=1`);
+    expect(fixture.authenticatedRequests).toEqual(expect.arrayContaining([
+      expect.objectContaining({ authorization: `Bearer ${AUTH_TOKEN}` }),
+    ]));
     expect(fixture.transfers).toHaveLength(1);
     expect(session.referralCode).toBe("FLYER42");
     expect(session.currentIntent).toBe("worker");
@@ -213,21 +288,19 @@ test.describe("onboarding continuity acceptance", () => {
       status: "active",
     };
     const fixture = await installContinuityFixtures(page, session);
-    await installOnboardFixture(page, (message) => /business invitation|business/i.test(message)
-      ? {
-          reply: "I saved your business setup. Create your business account to continue.",
-          route: "/signup",
-          tracking: { intent: "business_onboarding", user_type: "business_owner" },
-          guestDraft: {
-            type: "business_onboarding",
-            data: {
-              businessName: "Acme Field Services",
-              businessType: "Field Services",
-              needs: "Find reliable inspection workers",
-            },
-          },
-        }
-      : { reply: "Tell me what your business needs.", route: null, actions: [], options: [] });
+    const requests = await installOnboardFixture(page, () => ({
+      reply: "I saved your business setup. Create an account for your business to continue.",
+      route: "/signup",
+      tracking: { intent: "business_onboarding", user_type: "business_owner" },
+      guestDraft: {
+        type: "business_onboarding",
+        data: {
+          businessName: "Acme Field Services",
+          businessType: "Field Services",
+          needs: "Find reliable inspection workers",
+        },
+      },
+    }));
 
     await page.goto("/business-join/INVITE42");
     await expect(page.getByTestId("page-home")).toBeVisible();
@@ -249,6 +322,10 @@ test.describe("onboarding continuity acceptance", () => {
 
     await expect(page).toHaveURL(new RegExp(`/biz/dashboard\\?campaignSession=${BUSINESS_SESSION}`));
     expect(fixture.claims).toHaveLength(1);
+    expect(fixture.claims[0].cookie).toContain(`${AUTH_COOKIE}=1`);
+    expect(fixture.authenticatedRequests).toEqual(expect.arrayContaining([
+      expect.objectContaining({ cookie: expect.stringContaining(`${AUTH_COOKIE}=1`) }),
+    ]));
     expect(session.invitationCode).toBe("INVITE42");
     expect(session.context.guestDraft).toEqual(expect.objectContaining({ type: "business_onboarding" }));
   });
@@ -262,6 +339,9 @@ test.describe("onboarding continuity acceptance", () => {
     await page.getByTestId("button-signup-submit").click();
 
     await expect(page).toHaveURL(/\/dashboard$/);
+    expect(fixture.authenticatedRequests).toEqual(expect.arrayContaining([
+      expect.objectContaining({ authorization: `Bearer ${AUTH_TOKEN}` }),
+    ]));
     expect(fixture.claims).toHaveLength(0);
     expect(fixture.transfers).toHaveLength(1);
   });
