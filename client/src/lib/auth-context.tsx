@@ -56,9 +56,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await apiRequest("POST", "/api/auth/login", { email, password });
       const data = await res.json();
       if (data.token) await setToken(data.token);
-      return data;
+      // Password login returns the sanitized user at the top level, while
+      // native/browser OAuth adapters may wrap it as `user`. Normalize both
+      // shapes so the route guard can see the authenticated user immediately.
+      return (data.user ?? (data.id ? data : null)) as User | null;
     },
-    onSuccess: async () => {
+    onSuccess: async (authenticatedUser) => {
+      if (authenticatedUser) {
+        queryClient.setQueryData(["/api/auth/me"], authenticatedUser);
+      }
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       await queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
     },
@@ -80,12 +86,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.id, user?.accountType]);
 
   const signupMutation = useMutation({
-    mutationFn: async (data: { email: string; username: string; fullName: string; password: string; zipcode?: string }) => {
+    mutationFn: async (data: { email: string; username: string; fullName: string; password: string; zipcode?: string }): Promise<User | null> => {
       const res = await apiRequest("POST", "/api/auth/signup", data);
       const body = await res.json();
       if (body.token) await setToken(body.token);
+      // `/api/auth/signup` returns the sanitized user at the top level.
+      // Keep the cache authoritative before any protected destination mounts.
+      return (body.user ?? (body.id ? body : null)) as User | null;
     },
-    onSuccess: async () => {
+    onSuccess: async (authenticatedUser) => {
+      if (authenticatedUser) {
+        queryClient.setQueryData(["/api/auth/me"], authenticatedUser);
+      }
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       await queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
     },

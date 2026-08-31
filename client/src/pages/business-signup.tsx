@@ -170,11 +170,19 @@ export default function BusinessSignup() {
       if (campaignSessionId) {
         void recordCampaignEvent(campaignSessionId, "auth_started", "auth_started:business-signup");
       }
-      await apiRequest("POST", "/api/auth/business-access-request", {
+      const response = await apiRequest("POST", "/api/auth/business-access-request", {
         ...form,
         website: normalizedWebsite,
       });
+      // This endpoint creates the authenticated business session directly.
+      // Seed the auth cache before navigation so BizRoute cannot redirect the
+      // newly-created account back to login during the same render cycle.
+      const authenticatedUser = await response.json().catch(() => null);
+      if (authenticatedUser?.id) {
+        queryClient.setQueryData(["/api/auth/me"], authenticatedUser);
+      }
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
       setLocation(await claimAndResolveCampaignPath("/biz/dashboard"));
     } catch (err: any) {
       let msg = err.message || "Please try again";
