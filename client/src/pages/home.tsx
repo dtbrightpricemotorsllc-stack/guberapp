@@ -15,6 +15,8 @@ import { OpportunityMap } from "@/components/opportunity-map";
 import { SignUpWall } from "@/components/signup-wall";
 import { JacHomepage } from "@/components/jac-homepage";
 import { JacLiveExperience } from "@/components/jac/jac-live-experience";
+import { GuberDoorSplash } from "@/components/guber-door-splash";
+import { isNativeApp } from "@/lib/platform";
 
 import logoImg          from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
 import day1OGImg        from "@assets/Gubergoldday1_1772434950756.png";
@@ -793,6 +795,28 @@ export default function Home() {
   const [currentSlide,  setCurrentSlide]  = useState(SLIDES[0]);
   const { enabled: investorPitchPublic } = useFeatureFlag("investor_pitch_public");
 
+  // The Team GUBER door is a web entry experience. Keep the canonical JAC
+  // surface unmounted until the door has finished so two JAC instances cannot
+  // compete for the guest session or greeting.
+  const [doorSplashDone, setDoorSplashDone] = useState(() => {
+    if (isNativeApp) return true;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      // QA/dev override: always show the door, even for returning visitors.
+      if (params.has("doortest")) return false;
+    }
+    try {
+      return localStorage.getItem("guberDoorSplashSeen") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const finishDoorSplash = () => {
+    try { localStorage.setItem("guberDoorSplashSeen", "1"); } catch {}
+    setDoorSplashDone(true);
+  };
+
   // Scroll to top on mount AND every time the app is foregrounded.
   // iOS WKWebView preserves exact scroll position when backgrounded — the page
   // is never reloaded on resume, so index.html/useEffect fixes don't fire.
@@ -867,10 +891,21 @@ export default function Home() {
         </p>
       </section>
 
-      {/* ── JAC Live Experience — two-surface character interface ── */}
-      <section className="relative z-10 w-full px-4 sm:px-6 pb-8 max-w-5xl mx-auto">
-        <JacLiveExperience />
-      </section>
+      {/* ── Team GUBER entry door + canonical JAC experience ──
+          The door scene is the first-visit guest experience. It is mounted
+          instead of (not alongside) the canonical surface so its JAC greeting
+          and realtime session can never be duplicated. ── */}
+      {!doorSplashDone && (
+        <GuberDoorSplash
+          onEnterVoice={finishDoorSplash}
+          onEnterText={finishDoorSplash}
+        />
+      )}
+      {doorSplashDone && (
+        <section className="relative z-10 w-full px-4 sm:px-6 pb-8 max-w-5xl mx-auto">
+          <JacLiveExperience />
+        </section>
+      )}
 
       {/* ── Hero Slideshow — moved below JAC so conversation loads first ── */}
       <HeroSlideshow onSlideChange={setCurrentSlide} />
