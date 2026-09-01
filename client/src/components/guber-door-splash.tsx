@@ -17,6 +17,7 @@ import {
   JacOpenAIRealtimeSession,
   type JacOpenAIRealtimeSessionHandle,
 } from "@/components/jac/jac-openai-realtime-session";
+import type { JacRealtimeErrorKind } from "@/lib/jac-openai-realtime-transport";
 import type { JacRealtimePhase } from "@/lib/jac-openai-realtime-transport";
 import { SignupCard } from "@/components/jac/jac-signup-card";
 import { getGuestSessionId } from "@/hooks/use-guest-jac-session";
@@ -90,6 +91,10 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const [jacSpeakingTx,setJacSpeakingTx] = useState(false); // TTS for text replies
   const [realtimePhase,  setRealtimePhase]  = useState<JacRealtimePhase>("idle");
   const [realtimeActive, setRealtimeActive] = useState(false);
+  const [realtimeIssue, setRealtimeIssue] = useState<{
+    kind: JacRealtimeErrorKind;
+    message: string;
+  } | null>(null);
   const [showSignup,   setShowSignup]   = useState(false);
   const [signupReturnTo, setSignupReturnTo] = useState<string | undefined>();
   const [campaignSessionId] = useState(() => getActiveCampaignSessionId());
@@ -111,6 +116,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const signupOffered  = useRef(false); // in-scene signup card fires at most once per conversation
   const greetingHasFired = useRef(false);
   const realtimeConnected = useRef(false);
+  const retryAtReveal = useRef(false);
 
   const schedule = useCallback((fn: () => void, ms: number) => {
     const t = setTimeout(fn, ms);
@@ -152,6 +158,11 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     setShowGreeting(true);
     setMessages(current => current.length ? current : [{ role: "jac", text: GREETING_TEXT }]);
     speakRealtimeGreeting();
+    if (!realtimeConnected.current && retryAtReveal.current) {
+      retryAtReveal.current = false;
+      setRealtimePhase("connecting");
+      realtimeRef.current?.reconnect();
+    }
 
     schedule(() => setShowButtons(true), 420);
   }, [schedule, speakRealtimeGreeting]);
@@ -163,6 +174,8 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     // acquire the mic and prime realtime audio before the film begins, rather
     // than waiting for a post-render effect.
     realtimeConnected.current = false;
+    retryAtReveal.current = false;
+    setRealtimeIssue(null);
     realtimeRef.current?.activate();
     phaseRef.current = "opening";
     setPhase("opening");
@@ -296,23 +309,35 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     setRealtimePhase(p);
     if (p === "listening" || p === "speaking" || p === "thinking" || p === "muted") {
       realtimeConnected.current = true;
+      retryAtReveal.current = false;
+      setRealtimeIssue(null);
     }
     if (p === "listening" && phaseRef.current === "open") {
       speakRealtimeGreeting();
     }
   }, [speakRealtimeGreeting]);
 
-  const handleRealtimeError = useCallback(() => {
-    setRealtimePhase("idle");
-    // A denied/unavailable mic or failed first connection gets the existing
-    // text composer automatically. Once voice has connected, keep the voice
-    // controls available so the user can reconnect or type instead.
-    if (!realtimeConnected.current) {
+  const handleRealtimeError = useCallback((message: string, kind: JacRealtimeErrorKind) => {
+    const microphoneFailure = kind === "microphone-denied" || kind === "microphone-unavailable";
+    console.warn("[JAC realtime startup]", {
+      kind,
+      message,
+      doorPhase: phaseRef.current,
+      connectedBeforeFailure: realtimeConnected.current,
+      userAgent: navigator.userAgent,
+    });
+    setRealtimeIssue({ kind, message });
+    if (microphoneFailure) {
+      retryAtReveal.current = false;
       setRealtimeActive(false);
-      setConvMode(current => current === "voice" ? "text" : current);
-      schedule(() => inputRef.current?.focus(), 300);
+      setRealtimePhase("error");
+      return;
     }
-  }, [schedule]);
+    // ENTER remains authoritative. Session/audio/transport errors never switch
+    // to text or focus the composer; retry once when the cinematic reveals JAC.
+    retryAtReveal.current = phaseRef.current !== "open";
+    setRealtimePhase("connecting");
+  }, []);
 
   const handleRealtimeUser = useCallback((text: string) => {
     const t = text.trim();
@@ -349,6 +374,9 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const isMuted       = realtimePhase === "muted";
   const isVoiceLive   = convMode === "voice" && realtimePhase !== "idle" && realtimePhase !== "connecting";
   const statusLabel   =
+    realtimeIssue?.kind === "microphone-denied" ? "Microphone permission needed — Type Instead is available" :
+    realtimeIssue?.kind === "microphone-unavailable" ? "Microphone unavailable — Type Instead is available" :
+    realtimeIssue && realtimePhase === "connecting" ? "Reconnecting JAC…" :
     realtimePhase === "connecting" ? "Connecting…" :
     realtimePhase === "thinking"   ? "JAC is thinking…" :
     realtimePhase === "speaking"   ? "JAC is speaking" :

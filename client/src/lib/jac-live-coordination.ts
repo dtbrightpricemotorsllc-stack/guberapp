@@ -37,6 +37,12 @@ export type JacE2EVoiceEvent = {
     | "error"
     | "disconnect";
   text?: string;
+  errorKind?:
+    | "microphone-denied"
+    | "microphone-unavailable"
+    | "session"
+    | "audio"
+    | "transport";
 };
 
 /**

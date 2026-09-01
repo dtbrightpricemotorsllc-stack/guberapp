@@ -6,10 +6,14 @@ const CAMPAIGN_SESSION = "d".repeat(32);
 const doorRegion = (page: Page) =>
   page.locator('[aria-label="GUBER entry — tap to open"]');
 
-async function emitVoice(page: Page, kind: "connect" | "listening") {
+async function emitVoice(
+  page: Page,
+  kind: "connect" | "listening" | "error",
+  errorKind?: "microphone-denied" | "microphone-unavailable" | "session" | "audio" | "transport",
+) {
   await page.evaluate(
     (detail) => window.dispatchEvent(new CustomEvent("jac:e2e-voice", { detail })),
-    { target: "homepage", kind },
+    { target: "homepage", kind, errorKind },
   );
 }
 
@@ -65,7 +69,7 @@ test.describe("Team GUBER cinematic entry door", () => {
 
     await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
     await expect(page.getByText("Connecting…")).toBeVisible();
-    await emitVoice(page, "homepage", "listening");
+    await emitVoice(page, "listening");
     const scene = page.locator('[aria-label="Team GUBER HQ"]');
     await expect(scene).toBeVisible();
     await expect(page.getByTestId("guber-scene-conversation")).toHaveCount(0);
@@ -87,13 +91,47 @@ test.describe("Team GUBER cinematic entry door", () => {
 
     await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
     await expect(page.getByText("Connecting…")).toBeVisible();
-    await emitVoice(page, "homepage", "listening");
+    await emitVoice(page, "listening");
     await completeCinematic(page);
     await page.getByRole("button", { name: "Switch to typing" }).click();
     await page.getByRole("button", { name: "Go to full app" }).click();
 
     await expect(doorRegion(page)).toHaveCount(0);
     await expect(page.getByTestId("jac-live-surface")).toHaveCount(1);
+  });
+
+  test("a recoverable startup failure stays voice-first and never opens the keyboard", async ({ page }) => {
+    await installUnauthenticatedSession(page);
+    await page.goto("/?jac_e2e=1");
+    await expectDoorGatedHome(page);
+
+    await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
+    await emitVoice(page, "error", "transport");
+
+    await expect(page.getByText("Reconnecting JAC…")).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Message JAC" })).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).not.toBe("TEXTAREA");
+
+    await completeCinematic(page);
+    await expect(page.getByText("Reconnecting JAC…")).toBeVisible();
+    await emitVoice(page, "listening");
+    await expect(page.getByText("Listening…")).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Message JAC" })).toHaveCount(0);
+  });
+
+  test("microphone denial offers text fallback without focusing it", async ({ page }) => {
+    await installUnauthenticatedSession(page);
+    await page.goto("/?jac_e2e=1");
+    await expectDoorGatedHome(page);
+
+    await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
+    await emitVoice(page, "error", "microphone-denied");
+    await completeCinematic(page);
+
+    await expect(page.getByText("Microphone permission needed — Type Instead is available")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Switch to typing" })).toHaveText("Type Instead");
+    await expect(page.getByRole("textbox", { name: "Message JAC" })).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).not.toBe("TEXTAREA");
   });
 
   test("a fresh campaign join reaches the same door-gated home flow", async ({ page }) => {

@@ -19,6 +19,13 @@ Warm the invisible realtime voice session behind the playing door film after the
 
 **How to apply:** Use the Enter gesture for microphone permission, hold all live UI until the film reaches its clean final frame, then have the connected realtime session speak the greeting. Keep Type Instead visible if voice permission or connection fails.
 
+## ENTER remains the authoritative voice choice
+Never let a voice startup failure switch the door scene into text mode or focus the composer. Microphone denial/unavailability may expose Type Instead, but the keyboard opens only after the visitor explicitly chooses text. Recoverable session, audio, token, and transport failures remain voice-first and preserve gesture-acquired resources for retry.
+
+**Why:** Samsung Browser showed that generic error fallback could mount and focus the textarea during the cinematic, opening the keyboard and overriding the visitor's ENTER choice.
+
+**How to apply:** Classify microphone failures separately from recoverable transport failures, retain the prepared microphone/audio activation across retries, and keep a clear connecting state through the reveal.
+
 ## Core files
 - `client/src/components/guber-door-splash.tsx` — web door, greeting, in-scene conversation, and optional Explore handoff
 - `client/src/components/jac/jac-character-renderer.tsx` — animated JAC with 5 CSS states + canvas mouth overlay

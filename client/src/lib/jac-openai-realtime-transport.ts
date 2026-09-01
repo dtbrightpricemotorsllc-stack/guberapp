@@ -7,11 +7,18 @@ export type JacRealtimePhase =
   | "muted"
   | "error";
 
+export type JacRealtimeErrorKind =
+  | "microphone-denied"
+  | "microphone-unavailable"
+  | "session"
+  | "audio"
+  | "transport";
+
 export interface JacRealtimeCallbacks {
   onPhaseChange?(phase: JacRealtimePhase): void;
   onUserTranscript?(text: string): void;
   onJacResponse?(text: string): void;
-  onError?(message: string): void;
+  onError?(message: string, kind: JacRealtimeErrorKind): void;
 }
 
 export interface JacRealtimeTransportOptions extends JacRealtimeCallbacks {
@@ -24,6 +31,33 @@ export interface JacRealtimeTransportOptions extends JacRealtimeCallbacks {
 }
 
 type JsonEvent = Record<string, unknown> & { type?: string };
+
+class JacRealtimeStartError extends Error {
+  constructor(
+    message: string,
+    readonly kind: JacRealtimeErrorKind,
+  ) {
+    super(message);
+    this.name = "JacRealtimeStartError";
+  }
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return fallback;
+}
+
+function microphoneError(error: unknown): JacRealtimeStartError {
+  const name = error instanceof DOMException || error instanceof Error ? error.name : "";
+  const message = errorMessage(error, "The microphone could not start.");
+  if (name === "NotAllowedError" || name === "SecurityError" || name === "PermissionDeniedError") {
+    return new JacRealtimeStartError(message, "microphone-denied");
+  }
+  return new JacRealtimeStartError(message, "microphone-unavailable");
+}
 
 const MIC_CONSTRAINTS: MediaTrackConstraints = {
   channelCount: 1,
@@ -153,12 +187,15 @@ export class JacOpenAIRealtimeTransport {
           ? (constraints: MediaStreamConstraints) => navigator.mediaDevices.getUserMedia(constraints)
           : null);
       if (!media) {
-        this.preparedStream = Promise.reject(new Error("A microphone is not available in this browser."));
+        this.preparedStream = Promise.reject(
+          new JacRealtimeStartError("A microphone is not available in this browser.", "microphone-unavailable"),
+        );
       } else {
         try {
-          this.preparedStream = Promise.resolve(media({ audio: MIC_CONSTRAINTS }));
+          this.preparedStream = Promise.resolve(media({ audio: MIC_CONSTRAINTS }))
+            .catch(error => { throw microphoneError(error); });
         } catch (error) {
-          this.preparedStream = Promise.reject(error);
+          this.preparedStream = Promise.reject(microphoneError(error));
         }
       }
     }
@@ -187,6 +224,7 @@ export class JacOpenAIRealtimeTransport {
 
   async start(): Promise<void> {
     // Keep the context and mic promise primed by prepareForUserGesture().
+    this.preserveActivationForRetry();
     await this.teardown(false, true);
     const generation = ++this.generation;
     this.stopped = false;
@@ -199,54 +237,75 @@ export class JacOpenAIRealtimeTransport {
         ?? ((constraints: MediaStreamConstraints) => navigator.mediaDevices.getUserMedia(constraints));
       const preparedStream = this.preparedStream;
       this.preparedStream = null;
-      const [response, stream] = await Promise.all([
-        fetchImpl(this.options.sessionEndpoint, {
+      const sessionRequest = fetchImpl(this.options.sessionEndpoint, {
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ transport: "websocket", audioFormat: "pcm16", sampleRate: 24_000 }),
-        }),
-        preparedStream ?? media({ audio: MIC_CONSTRAINTS }),
-      ]);
-      if (!response.ok) throw new Error(`Voice session request failed (${response.status}).`);
+        }).catch(error => {
+          throw new JacRealtimeStartError(errorMessage(error, "Voice session request failed."), "session");
+        });
+      const microphoneRequest = (preparedStream ?? Promise.resolve()
+        .then(() => media({ audio: MIC_CONSTRAINTS })))
+        .catch(error => { throw error instanceof JacRealtimeStartError ? error : microphoneError(error); });
+      const [response, stream] = await Promise.all([sessionRequest, microphoneRequest]);
+      this.stream = stream;
+      if (!response.ok) {
+        throw new JacRealtimeStartError(`Voice session request failed (${response.status}).`, "session");
+      }
       const token = tokenFromSession(await response.json());
-      if (!token) throw new Error("Voice session did not return a short-lived token.");
+      if (!token) {
+        throw new JacRealtimeStartError("Voice session did not return a short-lived token.", "session");
+      }
       if (this.stopped || generation !== this.generation) {
         stream.getTracks().forEach(track => track.stop());
         return;
       }
 
-      this.stream = stream;
       const AudioContextImpl = this.options.AudioContext
         ?? globalThis.AudioContext
         ?? (globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextImpl && !this.preparedContext) throw new Error("Web Audio is not supported in this browser.");
+      if (!AudioContextImpl && !this.preparedContext) {
+        throw new JacRealtimeStartError("Web Audio is not supported in this browser.", "audio");
+      }
       const context = this.preparedContext
         ?? (AudioContextImpl ? new AudioContextImpl({ sampleRate: 24_000 }) : null);
-      if (!context) throw new Error("Web Audio is not supported in this browser.");
+      if (!context) throw new JacRealtimeStartError("Web Audio is not supported in this browser.", "audio");
       this.context = context;
       this.preparedContext = null;
-      if (this.context.state === "suspended") await this.context.resume();
-      await this.setupCapture();
+      try {
+        if (this.context.state === "suspended") await this.context.resume();
+        await this.setupCapture();
+      } catch (error) {
+        throw new JacRealtimeStartError(errorMessage(error, "Realtime audio could not start."), "audio");
+      }
 
       const location = window.location;
       const url = new URL(this.options.realtimePath ?? "/api/jac/realtime", location.origin);
       url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
       url.searchParams.set("token", token);
       const WebSocketImpl = this.options.WebSocket ?? globalThis.WebSocket;
-      this.socket = new WebSocketImpl(url.toString());
+      try {
+        this.socket = new WebSocketImpl(url.toString());
+      } catch (error) {
+        throw new JacRealtimeStartError(errorMessage(error, "Voice connection could not open."), "transport");
+      }
       this.socket.onopen = () => {
         if (generation !== this.generation || this.stopped) return;
         this.setPhase(this.muted ? "muted" : "listening");
       };
       this.socket.onmessage = event => this.handleEvent(decodeRealtimeEvent(event.data));
-      this.socket.onerror = () => this.fail("Voice connection lost.");
+      this.socket.onerror = () => this.fail("Voice connection lost.", "transport");
       this.socket.onclose = () => {
-        if (!this.stopped && generation === this.generation) this.fail("Voice disconnected.");
+        if (!this.stopped && generation === this.generation) this.fail("Voice disconnected.", "transport");
       };
     } catch (error) {
-      this.fail(error instanceof Error ? error.message : "Voice could not start.");
-      await this.teardown(false);
+      const failure = error instanceof JacRealtimeStartError
+        ? error
+        : new JacRealtimeStartError(errorMessage(error, "Voice could not start."), "transport");
+      this.fail(failure.message, failure.kind);
+      this.preserveActivationForRetry();
+      await this.teardown(false, true);
     }
   }
 
@@ -357,7 +416,10 @@ export class JacOpenAIRealtimeTransport {
         break;
       case "error": {
         const error = event.error as Record<string, unknown> | undefined;
-        this.fail(typeof error?.message === "string" ? error.message : "Voice connection error.");
+        this.fail(
+          typeof error?.message === "string" ? error.message : "Voice connection error.",
+          "transport",
+        );
         break;
       }
     }
@@ -404,11 +466,23 @@ export class JacOpenAIRealtimeTransport {
     if (this.socket?.readyState === 1) this.socket.send(JSON.stringify(event));
   }
 
-  private fail(message: string): void {
+  private fail(message: string, kind: JacRealtimeErrorKind): void {
     if (this.stopped || this.errorReported) return;
     this.errorReported = true;
     this.setPhase("error");
-    this.options.onError?.(message);
+    this.options.onError?.(message, kind);
+  }
+
+  private preserveActivationForRetry(): void {
+    if (this.stream && this.stream.getAudioTracks().some(track => track.readyState !== "ended")) {
+      const stream = this.stream;
+      this.stream = null;
+      this.preparedStream = Promise.resolve(stream);
+    }
+    if (this.context && this.context.state !== "closed") {
+      this.preparedContext = this.context;
+      this.context = null;
+    }
   }
 
   private setPhase(phase: JacRealtimePhase): void {

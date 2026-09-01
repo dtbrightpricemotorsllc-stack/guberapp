@@ -115,6 +115,59 @@ describe("JacOpenAIRealtimeTransport", () => {
     await transport.end();
   });
 
+  it("distinguishes microphone denial from transport failures", async () => {
+    const onError = vi.fn();
+    const transport = new JacOpenAIRealtimeTransport({
+      sessionEndpoint: "/session",
+      fetch: vi.fn(async () => ({ ok: true, json: async () => ({ token: "short-token" }) })) as any,
+      WebSocket: MockSocket as any,
+      AudioContext: vi.fn(function MockAudioContext() { return audioMocks().context; }) as any,
+      getUserMedia: vi.fn(async () => {
+        throw new DOMException("Permission denied", "NotAllowedError");
+      }),
+      onError,
+    });
+
+    transport.prepareForUserGesture();
+    await transport.start();
+
+    expect(onError).toHaveBeenCalledWith("Permission denied", "microphone-denied");
+    expect(transport.phase).toBe("error");
+  });
+
+  it("reuses gesture-prepared microphone and audio when a session retry succeeds", async () => {
+    const audio = audioMocks();
+    const track = { stop: vi.fn(), enabled: true, readyState: "live" };
+    const stream = { getTracks: () => [track], getAudioTracks: () => [track] } as unknown as MediaStream;
+    const getUserMedia = vi.fn(async () => stream);
+    const AudioContext = vi.fn(function MockAudioContext() { return audio.context; }) as any;
+    const fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ token: "short-token" }) });
+    const onError = vi.fn();
+    const transport = new JacOpenAIRealtimeTransport({
+      sessionEndpoint: "/session",
+      fetch: fetch as any,
+      WebSocket: MockSocket as any,
+      AudioContext,
+      getUserMedia,
+      onError,
+    });
+
+    transport.prepareForUserGesture();
+    await transport.start();
+    expect(onError).toHaveBeenCalledWith("Voice session request failed (503).", "session");
+
+    await transport.reconnect();
+    MockSocket.instances.at(-1)!.open();
+
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(AudioContext).toHaveBeenCalledTimes(1);
+    expect(track.stop).not.toHaveBeenCalled();
+    expect(transport.phase).toBe("listening");
+    await transport.end();
+  });
+
   it("reports transcripts and sends exact-text response.create", async () => {
     const onUserTranscript = vi.fn();
     const onJacResponse = vi.fn();

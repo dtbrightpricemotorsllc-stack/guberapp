@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import {
   JacOpenAIRealtimeTransport,
+  type JacRealtimeErrorKind,
   type JacRealtimePhase,
 } from "@/lib/jac-openai-realtime-transport";
 import {
@@ -25,7 +26,7 @@ interface Props {
   onPhaseChange(phase: JacRealtimePhase): void;
   onUserTranscript(text: string): void;
   onJacResponse(text: string): void;
-  onError(message: string): void;
+  onError(message: string, kind: JacRealtimeErrorKind): void;
 }
 
 /** Invisible OpenAI Realtime session controller. It stays resident so a user
@@ -54,10 +55,13 @@ export const JacOpenAIRealtimeSession = forwardRef<JacOpenAIRealtimeSessionHandl
           else if (event.kind === "assistant-response" && event.text?.trim()) callbacks.current.onJacResponse(event.text.trim());
           else if (event.kind === "error") {
             harnessConnected.current = false;
-            callbacks.current.onError(event.text?.trim() || "Voice connection lost.");
+            callbacks.current.onError(
+              event.text?.trim() || "Voice connection lost.",
+              event.errorKind ?? "transport",
+            );
           } else if (event.kind === "disconnect") {
             harnessConnected.current = false;
-            callbacks.current.onError("Voice disconnected.");
+            callbacks.current.onError("Voice disconnected.", "transport");
           }
         });
       }
@@ -67,7 +71,7 @@ export const JacOpenAIRealtimeSession = forwardRef<JacOpenAIRealtimeSessionHandl
         onPhaseChange: phase => callbacks.current.onPhaseChange(phase),
         onUserTranscript: text => callbacks.current.onUserTranscript(text),
         onJacResponse: text => callbacks.current.onJacResponse(text),
-        onError: message => callbacks.current.onError(message),
+        onError: (message, kind) => callbacks.current.onError(message, kind),
       });
       transport.current = instance;
       return () => {
