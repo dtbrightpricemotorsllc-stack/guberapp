@@ -84,6 +84,16 @@ async function sendGuestMessage(page: Page, message: string) {
   await input.press("Enter");
 }
 
+async function enterCanonicalJac(page: Page) {
+  const doorEntry = page.getByRole("button", { name: "Enter Team GUBER" });
+  if (await doorEntry.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await doorEntry.click();
+    await page.getByRole("button", { name: "Type to JAC instead" }).click();
+    await page.getByRole("button", { name: "Go to full app" }).click();
+  }
+  await expect(page.getByTestId("jac-live-surface")).toBeVisible();
+}
+
 async function sendAssistantMessage(page: Page, message: string) {
   const input = page.getByTestId("input-assistant-message");
   await expect(input).toBeEnabled();
@@ -137,9 +147,6 @@ async function dismissDashboardOverlays(page: Page) {
 }
 
 test("guest JAC asks whether to browse or post before showing a destination", async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem("guberDoorSplashSeen", "1");
-  });
   const requests = await installJacResponses(page, "guest");
   const voiceRequests: string[] = [];
   page.on("request", (request) => {
@@ -150,6 +157,7 @@ test("guest JAC asks whether to browse or post before showing a destination", as
 
   await page.goto("/");
   await expect(page.getByTestId("page-home")).toBeVisible();
+  await enterCanonicalJac(page);
   // Text JAC must be immediately usable. Voice is optional on web/PWA and
   // cannot mint a session until the user explicitly taps the voice control.
   expect(voiceRequests).toEqual([]);

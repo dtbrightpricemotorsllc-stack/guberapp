@@ -795,27 +795,11 @@ export default function Home() {
   const [currentSlide,  setCurrentSlide]  = useState(SLIDES[0]);
   const { enabled: investorPitchPublic } = useFeatureFlag("investor_pitch_public");
 
-  // The Team GUBER door is a web entry experience. Keep the canonical JAC
-  // surface unmounted until the door has finished so two JAC instances cannot
-  // compete for the guest session or greeting.
-  const [doorSplashDone, setDoorSplashDone] = useState(() => {
-    if (isNativeApp) return true;
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      // QA/dev override: always show the door, even for returning visitors.
-      if (params.has("doortest")) return false;
-    }
-    try {
-      return localStorage.getItem("guberDoorSplashSeen") === "1";
-    } catch {
-      return false;
-    }
-  });
+  // The Team GUBER door is the web entry experience. Web refreshes always
+  // begin at the cinematic scene; native builds keep their existing bypass.
+  const [doorSplashDone, setDoorSplashDone] = useState(() => isNativeApp);
 
-  const finishDoorSplash = () => {
-    try { localStorage.setItem("guberDoorSplashSeen", "1"); } catch {}
-    setDoorSplashDone(true);
-  };
+  const finishDoorSplash = () => setDoorSplashDone(true);
 
   // Scroll to top on mount AND every time the app is foregrounded.
   // iOS WKWebView preserves exact scroll position when backgrounded — the page

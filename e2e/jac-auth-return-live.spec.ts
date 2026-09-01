@@ -51,13 +51,22 @@ async function dismissDashboardOverlays(page: Page) {
   }
 }
 
+async function enterCanonicalJac(page: Page) {
+  const doorEntry = page.getByRole("button", { name: "Enter Team GUBER" });
+  if (await doorEntry.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await doorEntry.click();
+    await page.getByRole("button", { name: "Type to JAC instead" }).click();
+    await page.getByRole("button", { name: "Go to full app" }).click();
+  }
+  await expect(page.getByTestId("jac-live-surface")).toBeVisible();
+}
+
 test("JAC takes a real user from greeting to a safe action across login", async ({ page }) => {
   const origin = new URL(process.env.E2E_BASE_URL || "http://localhost:5000").origin;
   await page.context().grantPermissions(["microphone"], { origin });
   await page.addInitScript(() => {
     localStorage.setItem("guber_alert_status", "granted");
     localStorage.setItem("guber_alert_modal_autoshown", "true");
-    localStorage.setItem("guberDoorSplashSeen", "1");
   });
 
   const unsafeRequests: string[] = [];
@@ -138,6 +147,7 @@ test("JAC takes a real user from greeting to a safe action across login", async 
   // without showing a terminal error or taking text chat away.
   await page.goto("/?jac_e2e=1");
   await expect(page.getByTestId("page-home")).toBeVisible();
+  await enterCanonicalJac(page);
   const startVoice = page.getByRole("button", { name: "Start voice" });
   if (await startVoice.isVisible({ timeout: 1_000 }).catch(() => false)) {
     await startVoice.click({ timeout: 1_000 }).catch(() => {

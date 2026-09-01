@@ -18,7 +18,6 @@ import {
   type JacOpenAIRealtimeSessionHandle,
 } from "@/components/jac/jac-openai-realtime-session";
 import type { JacRealtimePhase } from "@/lib/jac-openai-realtime-transport";
-import { JacAnimatedCharacter, type JacState } from "@/components/jac/jac-animated-character";
 import { SignupCard } from "@/components/jac/jac-signup-card";
 import { getGuestSessionId } from "@/hooks/use-guest-jac-session";
 import { saveServiceOfferPrefill } from "@/lib/jac-listing-prefill";
@@ -30,21 +29,14 @@ import {
 } from "@/lib/campaign-onboarding";
 
 // ── Greeting guard: fires at most once per browser tab session ────────────────
-let _greetingHasFired = false;
-
 // ── Assets ───────────────────────────────────────────────────────────────────
 const DOOR_CLOSED = "/splash/door-closed.png";
-const HQ_BG       = "/splash/hq-new-bg.jpg";
-const CHAR_DD     = "/splash/char-dd-v2.png";
-const CHAR_GUBEE  = "/splash/char-gubee-v2.png";
-const BTN_TALK    = "/splash/btn-talk.png";
-const BTN_TYPE    = "/splash/btn-type.png";
+const HQ_BG       = "/splash/hq-reveal.png";
 
 // ── Timing (ms) ──────────────────────────────────────────────────────────────
 const SEAM_FLASH_MS  = 340;
 const DOORS_START_AT = 280;
 const DOORS_END_AT   = 1380;
-const WELCOME_AT     = 1420;
 const GREETING_AT    = 1700;
 const BUTTONS_AT     = 2200;
 const DOOR_SLIDE_MS  = DOORS_END_AT - DOORS_START_AT;
@@ -89,7 +81,6 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   // Door animation
   const [phase,        setPhase]        = useState<DoorPhase>("closed");
   const [seamFlash,    setSeamFlash]    = useState(false);
-  const [showWelcome,  setShowWelcome]  = useState(false);
   const [showGreeting, setShowGreeting] = useState(false);
   const [showButtons,  setShowButtons]  = useState(false);
   const [mounted,      setMounted]      = useState(true);
@@ -117,30 +108,17 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     }
   });
 
-  // JAC character dimensions (responsive to viewport)
-  const [jacHeightPx, setJacHeightPx]  = useState(380);
-
   const timerRefs      = useRef<ReturnType<typeof setTimeout>[]>([]);
   const realtimeRef    = useRef<JacOpenAIRealtimeSessionHandle | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef       = useRef<HTMLTextAreaElement>(null);
   const signupOffered  = useRef(false); // in-scene signup card fires at most once per conversation
+  const greetingHasFired = useRef(false);
 
   const schedule = useCallback((fn: () => void, ms: number) => {
     const t = setTimeout(fn, ms);
     timerRefs.current.push(t);
     return t;
-  }, []);
-
-  // Responsive JAC height
-  useEffect(() => {
-    function measure() {
-      const vh = window.innerHeight;
-      setJacHeightPx(Math.max(200, Math.min(430, Math.round(vh * 0.56))));
-    }
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
   }, []);
 
   useEffect(() => {
@@ -153,25 +131,6 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ── Derive JAC animation state ─────────────────────────────────────────────
-  const jacState: JacState = (() => {
-    if (greetingPlaying)                             return "speaking";
-    if (convMode === "none")                         return "idle";
-    if (convMode === "text") {
-      if (textLoading)   return "thinking";
-      if (jacSpeakingTx) return "speaking";
-      return "idle";
-    }
-    // voice mode
-    switch (realtimePhase) {
-      case "speaking":   return "speaking";
-      case "thinking":   return "thinking";
-      case "listening":  return "listening";
-      case "connecting": return "thinking";
-      default:           return "idle";
-    }
-  })();
-
   // ── Door open sequence ───────────────────────────────────────────────────
   function handleEnter() {
     if (phase !== "closed") return;
@@ -181,7 +140,6 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     schedule(() => setSeamFlash(true),  80);
     schedule(() => setSeamFlash(false), 80 + SEAM_FLASH_MS);
     schedule(() => setPhase("opening"), DOORS_START_AT);
-    schedule(() => setShowWelcome(true), WELCOME_AT);
     schedule(() => {
       setPhase("open");
       setShowGreeting(true);
@@ -190,8 +148,8 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
       setMessages([{ role: "jac", text: GREETING_TEXT }]);
 
       // Play greeting TTS exactly once
-      if (!_greetingHasFired) {
-        _greetingHasFired = true;
+      if (!greetingHasFired.current) {
+        greetingHasFired.current = true;
         setGreetingPlaying(true);
         jacSpeak(GREETING_TEXT)
           .catch(() => {})
@@ -477,6 +435,8 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
       <div
         role="region"
         aria-label={isClosed ? "GUBER entry — tap to open" : "Team GUBER HQ"}
+        data-testid="guber-door-scene"
+        data-phase={phase}
         style={{
           position:"fixed", inset:0, zIndex:9999,
           background:"#000", overflow:"hidden",
@@ -495,10 +455,10 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           willChange:"transform",
         }}>
           {/* Background */}
-          <img src={HQ_BG} alt="" draggable={false} style={{
+        <img src={HQ_BG} alt="" draggable={false} style={{
             position:"absolute", inset:0,
             width:"100%", height:"100%",
-            objectFit:"cover", objectPosition:"center top",
+            objectFit:"fill", objectPosition:"center top",
             display:"block", userSelect:"none",
           }} />
           <div style={{
@@ -506,78 +466,6 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
             background:"linear-gradient(to bottom,rgba(0,0,10,.7) 0%,rgba(0,0,10,.06) 28%,rgba(0,0,10,.04) 55%,rgba(0,0,10,.82) 100%)",
           }} />
 
-          {/* Gubee */}
-          <img src={CHAR_GUBEE} alt="" draggable={false} style={{
-            position:"absolute", right:"-3%", bottom:"11%",
-            height:"clamp(120px,38vh,290px)", width:"auto",
-            objectFit:"contain", userSelect:"none",
-            mixBlendMode:"screen",
-            filter:"brightness(1.12) saturate(1.15) contrast(1.05)",
-            animation: isOpen ? "gubee-breathe 3.5s ease-in-out infinite" : "none",
-            opacity:(isOpening||isOpen) ? 1 : 0,
-            transition:"opacity 600ms ease",
-          }} />
-
-          {/* JAC glow — color/animation changes by state */}
-          {(isOpening||isOpen) && (
-            <div aria-hidden="true" style={{
-              position:"absolute", left:"50%", bottom: inConv ? "13%" : "11%",
-              width:"clamp(150px,52vw,340px)", height:"clamp(150px,52vw,340px)",
-              borderRadius:"50%", transform:"translateX(-50%)",
-              background:
-                jacState === "speaking"  ? "radial-gradient(ellipse,rgba(110,60,255,.35) 0%,rgba(0,160,255,.15) 52%,transparent 78%)" :
-                jacState === "listening" ? "radial-gradient(ellipse,rgba(0,200,180,.30) 0%,rgba(0,150,220,.12) 52%,transparent 78%)" :
-                jacState === "thinking"  ? "radial-gradient(ellipse,rgba(100,50,220,.28) 0%,rgba(80,40,180,.10) 52%,transparent 78%)" :
-                                          "radial-gradient(ellipse,rgba(60,40,180,.18) 0%,rgba(0,100,200,.07) 52%,transparent 78%)",
-              animation:
-                jacState === "speaking"  ? "jac-glow-pulse 1.3s ease-in-out infinite" :
-                jacState === "listening" ? "jac-listen-glow 2.0s ease-in-out infinite" :
-                jacState === "thinking"  ? "jac-think-glow 1.8s ease-in-out infinite" :
-                "none",
-              pointerEvents:"none",
-              transition:"background 600ms ease",
-            }} />
-          )}
-
-          {/* ── JAC (animated character) ─────────────────────────────── */}
-          <div style={{
-            position:"absolute", left:"50%",
-            bottom: inConv ? "14%" : "12%",
-            transform:"translateX(-50%)",
-            zIndex:2,
-            opacity:(isOpening||isOpen) ? 1 : 0,
-            transition:"opacity 700ms ease, bottom 400ms ease",
-            willChange:"transform",
-          }}>
-            <JacAnimatedCharacter
-              state={jacState}
-              heightPx={jacHeightPx}
-            />
-          </div>
-
-          {/* D.D. */}
-          <img src={CHAR_DD} alt="" draggable={false} style={{
-            position:"absolute", left:"1%", bottom:"15%",
-            height:"clamp(75px,22vh,180px)", width:"auto",
-            objectFit:"contain", userSelect:"none",
-            mixBlendMode:"screen",
-            filter:"brightness(1.2) saturate(1.25) contrast(1.08)",
-            animation: isOpen ? "dd-hover 2.1s ease-in-out infinite" : "none",
-            opacity:(isOpening||isOpen) ? 1 : 0,
-            transition:"opacity 600ms ease",
-          }} />
-
-          {/* Floor ring */}
-          <div aria-hidden="true" style={{
-            position:"absolute", left:"50%", bottom:"7%",
-            width:"clamp(170px,60vw,380px)", height:32,
-            borderRadius:"50%", transform:"translateX(-50%)",
-            background:"radial-gradient(ellipse,rgba(80,60,255,.45) 0%,rgba(0,190,255,.2) 55%,transparent 80%)",
-            animation: isOpen ? "floor-ring 2.8s ease-in-out infinite" : "none",
-            pointerEvents:"none",
-            opacity:(isOpening||isOpen) ? 1 : 0,
-            transition:"opacity 700ms ease",
-          }} />
         </div>
         {/* ── end HQ scene ──────────────────────────────────────────────── */}
 
@@ -589,7 +477,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           willChange:"transform",
           transform:(isOpening||isOpen)?"translateX(-100%)":"translateX(0)",
           transition:doorTx,
-        }}>
+        }} data-testid="guber-door-panel-left" data-open={isOpening || isOpen ? "true" : "false"}>
           <img src={DOOR_CLOSED} alt="" draggable={false} style={{
             position:"absolute", left:0, top:0,
             width:"200%", height:"100%",
@@ -598,16 +486,16 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           }} />
         </div>
         <div aria-hidden="true" style={{
-          position:"absolute", right:0, top:0,
+          position:"absolute", left:"50%", top:0,
           width:"50%", height:"100%", overflow:"hidden",
           willChange:"transform",
           transform:(isOpening||isOpen)?"translateX(100%)":"translateX(0)",
           transition:doorTx,
-        }}>
+        }} data-testid="guber-door-panel-right" data-open={isOpening || isOpen ? "true" : "false"}>
           <img src={DOOR_CLOSED} alt="" draggable={false} style={{
-            position:"absolute", right:0, top:0,
+            position:"absolute", left:"-100%", top:0,
             width:"200%", height:"100%",
-            objectFit:"cover", objectPosition:"right center",
+            objectFit:"fill",
             display:"block", userSelect:"none",
           }} />
         </div>
@@ -672,120 +560,60 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
         {/* ═══════════════════════════════════════════════════════════════
             OPEN SCENE OVERLAY
             ═══════════════════════════════════════════════════════════════ */}
-        {showWelcome && (
+        {showGreeting && !inConv && (
           <>
-            {/* ── WELCOME HEADER (collapses when conversation starts) ─── */}
-            <div style={{
-              position:"absolute", top:0, left:0, right:0,
-              paddingTop:"max(16px,env(safe-area-inset-top,16px))",
-              display:"flex", flexDirection:"column", alignItems:"center",
-              zIndex:6,
-              background:"linear-gradient(to bottom,rgba(0,0,10,.88) 0%,rgba(0,0,10,.5) 72%,transparent 100%)",
-              animation:"welcome-in 560ms cubic-bezier(.22,1,.36,1) both",
-              maxHeight: inConv ? "48px" : "220px",
-              overflow:"hidden",
-              transition:"max-height 500ms cubic-bezier(.4,0,.2,1)",
-            }}>
-              {!inConv && (
-                <p style={{
-                  fontFamily:"'Bebas Neue','Inter',sans-serif",
-                  fontSize:"clamp(10px,2.8vw,13px)", letterSpacing:".38em",
-                  color:"rgba(255,255,255,.5)", margin:"0 0 2px 0", userSelect:"none",
-                }}>WELCOME TO</p>
-              )}
-              <p style={{
-                fontFamily:"'Bebas Neue','Inter',sans-serif",
-                fontSize: inConv ? "clamp(12px,3.2vw,17px)" : "clamp(36px,11vw,66px)",
-                fontWeight:700, letterSpacing:".16em", lineHeight:1,
-                color:"#fff",
-                textShadow:"0 0 22px rgba(110,60,255,.75),0 0 50px rgba(0,180,255,.35),0 2px 0 rgba(0,0,0,.5)",
-                margin:0, userSelect:"none",
-                transition:"font-size 400ms ease",
-              }}>TEAM GUBER</p>
-              {!inConv && (
-                <p style={{
-                  fontFamily:"'Bebas Neue','Inter',sans-serif",
-                  fontSize:"clamp(8px,2.2vw,11px)", letterSpacing:".30em",
-                  color:"rgba(0,230,120,.9)", margin:"7px 0 0 0", userSelect:"none",
-                }}>YOUR GO-TO FOR WHAT YOU GO THROUGH.</p>
-              )}
+            <div
+              role="status"
+              aria-live="polite"
+              aria-busy={greetingPlaying}
+              data-testid="guber-greeting"
+              style={{
+                position:"absolute", width:1, height:1, padding:0,
+                margin:-1, overflow:"hidden", clip:"rect(0,0,0,0)",
+                whiteSpace:"nowrap", border:0,
+              }}
+            >
+              {GREETING_TEXT}
             </div>
-
-
-            {/* ── PRE-CONVERSATION: greeting + TALK/TYPE buttons ─────── */}
-            {!inConv && showGreeting && (
+            {showButtons && (
               <div style={{
-                position:"absolute", bottom:0, left:0, right:0, zIndex:7,
-                display:"flex", flexDirection:"column", alignItems:"center",
-                animation:"conv-in 480ms cubic-bezier(.22,1,.36,1) both",
+                position:"absolute", left:0, right:0,
+                bottom:"clamp(72px,15vh,150px)",
+                padding:"0 clamp(18px,8vw,96px)",
+                display:"flex", gap:"clamp(10px,3vw,28px)",
+                zIndex:7,
+                animation:"btn-appear 400ms cubic-bezier(.34,1.1,.64,1) both",
               }}>
-                {/* Speaking dots while greeting plays */}
-                {greetingPlaying && (
-                  <div style={{ display:"flex", gap:5, marginBottom:6 }}>
-                    {[0,1,2].map(i => (
-                      <div key={i} style={{
-                        width:5, height:5, borderRadius:"50%",
-                        background:"rgba(0,230,120,.95)",
-                        animation:`speak-dot .85s ease-in-out infinite ${i*.22}s`,
-                      }} />
-                    ))}
-                  </div>
-                )}
-                <p style={{
-                  fontFamily:"'Bebas Neue','Inter',sans-serif",
-                  fontSize:"clamp(14px,4.2vw,20px)", letterSpacing:".06em",
-                  lineHeight:1.3, color:"#fff",
-                  textShadow:"0 0 14px rgba(120,70,255,.55),0 2px 8px rgba(0,0,0,.7)",
-                  margin:"0 24px 6px", textAlign:"center", userSelect:"none",
-                }}>
-                  I'M JAC. TELL ME WHAT YOU'RE TRYING TO GET DONE!
-                </p>
-
-                {showButtons && (
-                  <div style={{
-                    width:"100%",
-                    padding:"0 20px calc(20px + env(safe-area-inset-bottom,0px))",
-                    display:"flex", flexDirection:"column", gap:10,
-                    background:"linear-gradient(to top,rgba(0,0,10,.94) 0%,rgba(0,0,10,.55) 55%,transparent 100%)",
-                    animation:"btn-appear 400ms cubic-bezier(.34,1.1,.64,1) both",
-                  }}>
-                    <button
-                      onClick={enterVoice}
-                      aria-label="Talk to JAC with voice"
-                      className="gdoor-mode-btn"
-                      style={{
-                        background:"none", border:"none", padding:0,
-                        cursor:"pointer", display:"block", width:"100%",
-                        lineHeight:0, borderRadius:12, overflow:"hidden",
-                        transition:"transform 120ms ease, filter 120ms ease",
-                      }}
-                    >
-                      <img src={BTN_TALK} alt="Talk to JAC" draggable={false}
-                        style={{ width:"100%", height:"auto", display:"block" }} />
-                    </button>
-                    <button
-                      onClick={enterText}
-                      aria-label="Type to JAC instead"
-                      className="gdoor-mode-btn"
-                      style={{
-                        background:"none", border:"none", padding:0,
-                        cursor:"pointer", display:"block", width:"100%",
-                        lineHeight:0, borderRadius:12, overflow:"hidden",
-                        transition:"transform 120ms ease, filter 120ms ease",
-                      }}
-                    >
-                      <img src={BTN_TYPE} alt="Type instead" draggable={false}
-                        style={{ width:"100%", height:"auto", display:"block" }} />
-                    </button>
-                  </div>
-                )}
+                <button
+                  onClick={enterVoice}
+                  aria-label="Talk to JAC with voice"
+                  className="gdoor-mode-btn"
+                  style={{
+                    flex:1, minHeight:"clamp(58px,11vh,105px)",
+                    background:"transparent", border:"1px solid transparent",
+                    borderRadius:16, cursor:"pointer",
+                    transition:"transform 120ms ease, filter 120ms ease",
+                  }}
+                />
+                <button
+                  onClick={enterText}
+                  aria-label="Type to JAC instead"
+                  className="gdoor-mode-btn"
+                  style={{
+                    flex:1, minHeight:"clamp(58px,11vh,105px)",
+                    background:"transparent", border:"1px solid transparent",
+                    borderRadius:16, cursor:"pointer",
+                    transition:"transform 120ms ease, filter 120ms ease",
+                  }}
+                />
               </div>
             )}
+          </>
+        )}
 
-
-            {/* ═══════════════════════════════════════════════════════════
-                IN-CONVERSATION UI
-                ═══════════════════════════════════════════════════════════ */}
+        {/* ═══════════════════════════════════════════════════════════
+            IN-CONVERSATION UI
+            ═══════════════════════════════════════════════════════════ */}
             {inConv && (
               <div style={{
                 position:"absolute", bottom:0, left:0, right:0,
@@ -969,6 +797,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                     <textarea
                       ref={inputRef}
                       value={inputText}
+                      aria-label="Message JAC"
                       onChange={e => setInputText(e.target.value)}
                       onKeyDown={e => {
                         if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(); }

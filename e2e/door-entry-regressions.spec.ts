@@ -1,6 +1,5 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
 
-const DOOR_SEEN_KEY = "guberDoorSplashSeen";
 const CAMPAIGN_CODE = "DOOR42";
 const CAMPAIGN_SESSION = "d".repeat(32);
 
@@ -21,27 +20,45 @@ async function expectDoorGatedHome(page: Page) {
   await expect(page.getByTestId("page-home")).toBeVisible();
   await expect(doorRegion(page)).toBeVisible();
   await expect(page.getByTestId("jac-live-surface")).toHaveCount(0);
+  await expect(doorRegion(page).getByRole("button", { name: "Enter Team GUBER" })).toHaveCount(1);
 }
 
-test.describe("Team GUBER first-visit door", () => {
+test.describe("Team GUBER cinematic entry door", () => {
   test("a fresh home visit shows the door before the canonical JAC surface", async ({ page }) => {
-    await page.addInitScript((key) => localStorage.removeItem(key), DOOR_SEEN_KEY);
     await installUnauthenticatedSession(page);
 
     await page.goto("/");
     await expectDoorGatedHome(page);
   });
 
-  test("?doortest=1 shows the door even for returning visitors", async ({ page }) => {
-    await page.addInitScript((key) => localStorage.setItem(key, "1"), DOOR_SEEN_KEY);
+  test("every web refresh shows the door even for returning visitors", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("guberDoorSplashSeen", "1"));
     await installUnauthenticatedSession(page);
 
-    await page.goto("/?doortest=1");
+    await page.goto("/");
     await expectDoorGatedHome(page);
   });
 
-  test("completing the door leaves exactly one canonical JAC surface", async ({ page }) => {
-    await page.addInitScript((key) => localStorage.removeItem(key), DOOR_SEEN_KEY);
+  test("opening the door reveals JAC in-scene before optional Explore", async ({ page }) => {
+    await installUnauthenticatedSession(page);
+
+    await page.goto("/");
+    await expectDoorGatedHome(page);
+
+    await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
+    const scene = page.locator('[aria-label="Team GUBER HQ"]');
+    await expect(scene).toBeVisible();
+    await expect(page.getByTestId("guber-door-panel-left")).toHaveAttribute("data-open", "true");
+    await expect(page.getByTestId("guber-door-panel-right")).toHaveAttribute("data-open", "true");
+    await expect(page.getByText("I'M JAC. TELL ME WHAT YOU'RE TRYING TO GET DONE!", { exact: true }))
+      .toBeVisible();
+    await expect(page.getByRole("button", { name: "Talk to JAC with voice" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Type to JAC instead" })).toBeVisible();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByTestId("jac-live-surface")).toHaveCount(0);
+  });
+
+  test("Explore is the optional escape to the canonical JAC surface", async ({ page }) => {
     await installUnauthenticatedSession(page);
 
     await page.goto("/");
@@ -53,8 +70,6 @@ test.describe("Team GUBER first-visit door", () => {
 
     await expect(doorRegion(page)).toHaveCount(0);
     await expect(page.getByTestId("jac-live-surface")).toHaveCount(1);
-    await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), DOOR_SEEN_KEY))
-      .toBe("1");
   });
 
   test("a fresh campaign join reaches the same door-gated home flow", async ({ page }) => {
@@ -73,7 +88,6 @@ test.describe("Team GUBER first-visit door", () => {
       expiresAt: "2030-01-01T00:00:00.000Z",
     };
 
-    await page.addInitScript((key) => localStorage.removeItem(key), DOOR_SEEN_KEY);
     await installUnauthenticatedSession(page);
     await page.route("**/api/onboarding/campaign-session", async (route: Route) => {
       if (route.request().method() !== "POST") {
