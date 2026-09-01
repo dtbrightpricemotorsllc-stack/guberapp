@@ -105,6 +105,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const timerRefs      = useRef<ReturnType<typeof setTimeout>[]>([]);
   const cinematicRef   = useRef<HTMLVideoElement>(null);
   const realtimeRef    = useRef<JacOpenAIRealtimeSessionHandle | null>(null);
+  const phaseRef       = useRef<DoorPhase>("closed");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef       = useRef<HTMLTextAreaElement>(null);
   const signupOffered  = useRef(false); // in-scene signup card fires at most once per conversation
@@ -115,6 +116,14 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     timerRefs.current.push(t);
     return t;
   }, []);
+
+  const speakRealtimeGreeting = useCallback(() => {
+    if (greetingHasFired.current || !realtimeRef.current?.connected) return;
+    greetingHasFired.current = true;
+    setGreetingPlaying(true);
+    realtimeRef.current.speakApprovedText(GREETING_TEXT);
+    schedule(() => setGreetingPlaying(false), 4_500);
+  }, [schedule]);
 
   useEffect(() => {
     if (skip) setMounted(false);
@@ -137,24 +146,19 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
 
   // ── Door open sequence ───────────────────────────────────────────────────
   const finishCinematic = useCallback(() => {
+    phaseRef.current = "open";
     setPhase("open");
     setShowGreeting(true);
     setMessages(current => current.length ? current : [{ role: "jac", text: GREETING_TEXT }]);
-
-    if (!greetingHasFired.current) {
-      greetingHasFired.current = true;
-      setGreetingPlaying(true);
-      jacSpeak(GREETING_TEXT)
-        .catch(() => {})
-        .finally(() => setGreetingPlaying(false));
-    }
+    speakRealtimeGreeting();
 
     schedule(() => setShowButtons(true), 420);
-  }, [schedule]);
+  }, [schedule, speakRealtimeGreeting]);
 
   function handleEnter() {
     if (phase !== "closed") return;
     unlockAudioContext();
+    phaseRef.current = "opening";
     setPhase("opening");
     // Warm voice invisibly behind the film so the reveal lands directly in a
     // listening JAC instead of showing a second startup state.
@@ -281,7 +285,10 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   // ── Realtime callbacks ────────────────────────────────────────────────────
   const handleRealtimePhase = useCallback((p: JacRealtimePhase) => {
     setRealtimePhase(p);
-  }, []);
+    if (p === "listening" && phaseRef.current === "open") {
+      speakRealtimeGreeting();
+    }
+  }, [speakRealtimeGreeting]);
 
   const handleRealtimeUser = useCallback((text: string) => {
     const t = text.trim();
@@ -298,6 +305,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
 
   // ── Exit scene → main app ─────────────────────────────────────────────────
   function exitToApp(voice: boolean) {
+    phaseRef.current = "exiting";
     setPhase("exiting");
     setRealtimeActive(false);
     cancelAllJacAudio();
@@ -805,7 +813,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                         fontFamily:"'Inter',sans-serif", letterSpacing:".04em",
                         flexShrink:0, padding:"4px 0",
                       }}
-                     >Type instead</button>
+                     >Type Instead</button>
 
                     {/* Explore → */}
                     <button onClick={() => exitToApp(true)} aria-label="Go to full app"

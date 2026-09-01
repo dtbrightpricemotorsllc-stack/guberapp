@@ -12,6 +12,13 @@ The full-screen door scene is the sole web launch visual on every refresh. The u
 
 **How to apply:** Serve one generated 9:16 video for the door, light bloom, physical opening, character approach, and camera push. Use source art only to condition generation, never as runtime scene layers. Keep a tiny branded poster only for first paint, reduced motion/data, or video failure. The canonical JAC surface mounts only after optional Explore.
 
+## Continuous cinematic-to-JAC handoff
+Warm the invisible realtime voice session behind the playing door film after the visitor's Enter gesture. On the final frame, keep the same video element mounted and reveal the greeting/conversation controls over it; do not mount another splash or startup surface.
+
+**Why:** The cinematic and live JAC are one experience. Starting voice only after the film, swapping artwork, or showing another loader makes the reveal feel like a handoff to a second screen.
+
+**How to apply:** Use the Enter gesture for microphone permission, hold all live UI until the film reaches its clean final frame, then have the connected realtime session speak the greeting. Keep Type Instead visible if voice permission or connection fails.
+
 ## Core files
 - `client/src/components/guber-door-splash.tsx` — web door, greeting, in-scene conversation, and optional Explore handoff
 - `client/src/components/jac/jac-character-renderer.tsx` — animated JAC with 5 CSS states + canvas mouth overlay
