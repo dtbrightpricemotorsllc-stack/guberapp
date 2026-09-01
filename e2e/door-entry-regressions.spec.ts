@@ -50,8 +50,9 @@ test.describe("Team GUBER cinematic entry door", () => {
     await expect(scene).toBeVisible();
     await expect(page.getByTestId("guber-door-panel-left")).toHaveAttribute("data-open", "true");
     await expect(page.getByTestId("guber-door-panel-right")).toHaveAttribute("data-open", "true");
-    await expect(page.getByText("I'M JAC. TELL ME WHAT YOU'RE TRYING TO GET DONE!", { exact: true }))
-      .toBeVisible();
+    await expect(page.getByTestId("guber-greeting")).toHaveText(
+      "Welcome to Team Guber. What brings you here?",
+    );
     await expect(page.getByRole("button", { name: "Talk to JAC with voice" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Type to JAC instead" })).toBeVisible();
     await expect(page).toHaveURL(/\/$/);

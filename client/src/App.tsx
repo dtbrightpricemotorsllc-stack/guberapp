@@ -684,6 +684,12 @@ function SplashWrapper({ onDone }: { onDone: () => void }) {
     return () => window.clearTimeout(timer);
   }, []);
 
+  // The web homepage owns its cinematic entry through GuberDoorSplash.
+  // Keeping the universal mascot loader on top creates two competing launch
+  // scenes and flashes the mascot through the closed doors. Native retains
+  // the existing loading splash because the door scene is bypassed there.
+  if (!isNativeApp) return null;
+
   return (
     <LoadingSplash
       loading={isLoading && !splashTimedOut}

@@ -303,6 +303,12 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const isOpen    = phase === "open" || phase === "exiting";
   const exiting   = phase === "exiting";
   const inConv    = convMode !== "none";
+  const isJacSpeaking = jacSpeakingTx || realtimePhase === "speaking";
+  const jacPerformanceAnimation =
+    isJacSpeaking ? "jac-door-speak .72s ease-in-out infinite" :
+    realtimePhase === "listening" ? "jac-door-listen 2.4s ease-in-out infinite" :
+    realtimePhase === "thinking" ? "jac-door-think 1.7s ease-in-out infinite" :
+    "none";
 
   const doorTx = (isOpening || isOpen)
     ? `transform ${DOOR_SLIDE_MS}ms cubic-bezier(0.42,0,0.12,1)`
@@ -344,6 +350,12 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           20% { opacity:.5 }
           100%{ opacity:0 }
         }
+        @keyframes energy-burst {
+          0%   { opacity:0; transform:translate(-50%,-50%) scale(.35) rotate(-8deg) }
+          16%  { opacity:1 }
+          62%  { opacity:.82; transform:translate(-50%,-50%) scale(1.18) rotate(4deg) }
+          100% { opacity:0; transform:translate(-50%,-50%) scale(1.55) rotate(12deg) }
+        }
         @keyframes camera-push {
           0%   { transform:scale(.96) }
           100% { transform:scale(1.075) }
@@ -374,6 +386,20 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
         @keyframes dd-door-idle {
           0%,100% { transform:translateY(0) rotate(-1deg) }
           50%     { transform:translateY(-8px) rotate(1deg) }
+        }
+        @keyframes jac-door-speak {
+          0%,100% { transform:translateY(0) scale(1) rotate(-.2deg) }
+          18%     { transform:translateY(-5px) scale(1.012) rotate(.3deg) }
+          42%     { transform:translateY(-1px) scale(1.006) rotate(-.2deg) }
+          68%     { transform:translateY(-6px) scale(1.014) rotate(.2deg) }
+        }
+        @keyframes jac-door-listen {
+          0%,100% { transform:translateY(0) rotate(-.35deg) }
+          50%     { transform:translateY(-4px) rotate(.35deg) }
+        }
+        @keyframes jac-door-think {
+          0%,100% { transform:translateY(0) scale(1) }
+          50%     { transform:translateY(-5px) scale(1.008) }
         }
         @keyframes jac-idle {
           0%,100%{ transform:translateY(0px)  rotate(-.3deg) scale(1) }
@@ -520,6 +546,9 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           }}>
             <img src={CHAR_JAC} alt="" draggable={false} style={{
               width:"100%", height:"100%", objectFit:"fill", display:"block",
+              animation:jacPerformanceAnimation,
+              transformOrigin:"50% 82%",
+              willChange:"transform",
             }} />
           </div>
           <div aria-hidden="true" style={{
@@ -645,6 +674,17 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
             zIndex:4, pointerEvents:"none",
           }} />
         )}
+        {isOpening && (
+          <div aria-hidden="true" style={{
+            position:"absolute", left:"50%", top:"48%",
+            width:"118%", height:"118%",
+            transform:"translate(-50%,-50%)",
+            background:"radial-gradient(circle,rgba(225,255,255,.95) 0%,rgba(50,220,255,.55) 9%,rgba(40,170,255,.18) 28%,transparent 58%), conic-gradient(from 0deg,transparent 0deg,rgba(90,230,255,.72) 5deg,transparent 11deg,transparent 31deg,rgba(110,120,255,.6) 37deg,transparent 45deg,transparent 74deg,rgba(60,255,210,.56) 80deg,transparent 88deg,transparent 120deg,rgba(70,200,255,.5) 126deg,transparent 135deg,transparent 180deg,rgba(100,100,255,.5) 187deg,transparent 195deg,transparent 240deg,rgba(40,255,220,.5) 247deg,transparent 255deg,transparent 300deg,rgba(80,200,255,.6) 307deg,transparent 315deg,transparent 360deg)",
+            mixBlendMode:"screen",
+            animation:"energy-burst 1200ms cubic-bezier(.16,1,.3,1) both",
+            pointerEvents:"none", zIndex:12,
+          }} />
+        )}
 
 
         {/* ── TAP TARGET (closed only) ───────────────────────────────────── */}
@@ -680,7 +720,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
               <div style={{
                 position:"absolute", left:"50%", width:"min(100vw, 56.25vh)",
                 transform:"translateX(-50%)",
-                bottom:"clamp(72px,15vh,150px)",
+                bottom:"clamp(32px,4.5vh,44px)",
                 padding:"0 9%",
                 display:"flex", gap:"clamp(10px,3vw,28px)",
                 zIndex:7,
@@ -691,7 +731,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                   aria-label="Talk to JAC with voice"
                   className="gdoor-mode-btn"
                   style={{
-                    flex:1, minHeight:"clamp(58px,11vh,105px)",
+                    flex:1, minHeight:"clamp(52px,7.5vh,68px)",
                     background:"transparent", border:"1px solid transparent",
                     borderRadius:16, cursor:"pointer",
                     transition:"transform 120ms ease, filter 120ms ease",
@@ -702,7 +742,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                   aria-label="Type to JAC instead"
                   className="gdoor-mode-btn"
                   style={{
-                    flex:1, minHeight:"clamp(58px,11vh,105px)",
+                    flex:1, minHeight:"clamp(52px,7.5vh,68px)",
                     background:"transparent", border:"1px solid transparent",
                     borderRadius:16, cursor:"pointer",
                     transition:"transform 120ms ease, filter 120ms ease",

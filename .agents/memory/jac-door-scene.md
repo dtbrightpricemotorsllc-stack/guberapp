@@ -6,11 +6,23 @@ description: Architecture and key facts for the JAC two-surface homepage experie
 # JAC Live Interactive Character Experience
 
 ## Entry flow (web)
-`App.tsx` → `SplashWrapper` (while auth loads) → `home.tsx` → `<JacLiveExperience />` in a `max-w-5xl mx-auto` section. No door gate. No mascot loader for web.
+The full-screen door scene is the sole web launch visual on every refresh. The universal mascot loading splash is native-only, because stacking it above the door creates ghost layers. Native bypasses the door.
+
+**Why:** The door artwork must remain one undistorted portrait composition until opening; overlapping the universal loader visibly bleeds the old mascot and rotating copy through it.
+
+**How to apply:** Keep the closed door as one intact plate. Split it into moving halves only during opening, then reveal layered Team GUBER character art. The canonical JAC surface mounts only after optional Explore.
 
 ## Core files
+- `client/src/components/guber-door-splash.tsx` — web door, greeting, in-scene conversation, and optional Explore handoff
 - `client/src/components/jac/jac-character-renderer.tsx` — animated JAC with 5 CSS states + canvas mouth overlay
 - `client/src/components/jac/jac-live-experience.tsx` — two-surface layout; ConversationProvider wrapper + JacLiveInner
+
+## Door-scene character motion
+Use whole transparent character plates for arrival and conversation-state body motion. Do not use the canvas mouth patch in the cinematic door scene.
+
+**Why:** The face patch can look like a hole or glitch when composited over the cinematic plate.
+
+**How to apply:** Drive the complete JAC plate from speaking/listening/thinking state; reserve mouth-canvas rendering for the canonical post-Explore experience.
 
 ## JacCharacterRenderer
 - Image: `/splash/char-jac-v2.png` (public path, 574×1046 RGBA)

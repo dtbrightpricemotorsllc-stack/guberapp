@@ -44,7 +44,6 @@ async function installContinuityFixtures(
   // These tests cover campaign persistence after the public landing page.
   // The dedicated door-entry suite owns first-visit door coverage.
   await page.addInitScript(() => {
-    localStorage.setItem("guberDoorSplashSeen", "1");
     localStorage.setItem("jac_guest_session_id", "continuity-guest-session");
   });
   let authenticated = false;
