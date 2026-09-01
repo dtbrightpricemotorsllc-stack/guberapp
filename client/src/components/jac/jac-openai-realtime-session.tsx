@@ -9,6 +9,7 @@ import {
 } from "@/lib/jac-live-coordination";
 
 export interface JacOpenAIRealtimeSessionHandle {
+  activate(): void;
   toggleMute(): void;
   reconnect(): void;
   end(): void;
@@ -27,7 +28,8 @@ interface Props {
   onError(message: string): void;
 }
 
-/** Invisible OpenAI Realtime session controller. It starts only when active becomes true. */
+/** Invisible OpenAI Realtime session controller. It stays resident so a user
+ * gesture can prime browser-gated audio and microphone work before activation. */
 export const JacOpenAIRealtimeSession = forwardRef<JacOpenAIRealtimeSessionHandle, Props>(
   function JacOpenAIRealtimeSession(props, ref) {
     const callbacks = useRef(props);
@@ -36,6 +38,7 @@ export const JacOpenAIRealtimeSession = forwardRef<JacOpenAIRealtimeSessionHandl
     const harness = isJacE2EVoiceHarnessEnabled();
     const harnessConnected = useRef(false);
     const harnessMuted = useRef(false);
+    const gestureStartRequested = useRef(false);
 
     useEffect(() => {
       if (harness) {
@@ -75,17 +78,34 @@ export const JacOpenAIRealtimeSession = forwardRef<JacOpenAIRealtimeSessionHandl
 
     useEffect(() => {
       if (harness) {
-        if (!props.active) harnessConnected.current = false;
-        callbacks.current.onPhaseChange(props.active ? "connecting" : "idle");
+        if (!props.active) {
+          harnessConnected.current = false;
+          callbacks.current.onPhaseChange("idle");
+        } else if (!harnessConnected.current) {
+          callbacks.current.onPhaseChange("connecting");
+        }
         return;
       }
       const instance = transport.current;
       if (!instance) return;
-      if (props.active) void instance.start();
-      else void instance.end();
+      if (props.active) {
+        if (!gestureStartRequested.current) void instance.start();
+      } else {
+        gestureStartRequested.current = false;
+        void instance.end();
+      }
     }, [harness, props.active, props.sessionEndpoint]);
 
     useImperativeHandle(ref, () => ({
+      activate: () => {
+        gestureStartRequested.current = true;
+        if (harness) {
+          callbacks.current.onPhaseChange("connecting");
+          return;
+        }
+        transport.current?.prepareForUserGesture();
+        void transport.current?.start();
+      },
       toggleMute: () => {
         if (harness) {
           harnessMuted.current = !harnessMuted.current;

@@ -110,6 +110,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const inputRef       = useRef<HTMLTextAreaElement>(null);
   const signupOffered  = useRef(false); // in-scene signup card fires at most once per conversation
   const greetingHasFired = useRef(false);
+  const realtimeConnected = useRef(false);
 
   const schedule = useCallback((fn: () => void, ms: number) => {
     const t = setTimeout(fn, ms);
@@ -158,6 +159,11 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   function handleEnter() {
     if (phase !== "closed") return;
     unlockAudioContext();
+    // ENTER is the one user-activation gesture for the live voice path:
+    // acquire the mic and prime realtime audio before the film begins, rather
+    // than waiting for a post-render effect.
+    realtimeConnected.current = false;
+    realtimeRef.current?.activate();
     phaseRef.current = "opening";
     setPhase("opening");
     // Warm voice invisibly behind the film so the reveal lands directly in a
@@ -180,9 +186,12 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   // ── Voice mode entry ──────────────────────────────────────────────────────
   function enterVoice() {
     if (phase !== "open") return;
+    unlockAudioContext();
     cancelAllJacAudio();
     setGreetingPlaying(false);
+    realtimeConnected.current = false;
     setConvMode("voice");
+    realtimeRef.current?.activate();
     setRealtimeActive(true);
   }
 
@@ -285,10 +294,25 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   // ── Realtime callbacks ────────────────────────────────────────────────────
   const handleRealtimePhase = useCallback((p: JacRealtimePhase) => {
     setRealtimePhase(p);
+    if (p === "listening" || p === "speaking" || p === "thinking" || p === "muted") {
+      realtimeConnected.current = true;
+    }
     if (p === "listening" && phaseRef.current === "open") {
       speakRealtimeGreeting();
     }
   }, [speakRealtimeGreeting]);
+
+  const handleRealtimeError = useCallback(() => {
+    setRealtimePhase("idle");
+    // A denied/unavailable mic or failed first connection gets the existing
+    // text composer automatically. Once voice has connected, keep the voice
+    // controls available so the user can reconnect or type instead.
+    if (!realtimeConnected.current) {
+      setRealtimeActive(false);
+      setConvMode(current => current === "voice" ? "text" : current);
+      schedule(() => inputRef.current?.focus(), 300);
+    }
+  }, [schedule]);
 
   const handleRealtimeUser = useCallback((text: string) => {
     const t = text.trim();
@@ -912,18 +936,19 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
         {/* ── end open-scene UI ─────────────────────────────────────────── */}
 
 
-        {/* ── OpenAI Realtime session ────────────────────────────────────── */}
-        {convMode === "voice" && (
-          <JacOpenAIRealtimeSession
-            ref={realtimeRef}
-            active={realtimeActive}
-            sessionEndpoint="/api/jac/realtime-token/guest"
-            onPhaseChange={handleRealtimePhase}
-            onUserTranscript={handleRealtimeUser}
-            onJacResponse={handleRealtimeJac}
-            onError={() => setRealtimePhase("idle")}
-          />
-        )}
+        {/* ── OpenAI Realtime session ──────────────────────────────────────
+            Keep the controller mounted while the door is closed so ENTER can
+            synchronously begin browser-gated mic/audio preparation. */}
+        <JacOpenAIRealtimeSession
+          ref={realtimeRef}
+          active={realtimeActive}
+          sessionEndpoint="/api/jac/realtime-token/guest"
+          e2eTarget="homepage"
+          onPhaseChange={handleRealtimePhase}
+          onUserTranscript={handleRealtimeUser}
+          onJacResponse={handleRealtimeJac}
+          onError={handleRealtimeError}
+        />
 
       </div>
     </>

@@ -115,7 +115,9 @@ export class JacOpenAIRealtimeTransport {
   private options: JacRealtimeTransportOptions;
   private socket: WebSocket | null = null;
   private context: AudioContext | null = null;
+  private preparedContext: AudioContext | null = null;
   private stream: MediaStream | null = null;
+  private preparedStream: Promise<MediaStream> | null = null;
   private mediaSource: MediaStreamAudioSourceNode | null = null;
   private captureNode: AudioNode | null = null;
   private captureSink: GainNode | null = null;
@@ -139,8 +141,53 @@ export class JacOpenAIRealtimeTransport {
   get connected(): boolean { return this.socket?.readyState === 1; }
   get isMuted(): boolean { return this.muted; }
 
+  /**
+   * Start browser-gated work directly from a user gesture. The returned
+   * promises are consumed by start(), which may run after React effects have
+   * been scheduled and the browser's transient activation has ended.
+   */
+  prepareForUserGesture(): void {
+    if (!this.preparedStream) {
+      const media = this.options.getUserMedia
+        ?? (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia
+          ? (constraints: MediaStreamConstraints) => navigator.mediaDevices.getUserMedia(constraints)
+          : null);
+      if (!media) {
+        this.preparedStream = Promise.reject(new Error("A microphone is not available in this browser."));
+      } else {
+        try {
+          this.preparedStream = Promise.resolve(media({ audio: MIC_CONSTRAINTS }));
+        } catch (error) {
+          this.preparedStream = Promise.reject(error);
+        }
+      }
+    }
+
+    if (!this.preparedContext || this.preparedContext.state === "closed") {
+      const AudioContextImpl = this.options.AudioContext
+        ?? globalThis.AudioContext
+        ?? (globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextImpl) return;
+
+      try {
+        this.preparedContext = new AudioContextImpl({ sampleRate: 24_000 });
+        if (this.preparedContext.state === "suspended") {
+          this.preparedContext.resume().catch(() => {});
+        }
+        const silent = this.preparedContext.createBuffer(1, 1, 24_000);
+        const source = this.preparedContext.createBufferSource();
+        source.buffer = silent;
+        source.connect(this.preparedContext.destination);
+        source.start(0);
+      } catch {
+        this.preparedContext = null;
+      }
+    }
+  }
+
   async start(): Promise<void> {
-    await this.teardown(false);
+    // Keep the context and mic promise primed by prepareForUserGesture().
+    await this.teardown(false, true);
     const generation = ++this.generation;
     this.stopped = false;
     this.errorReported = false;
@@ -150,6 +197,8 @@ export class JacOpenAIRealtimeTransport {
       const fetchImpl = this.options.fetch ?? globalThis.fetch;
       const media = this.options.getUserMedia
         ?? ((constraints: MediaStreamConstraints) => navigator.mediaDevices.getUserMedia(constraints));
+      const preparedStream = this.preparedStream;
+      this.preparedStream = null;
       const [response, stream] = await Promise.all([
         fetchImpl(this.options.sessionEndpoint, {
           method: "POST",
@@ -157,7 +206,7 @@ export class JacOpenAIRealtimeTransport {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ transport: "websocket", audioFormat: "pcm16", sampleRate: 24_000 }),
         }),
-        media({ audio: MIC_CONSTRAINTS }),
+        preparedStream ?? media({ audio: MIC_CONSTRAINTS }),
       ]);
       if (!response.ok) throw new Error(`Voice session request failed (${response.status}).`);
       const token = tokenFromSession(await response.json());
@@ -171,8 +220,12 @@ export class JacOpenAIRealtimeTransport {
       const AudioContextImpl = this.options.AudioContext
         ?? globalThis.AudioContext
         ?? (globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextImpl) throw new Error("Web Audio is not supported in this browser.");
-      this.context = new AudioContextImpl({ sampleRate: 24_000 });
+      if (!AudioContextImpl && !this.preparedContext) throw new Error("Web Audio is not supported in this browser.");
+      const context = this.preparedContext
+        ?? (AudioContextImpl ? new AudioContextImpl({ sampleRate: 24_000 }) : null);
+      if (!context) throw new Error("Web Audio is not supported in this browser.");
+      this.context = context;
+      this.preparedContext = null;
       if (this.context.state === "suspended") await this.context.resume();
       await this.setupCapture();
 
@@ -364,7 +417,7 @@ export class JacOpenAIRealtimeTransport {
     this.options.onPhaseChange?.(phase);
   }
 
-  private async teardown(reportIdle: boolean): Promise<void> {
+  private async teardown(reportIdle: boolean, preservePrepared = false): Promise<void> {
     this.stopped = true;
     this.generation++;
     const socket = this.socket;
@@ -389,6 +442,14 @@ export class JacOpenAIRealtimeTransport {
     if (context && context.state !== "closed") {
       try { await context.close(); } catch {}
     }
+    if (!preservePrepared && this.preparedContext && this.preparedContext !== context) {
+      const preparedContext = this.preparedContext;
+      this.preparedContext = null;
+      if (preparedContext.state !== "closed") {
+        try { await preparedContext.close(); } catch {}
+      }
+    }
+    if (!preservePrepared) this.preparedStream = null;
     if (this.workletUrl) {
       URL.revokeObjectURL(this.workletUrl);
       this.workletUrl = null;

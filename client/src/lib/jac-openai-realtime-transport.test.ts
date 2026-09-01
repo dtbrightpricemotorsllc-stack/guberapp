@@ -91,6 +91,30 @@ describe("JacOpenAIRealtimeTransport", () => {
     expect(instructions).toBe("Approved words.");
   });
 
+  it("starts microphone and audio preparation from a user gesture without repeating either", async () => {
+    const audio = audioMocks();
+    const track = { stop: vi.fn(), enabled: true };
+    const stream = { getTracks: () => [track], getAudioTracks: () => [track] } as unknown as MediaStream;
+    const getUserMedia = vi.fn(async () => stream);
+    const AudioContext = vi.fn(function MockAudioContext() { return audio.context; }) as any;
+    const transport = new JacOpenAIRealtimeTransport({
+      sessionEndpoint: "/session",
+      fetch: vi.fn(async () => ({ ok: true, json: async () => ({ client_secret: { value: "short-token" } }) })) as any,
+      WebSocket: MockSocket as any,
+      AudioContext,
+      getUserMedia,
+    });
+
+    transport.prepareForUserGesture();
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(AudioContext).toHaveBeenCalledTimes(1);
+
+    await transport.start();
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(AudioContext).toHaveBeenCalledTimes(1);
+    await transport.end();
+  });
+
   it("reports transcripts and sends exact-text response.create", async () => {
     const onUserTranscript = vi.fn();
     const onJacResponse = vi.fn();
