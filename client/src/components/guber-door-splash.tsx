@@ -41,7 +41,7 @@ const SEAM_FLASH_MS  = 340;
 const DOORS_START_AT = 280;
 const DOORS_END_AT   = 1380;
 const GREETING_AT    = 1700;
-const BUTTONS_AT     = 2200;
+const BUTTONS_AT     = 3400;
 const DOOR_SLIDE_MS  = DOORS_END_AT - DOORS_START_AT;
 
 const GREETING_TEXT = "Welcome to Team Guber. What brings you here?";
@@ -361,27 +361,30 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           100% { transform:scale(1.075) }
         }
         @keyframes jac-arrive {
-          0%   { opacity:0; transform:translateY(42px) scale(.76) }
-          58%  { opacity:1; transform:translateY(-5px) scale(1.045) }
-          100% { opacity:1; transform:translateY(0) scale(1) }
+          0%   { opacity:0; transform:translateY(112px) scale(.62) rotate(-1.6deg) }
+          42%  { opacity:1; transform:translateY(15px) scale(.88) rotate(.8deg) }
+          72%  { opacity:1; transform:translateY(-10px) scale(1.045) rotate(-.35deg) }
+          100% { opacity:1; transform:translateY(0) scale(1) rotate(0) }
         }
         @keyframes jac-door-idle {
           0%,100% { transform:translateY(0) scale(1) rotate(-.2deg) }
           50%     { transform:translateY(-7px) scale(1.008) rotate(.2deg) }
         }
         @keyframes gubee-arrive {
-          0%   { opacity:0; transform:translate(24px,34px) scale(.78) }
-          65%  { opacity:1; transform:translate(-2px,-3px) scale(1.035) }
-          100% { opacity:1; transform:translate(0,0) scale(1) }
+          0%   { opacity:0; transform:translate(82px,96px) scale(.58) rotate(2deg) }
+          48%  { opacity:1; transform:translate(18px,10px) scale(.87) rotate(-.8deg) }
+          76%  { opacity:1; transform:translate(-5px,-7px) scale(1.04) rotate(.25deg) }
+          100% { opacity:1; transform:translate(0,0) scale(1) rotate(0) }
         }
         @keyframes gubee-door-idle {
           0%,100% { transform:translateY(0) scale(1) }
           50%     { transform:translateY(-5px) scale(1.012) }
         }
         @keyframes dd-arrive {
-          0%   { opacity:0; transform:translate(-22px,30px) scale(.8) }
-          68%  { opacity:1; transform:translate(2px,-3px) scale(1.035) }
-          100% { opacity:1; transform:translate(0,0) scale(1) }
+          0%   { opacity:0; transform:translate(-74px,88px) scale(.6) rotate(-2deg) }
+          50%  { opacity:1; transform:translate(-14px,10px) scale(.88) rotate(1deg) }
+          78%  { opacity:1; transform:translate(5px,-6px) scale(1.04) rotate(-.3deg) }
+          100% { opacity:1; transform:translate(0,0) scale(1) rotate(0) }
         }
         @keyframes dd-door-idle {
           0%,100% { transform:translateY(0) rotate(-1deg) }
