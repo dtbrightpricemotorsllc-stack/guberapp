@@ -5,11 +5,11 @@ description: JAC's shared brain and voice invariants across direct OpenAI Realti
 
 ## Current transport status
 
-The homepage/live JAC surface tries the OpenAI Realtime WebSocket relay first.
-If that initial transport fails before connecting, it switches once to the
-signed ElevenLabs ConvAI session; it must never mount both active transports or
-loop between them. A failure of the backup transport returns to the explicit
-Start voice control while text remains available.
+The ENTER door uses the signed ElevenLabs ConvAI session as its sole transport,
+because it must provide one continuous agent-owned welcome, STT, turn detection,
+brain response, and spoken reply. Other JAC surfaces may use the OpenAI Realtime
+speech-renderer relay when a direct realtime credential exists, but must never
+mount competing active transports.
 
 Replit's managed OpenAI HTTP integration credential is a proxy credential, not
 a direct OpenAI API key. Its HTTP base rejects realtime WebSocket upgrades and
@@ -17,14 +17,16 @@ the credential is rejected at OpenAI's direct realtime endpoint. Only a genuine
 `OPENAI_REALTIME_API_KEY` or direct `OPENAI_API_KEY` may activate the relay;
 never treat `AI_INTEGRATIONS_OPENAI_API_KEY` as realtime-capable.
 
-**Why:** Otherwise mobile browsers successfully open the microphone, then the
-relay fails immediately and the homepage misleadingly settles on "Voice
-unavailable" even though the configured ConvAI path is healthy.
+**Why:** The door previously opened the microphone through the relay path while
+the environment lacked a direct realtime credential; the healthy signed ConvAI
+path was never engaged, leaving a text-looking conversation with no usable
+two-way audio.
 
-**How to apply:** Keep OpenAI as the preferred speech renderer when directly
-configured. On an initial pre-connect failure, unmount it and activate ConvAI
-once. ConvAI must stay inside `ConversationProvider`, use its signed WebSocket,
-and preserve the approved voice lock. Do not auto-retry a failed backup.
+**How to apply:** For the door, prime microphone/audio synchronously from ENTER,
+prewarm the signed session, and let ConvAI connect during the cinematic. Retry
+one recoverable startup failure automatically; after that, show an explicit
+not-connected status. Microphone denial may expose Type Instead but must not
+focus it.
 
 ## One brain, never forked
 JAC's brain lives in a single function `runGuberAssistBrain(sessionUser, sanitized, voiceMode)` inside the `registerRoutes` closure in `server/routes.ts`. BOTH the text route (`POST /api/ai/guber-assist`) and the ElevenLabs custom-LLM adapter (`POST /api/jac/convai/llm`) call it.

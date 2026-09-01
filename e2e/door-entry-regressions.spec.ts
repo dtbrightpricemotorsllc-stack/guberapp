@@ -8,12 +8,13 @@ const doorRegion = (page: Page) =>
 
 async function emitVoice(
   page: Page,
-  kind: "connect" | "listening" | "error",
+  kind: "connect" | "listening" | "thinking" | "speaking" | "user-transcript" | "assistant-response" | "error",
   errorKind?: "microphone-denied" | "microphone-unavailable" | "session" | "audio" | "transport",
+  text?: string,
 ) {
   await page.evaluate(
     (detail) => window.dispatchEvent(new CustomEvent("jac:e2e-voice", { detail })),
-    { target: "homepage", kind, errorKind },
+    { target: "homepage", kind, errorKind, text },
   );
 }
 
@@ -81,6 +82,34 @@ test.describe("Team GUBER cinematic entry door", () => {
     await expect(page.getByRole("button", { name: "Switch to typing" })).toHaveText("Type Instead");
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByTestId("jac-live-surface")).toHaveCount(0);
+  });
+
+  test("one ENTER tap supports welcome, hands-free user speech, and JAC's spoken reply", async ({ page }) => {
+    await installUnauthenticatedSession(page);
+    await page.goto("/?jac_e2e=1");
+    await expectDoorGatedHome(page);
+
+    await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
+    await expect(page.getByText("Connecting…")).toBeVisible();
+    await emitVoice(page, "connect");
+    await emitVoice(page, "speaking");
+    await completeCinematic(page);
+    await emitVoice(page, "assistant-response", undefined, "Welcome to Team Guber. What brings you here?");
+    await emitVoice(page, "listening");
+
+    await expect(page.getByText("Listening…")).toBeVisible();
+    await emitVoice(page, "user-transcript", undefined, "I need help finding work");
+    await emitVoice(page, "thinking");
+    await emitVoice(page, "speaking");
+    await emitVoice(page, "assistant-response", undefined, "I can help you find work near you.");
+    await emitVoice(page, "listening");
+
+    const conversation = page.getByTestId("guber-scene-conversation");
+    await expect(conversation.getByText("I need help finding work")).toBeVisible();
+    await expect(conversation.getByText("I can help you find work near you.")).toBeVisible();
+    await expect(page.getByText("Listening…")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Talk to JAC with voice" })).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: "Message JAC" })).toHaveCount(0);
   });
 
   test("Explore is the optional escape to the canonical JAC surface", async ({ page }) => {

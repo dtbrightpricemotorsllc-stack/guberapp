@@ -351,6 +351,8 @@ export type ConvaiPhase =
   | "error";
 
 export interface JacConvaiSessionHandle {
+  /** Prime microphone/audio directly from the user's ENTER gesture. */
+  activate(): void;
   toggleMute(): void;
   reconnect(): void;
   /** true when the ElevenLabs WebSocket is fully connected */
@@ -371,7 +373,10 @@ interface Props {
   onPhaseChange(phase: ConvaiPhase): void;
   onUserTranscript(text: string): void;
   onJacResponse(text: string): void;
-  onError(msg: string): void;
+  onError(
+    msg: string,
+    kind?: "microphone-denied" | "microphone-unavailable" | "session" | "audio" | "transport",
+  ): void;
 }
 
 export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
@@ -424,6 +429,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
     const micLostTokenRef = useRef<MicLostToken | null>(null);
     const latestAssistantSpeechRef = useRef<{ text: string; at: number } | null>(null);
     const micConstraintLeaseRef = useRef(false);
+    const preparedMicRef = useRef<Promise<MediaStream> | null>(null);
     const e2eHarnessEnabled = isJacE2EVoiceHarnessEnabled();
     const [e2eConnected, setE2EConnected] = useState(false);
 
@@ -548,7 +554,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
       }
       if (event.kind === "error") {
         setE2EConnected(false);
-        cbRef.current.onError(event.text?.trim() || "Voice connection lost.");
+        cbRef.current.onError(event.text?.trim() || "Voice connection lost.", event.errorKind);
         return;
       }
       if (event.kind === "disconnect") {
@@ -614,7 +620,7 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           const isIAB = /iab/.test(platform); // facebook_iab, instagram_iab, etc.
           if (isIAB) {
             intentionalReconnectRef.current = false;
-            cbRef.current.onError("IAB_NO_VOICE");
+            cbRef.current.onError("Voice is unavailable in this in-app browser.", "microphone-unavailable");
             return;
           }
 
@@ -661,8 +667,10 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
                  return r.json();
                });
 
+          const preparedMic = preparedMicRef.current;
+          preparedMicRef.current = null;
           const [micResult, sessionResult] = await Promise.allSettled([
-            getUserMediaWithTimeout({ audio: JAC_MIC_CONSTRAINTS }),
+            preparedMic ?? getUserMediaWithTimeout({ audio: JAC_MIC_CONSTRAINTS }),
             sessionFetch,
           ]);
           if (cancelRef.current) return;
@@ -678,7 +686,10 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
             cbRef.current.onError(
               platform === "android_native"
                 ? `Microphone blocked on Android (${micErr?.name ?? "unknown error"}). Grant mic permission in App Settings.`
-                : "Mic access denied."
+                : "Microphone permission was denied.",
+              micErr?.name === "NotFoundError" || micErr?.name === "DevicesNotFoundError"
+                ? "microphone-unavailable"
+                : "microphone-denied",
             );
             return;
           }
@@ -703,15 +714,15 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           if (sessionResult.status === "rejected") {
             const err = sessionResult.reason as any;
             intentionalReconnectRef.current = false;
-            if (err?.status === 401) { cbRef.current.onError("Sign in to use JAC voice."); return; }
-            cbRef.current.onError("Could not reach JAC voice. Try again.");
+            if (err?.status === 401) { cbRef.current.onError("Sign in to use JAC voice.", "session"); return; }
+            cbRef.current.onError("Could not reach JAC voice.", "session");
             return;
           }
 
           const session = sessionResult.value;
           if (!session) {
             intentionalReconnectRef.current = false;
-            cbRef.current.onError("Voice session error. Try again.");
+            cbRef.current.onError("Voice session could not start.", "session");
             return;
           }
           if (cancelRef.current) return;
@@ -817,14 +828,14 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
               intentionalReconnectRef.current = false;
               sendVoiceTelemetry("timeout", platformRef.current, `no_connect_in_${CONNECTION_TIMEOUT_MS}ms`, voiceTokenRef.current);
               try { endSession(); } catch {}
-              cbRef.current.onError("Voice connection timed out. Tap the mic to retry.");
+              cbRef.current.onError("Voice connection timed out.", "transport");
             }
           }, CONNECTION_TIMEOUT_MS);
 
         } catch (err: any) {
           clearConnectTimeout();
           intentionalReconnectRef.current = false;
-          if (!cancelRef.current) cbRef.current.onError(err?.message || "Could not start JAC voice.");
+          if (!cancelRef.current) cbRef.current.onError(err?.message || "Could not start JAC voice.", "transport");
         }
       }
 
@@ -846,6 +857,16 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
     }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useImperativeHandle(ref, () => ({
+      activate() {
+        unlockAudioContext();
+        prewarmJacSession(sessionEndpoint);
+        if (e2eHarnessEnabled || preparedMicRef.current || !navigator.mediaDevices?.getUserMedia) return;
+        const prepared = navigator.mediaDevices.getUserMedia({ audio: JAC_MIC_CONSTRAINTS });
+        // Attach a rejection observer immediately; boot() consumes and classifies
+        // the same promise after React applies active=true.
+        void prepared.catch(() => {});
+        preparedMicRef.current = prepared;
+      },
       toggleMute() { if (connected) setMuted(!isMuted); },
       reconnect() {
         const epoch = ++reconnectEpochRef.current;

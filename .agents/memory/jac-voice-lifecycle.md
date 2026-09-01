@@ -37,6 +37,12 @@ Preserve the shared transcript, campaign context, and greeting claim across voic
 disconnects; never substitute browser speech or static audio for the approved
 JAC voice.
 
+The web entry door is the deliberate exception: ENTER is already an explicit
+voice activation gesture, so it must request microphone permission and start the
+signed ConvAI session immediately. It must not reveal a second Start Voice
+control. One recoverable startup failure retries automatically; connection state
+must remain truthful throughout.
+
 ### 3. handleConvaiError replayed the greeting via TTS
 Any voice failure called `jacSpeak(GREETING_TTS)` — the greeting text spoken aloud.
 Combined with #2, this meant: click text box → voice attempt → fails → TTS speaks greeting.

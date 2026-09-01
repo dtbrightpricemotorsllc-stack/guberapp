@@ -260,6 +260,45 @@ describe("JacConvaiSession — WebSocket transport guarantee", () => {
     );
   }
 
+  it("starts microphone acquisition synchronously from the ENTER activation call", async () => {
+    mockApiRequest.mockResolvedValue(makeSessionResponse());
+    const ref = React.createRef<JacConvaiSessionHandle>();
+    const rendered = render(
+      <JacConvaiSession
+        ref={ref}
+        active={false}
+        sessionEndpoint="/api/jac/convai/public-session"
+        onPhaseChange={noop}
+        onUserTranscript={noop}
+        onJacResponse={noop}
+        onError={noop}
+      />,
+    );
+    const getUserMedia = navigator.mediaDevices.getUserMedia as Mock;
+
+    act(() => ref.current?.activate());
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      "POST",
+      "/api/jac/convai/public-session",
+      expect.objectContaining({ platform: expect.any(String) }),
+    );
+
+    rendered.rerender(
+      <JacConvaiSession
+        ref={ref}
+        active={true}
+        sessionEndpoint="/api/jac/convai/public-session"
+        onPhaseChange={noop}
+        onUserTranscript={noop}
+        onJacResponse={noop}
+        onError={noop}
+      />,
+    );
+    await waitFor(() => expect(startSessionSpy).toHaveBeenCalledTimes(1), { timeout: 3000, interval: 50 });
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+  });
+
   it("passes signedUrl (not agentId) without unsupported transport options", async () => {
     await mountAndBoot();
 
@@ -403,7 +442,10 @@ describe("JacConvaiSession — IAB early-exit guard", () => {
       });
 
       await waitFor(
-        () => expect(onError).toHaveBeenCalledWith("IAB_NO_VOICE"),
+        () => expect(onError).toHaveBeenCalledWith(
+          "Voice is unavailable in this in-app browser.",
+          "microphone-unavailable",
+        ),
         { timeout: 2000, interval: 25 },
       );
 
@@ -514,6 +556,7 @@ describe("JacConvaiSession — connection timeout guard", () => {
     expect(onErrorSpy).toHaveBeenCalledTimes(1);
     expect(onErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining("timed out"),
+      "transport",
     );
   });
 });

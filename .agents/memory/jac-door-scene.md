@@ -13,11 +13,11 @@ The full-screen door scene is the sole web launch visual on every refresh. The u
 **How to apply:** Serve one generated 9:16 video for the door, light bloom, physical opening, character approach, and camera push. Use source art only to condition generation, never as runtime scene layers. Keep a tiny branded poster only for first paint, reduced motion/data, or video failure. The canonical JAC surface mounts only after optional Explore. Web auth guards and lazy-route fallbacks must use a quiet dark transition, never the mascot loader.
 
 ## Continuous cinematic-to-JAC handoff
-Warm the invisible realtime voice session behind the playing door film after the visitor's Enter gesture. On the final frame, keep the same video element mounted and reveal the greeting/conversation controls over it; do not mount another splash or startup surface.
+Warm the canonical signed ConvAI session behind the playing door film after the visitor's Enter gesture. ENTER must synchronously prime microphone permission and browser audio before React state updates. On the final frame, keep the same video element mounted and reveal the greeting/conversation controls over it; do not mount another splash or startup surface.
 
-**Why:** The cinematic and live JAC are one experience. Starting voice only after the film, swapping artwork, or showing another loader makes the reveal feel like a handoff to a second screen.
+**Why:** The door previously used the direct OpenAI realtime relay even when no direct realtime credential existed, so the UI could appear ready while JAC could neither hear nor speak. The cinematic and live JAC must remain one experience.
 
-**How to apply:** Use the Enter gesture for microphone permission, hold all live UI until the film reaches its clean final frame, then have the connected realtime session speak the greeting. Keep Type Instead visible if voice permission or connection fails.
+**How to apply:** Keep the voice controller mounted behind the closed door. Use ENTER for getUserMedia, audio unlock, and signed-session prewarm; require SDK connection confirmation before showing a live state. Let ConvAI own welcome, STT, turn-taking, and voice replies. Keep Type Instead optional.
 
 ## ENTER remains the authoritative voice choice
 Never let a voice startup failure switch the door scene into text mode or focus the composer. Microphone denial/unavailability may expose Type Instead, but the keyboard opens only after the visitor explicitly chooses text. Recoverable session, audio, token, and transport failures remain voice-first and preserve gesture-acquired resources for retry.
