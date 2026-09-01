@@ -7,12 +7,24 @@ import { RootErrorBoundary } from "@/components/root-error-boundary";
 
 installGlobalErrorReporting();
 
+function dismissBootFrame() {
+  const bootFrame = document.getElementById("guber-boot-frame");
+  if (!bootFrame) return;
+
+  // Let the first React commit paint beneath the frame before fading it out.
+  requestAnimationFrame(() => {
+    bootFrame.classList.add("is-ready");
+    window.setTimeout(() => bootFrame.remove(), 240);
+  });
+}
+
 migrateToken().finally(() => {
   createRoot(document.getElementById("root")!).render(
     <RootErrorBoundary>
       <App />
     </RootErrorBoundary>
   );
+  dismissBootFrame();
 });
 
 if ("serviceWorker" in navigator) {

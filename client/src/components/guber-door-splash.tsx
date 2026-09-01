@@ -39,9 +39,9 @@ const CHAR_DD     = "/splash/hq-char-dd.png";
 // ── Timing (ms) ──────────────────────────────────────────────────────────────
 const SEAM_FLASH_MS  = 340;
 const DOORS_START_AT = 280;
-const DOORS_END_AT   = 1380;
-const GREETING_AT    = 1700;
-const BUTTONS_AT     = 3400;
+const DOORS_END_AT   = 1500;
+const GREETING_AT    = 3200;
+const BUTTONS_AT     = 3700;
 const DOOR_SLIDE_MS  = DOORS_END_AT - DOORS_START_AT;
 
 const GREETING_TEXT = "Welcome to Team Guber. What brings you here?";
@@ -144,7 +144,12 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     schedule(() => setSeamFlash(false), 80 + SEAM_FLASH_MS);
     schedule(() => setPhase("opening"), DOORS_START_AT);
     schedule(() => {
+      // Do not start the character move until the door panels have fully
+      // cleared the frame. This is the visual handoff from the door scene to
+      // the room beyond it.
       setPhase("open");
+    }, DOORS_END_AT);
+    schedule(() => {
       setShowGreeting(true);
 
       // First message bubble (always shown)
@@ -361,9 +366,10 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           100% { transform:scale(1.075) }
         }
         @keyframes jac-arrive {
-          0%   { opacity:0; transform:translateY(112px) scale(.62) rotate(-1.6deg) }
-          42%  { opacity:1; transform:translateY(15px) scale(.88) rotate(.8deg) }
-          72%  { opacity:1; transform:translateY(-10px) scale(1.045) rotate(-.35deg) }
+          0%   { opacity:0; transform:translateY(240px) scale(.42) rotate(-2.8deg) }
+          28%  { opacity:.45; transform:translateY(112px) scale(.63) rotate(-1.6deg) }
+          58%  { opacity:1; transform:translateY(18px) scale(.91) rotate(.8deg) }
+          78%  { opacity:1; transform:translateY(-11px) scale(1.045) rotate(-.35deg) }
           100% { opacity:1; transform:translateY(0) scale(1) rotate(0) }
         }
         @keyframes jac-door-idle {
@@ -371,9 +377,10 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           50%     { transform:translateY(-7px) scale(1.008) rotate(.2deg) }
         }
         @keyframes gubee-arrive {
-          0%   { opacity:0; transform:translate(82px,96px) scale(.58) rotate(2deg) }
-          48%  { opacity:1; transform:translate(18px,10px) scale(.87) rotate(-.8deg) }
-          76%  { opacity:1; transform:translate(-5px,-7px) scale(1.04) rotate(.25deg) }
+          0%   { opacity:0; transform:translate(168px,190px) scale(.38) rotate(4deg) }
+          30%  { opacity:.42; transform:translate(78px,94px) scale(.59) rotate(2deg) }
+          60%  { opacity:1; transform:translate(16px,10px) scale(.9) rotate(-.8deg) }
+          80%  { opacity:1; transform:translate(-5px,-7px) scale(1.04) rotate(.25deg) }
           100% { opacity:1; transform:translate(0,0) scale(1) rotate(0) }
         }
         @keyframes gubee-door-idle {
@@ -381,9 +388,10 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           50%     { transform:translateY(-5px) scale(1.012) }
         }
         @keyframes dd-arrive {
-          0%   { opacity:0; transform:translate(-74px,88px) scale(.6) rotate(-2deg) }
-          50%  { opacity:1; transform:translate(-14px,10px) scale(.88) rotate(1deg) }
-          78%  { opacity:1; transform:translate(5px,-6px) scale(1.04) rotate(-.3deg) }
+          0%   { opacity:0; transform:translate(-154px,178px) scale(.4) rotate(-4deg) }
+          31%  { opacity:.42; transform:translate(-72px,92px) scale(.6) rotate(-2deg) }
+          61%  { opacity:1; transform:translate(-14px,10px) scale(.9) rotate(1deg) }
+          80%  { opacity:1; transform:translate(5px,-6px) scale(1.04) rotate(-.3deg) }
           100% { opacity:1; transform:translate(0,0) scale(1) rotate(0) }
         }
         @keyframes dd-door-idle {
@@ -473,6 +481,10 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           from{ opacity:0; transform:translateY(16px) }
           to  { opacity:1; transform:translateY(0) }
         }
+        @keyframes scene-conv-in {
+          from{ opacity:0; transform:translate(-50%,16px) }
+          to  { opacity:1; transform:translate(-50%,0) }
+        }
         @keyframes seam-pulse {
           0%,100%{ opacity:.15 }
           50%    { opacity:.45 }
@@ -492,6 +504,9 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
         .gdoor-send:active   { transform:scale(.92) !important }
         .gdoor-mode-btn:active{ transform:scale(.95) !important }
         .gdoor-mute-btn:active{ transform:scale(.9) !important }
+        @media (prefers-reduced-motion: reduce) {
+          .gdoor-motion { animation:none !important; transition:none !important; }
+        }
       `}</style>
 
       {/* ── Root overlay ──────────────────────────────────────────────────── */}
@@ -521,12 +536,12 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
         {/* ── HQ SCENE ──────────────────────────────────────────────────── */}
         <div aria-hidden="true" style={{
           position:"absolute", inset:0,
-          transform:(isOpening||isOpen) ? "scale(1.075)" : "scale(1)",
-          transition:(isOpening||isOpen)
-            ? "transform 1800ms cubic-bezier(.16,1,.3,1)"
+            transform:isOpen ? "scale(1.075)" : "scale(1)",
+            transition:isOpen
+              ? "transform 1800ms cubic-bezier(.16,1,.3,1)"
             : "none",
           willChange:"transform",
-        }}>
+          }} className="gdoor-motion">
           {/* Background */}
           <img src={HQ_BG} alt="" draggable={false} style={{
             position:"absolute", inset:0,
@@ -540,13 +555,13 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
               can move forward without ever duplicating the visible artwork. */}
           <div aria-hidden="true" style={{
             position:"absolute", inset:0, pointerEvents:"none",
-            opacity:(isOpening||isOpen) ? 1 : 0,
-            animation:(isOpening||isOpen)
-              ? "jac-arrive 1200ms cubic-bezier(.16,1,.3,1) both, jac-door-idle 4.4s ease-in-out 1200ms infinite"
+            opacity:isOpen ? 1 : 0,
+            animation:isOpen
+              ? "jac-arrive 1500ms cubic-bezier(.16,1,.3,1) both, jac-door-idle 4.4s ease-in-out 1500ms infinite"
               : "none",
             transformOrigin:"50% 82%",
             willChange:"transform, opacity",
-          }}>
+          }} className="gdoor-motion">
             <img src={CHAR_JAC} alt="" draggable={false} style={{
               width:"100%", height:"100%", objectFit:"fill", display:"block",
               animation:jacPerformanceAnimation,
@@ -556,30 +571,37 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           </div>
           <div aria-hidden="true" style={{
             position:"absolute", inset:0, pointerEvents:"none",
-            opacity:(isOpening||isOpen) ? 1 : 0,
-            animation:(isOpening||isOpen)
-              ? "gubee-arrive 1350ms cubic-bezier(.16,1,.3,1) 140ms both, gubee-door-idle 4.8s ease-in-out 1490ms infinite"
+            opacity:isOpen ? 1 : 0,
+            animation:isOpen
+              ? "gubee-arrive 1650ms cubic-bezier(.16,1,.3,1) both, gubee-door-idle 4.8s ease-in-out 1650ms infinite"
               : "none",
             transformOrigin:"50% 82%",
             willChange:"transform, opacity",
-          }}>
+          }} className="gdoor-motion">
             <img src={CHAR_GUBEE} alt="" draggable={false} style={{
               width:"100%", height:"100%", objectFit:"fill", display:"block",
             }} />
           </div>
           <div aria-hidden="true" style={{
             position:"absolute", inset:0, pointerEvents:"none",
-            opacity:(isOpening||isOpen) ? 1 : 0,
-            animation:(isOpening||isOpen)
-              ? "dd-arrive 1250ms cubic-bezier(.16,1,.3,1) 260ms both, dd-door-idle 4.2s ease-in-out 1510ms infinite"
+            opacity:isOpen ? 1 : 0,
+            animation:isOpen
+              ? "dd-arrive 1550ms cubic-bezier(.16,1,.3,1) both, dd-door-idle 4.2s ease-in-out 1550ms infinite"
               : "none",
             transformOrigin:"50% 82%",
             willChange:"transform, opacity",
-          }}>
+          }} className="gdoor-motion">
             <img src={CHAR_DD} alt="" draggable={false} style={{
               width:"100%", height:"100%", objectFit:"fill", display:"block",
             }} />
           </div>
+          {(!showButtons || inConv) && (
+            <div aria-hidden="true" style={{
+              position:"absolute", left:0, right:0, top:"83%", bottom:"7%",
+              zIndex:1, pointerEvents:"none",
+              background:"linear-gradient(to bottom,rgba(0,0,8,.38) 0%,rgba(0,0,8,.96) 35%,rgba(0,0,8,.98) 100%)",
+            }} />
+          )}
         </div>
         {/* ── end HQ scene ──────────────────────────────────────────────── */}
 
@@ -756,6 +778,77 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           </>
         )}
 
+        {/* Once a mode is chosen, this upper scene region becomes the
+            conversation itself. It deliberately has no card chrome: the
+            gradient hides the baked welcome copy while preserving the HQ
+            lighting and the characters below it. */}
+        {inConv && (
+          <div
+            data-testid="guber-scene-conversation"
+            role="log"
+            aria-live="polite"
+            style={{
+              position:"absolute", top:0,
+              left:"50%", width:"min(100vw,56.25vh)",
+              height:"clamp(270px,33vh,330px)",
+              transform:"translateX(-50%)",
+              zIndex:6, pointerEvents:"none",
+              padding:"0 8%",
+              boxSizing:"border-box",
+              display:"flex", flexDirection:"column",
+              justifyContent:"flex-end",
+              background:"linear-gradient(to bottom,#00000e 0%,#00000e 76%,rgba(0,0,14,.82) 90%,rgba(0,0,14,0) 100%)",
+              animation:"scene-conv-in 420ms cubic-bezier(.22,1,.36,1) both",
+            }}
+          >
+            <div style={{
+              display:"flex", flexDirection:"column", gap:8,
+              maxHeight:"clamp(128px,18vh,188px)",
+              overflowY:"auto", paddingBottom:"8%",
+              maskImage:"linear-gradient(to bottom,transparent 0%,black 18%,black 100%)",
+              WebkitMaskImage:"linear-gradient(to bottom,transparent 0%,black 18%,black 100%)",
+            }}>
+              {messages.slice(-4).map((m, i) => (
+                <div key={`${m.role}-${i}-${m.text.slice(0, 12)}`} style={{
+                  alignSelf:m.role === "user" ? "flex-end" : "flex-start",
+                  maxWidth:"94%",
+                  textAlign:m.role === "user" ? "right" : "left",
+                  animation:"bubble-in 280ms cubic-bezier(.22,1,.36,1) both",
+                }}>
+                  <div style={{
+                    color:m.role === "user" ? "rgba(130,100,255,.95)" : "rgba(0,220,190,.95)",
+                    fontSize:"clamp(9px,2.5vw,11px)",
+                    fontFamily:"'Oxanium',sans-serif",
+                    letterSpacing:".16em", textTransform:"uppercase",
+                    marginBottom:3, textShadow:"0 0 12px rgba(0,200,220,.55)",
+                  }}>
+                    {m.role === "user" ? "You" : "JAC"}
+                  </div>
+                  <p style={{
+                    margin:0, color:"#fff",
+                    fontSize:"clamp(14px,3.8vw,18px)",
+                    lineHeight:1.32,
+                    fontFamily:"'Inter',sans-serif",
+                    textShadow:"0 2px 12px rgba(0,0,0,.9)",
+                  }}>{m.text}</p>
+                </div>
+              ))}
+              {(textLoading || realtimePhase === "thinking" || realtimePhase === "connecting") && (
+                <div style={{
+                  alignSelf:"flex-start", color:"rgba(0,220,190,.95)",
+                  fontSize:"clamp(14px,3.8vw,18px)",
+                  letterSpacing:".18em", textShadow:"0 0 12px rgba(0,200,220,.55)",
+                }}>
+                  <span style={{ animation:"speak-dot .9s ease-in-out infinite" }}>•</span>
+                  <span style={{ animation:"speak-dot .9s ease-in-out .2s infinite" }}>•</span>
+                  <span style={{ animation:"speak-dot .9s ease-in-out .4s infinite" }}>•</span>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          </div>
+        )}
+
         {/* ═══════════════════════════════════════════════════════════
             IN-CONVERSATION UI
             ═══════════════════════════════════════════════════════════ */}
@@ -765,69 +858,6 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                 zIndex:7, display:"flex", flexDirection:"column",
                 animation:"conv-in 400ms cubic-bezier(.22,1,.36,1) both",
               }}>
-
-                {/* Message bubbles */}
-                <div style={{
-                  overflowY:"auto", padding:"8px 16px",
-                  display:"flex", flexDirection:"column", gap:8,
-                  maxHeight:"38vh",
-                  background:"linear-gradient(to top,rgba(0,0,15,.74) 0%,rgba(0,0,15,.46) 72%,transparent 100%)",
-                  WebkitOverflowScrolling:"touch",
-                }}>
-                  {messages.map((m, i) => (
-                    <div key={i} style={{
-                      alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-                      maxWidth:"82%",
-                      animation:"bubble-in 280ms cubic-bezier(.22,1,.36,1) both",
-                    }}>
-                      <div style={{
-                        background: m.role === "user"
-                          ? "rgba(100,60,255,.55)"
-                          : "rgba(0,20,40,.72)",
-                        border: m.role === "user"
-                          ? "1px solid rgba(130,80,255,.6)"
-                          : "1px solid rgba(0,180,220,.35)",
-                        borderRadius: m.role === "user"
-                          ? "16px 16px 4px 16px"
-                          : "16px 16px 16px 4px",
-                        padding:"10px 14px",
-                        backdropFilter:"blur(8px)",
-                      }}>
-                        <p style={{
-                          margin:0,
-                          fontSize:"clamp(13px,3.8vw,16px)",
-                          lineHeight:1.4, color:"#fff",
-                          fontFamily:"'Inter',sans-serif",
-                          textShadow:"0 1px 4px rgba(0,0,0,.6)",
-                        }}>{m.text}</p>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Typing / thinking indicator */}
-                  {(textLoading || realtimePhase === "thinking" || realtimePhase === "connecting") && (
-                    <div style={{ alignSelf:"flex-start" }}>
-                      <div style={{
-                        background:"rgba(0,20,40,.72)",
-                        border:"1px solid rgba(0,180,220,.35)",
-                        borderRadius:"16px 16px 16px 4px",
-                        padding:"10px 18px",
-                        animation: realtimePhase === "thinking" ? "think-pulse 1.4s ease-in-out infinite" : "none",
-                      }}>
-                        <div style={{ display:"flex", gap:4 }}>
-                          {[0,1,2].map(i => (
-                            <div key={i} style={{
-                              width:6, height:6, borderRadius:"50%",
-                              background:"rgba(0,200,160,.8)",
-                              animation:`speak-dot .9s ease-in-out infinite ${i*.25}s`,
-                            }} />
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  <div ref={messagesEndRef} />
-                </div>
 
                 {/* ── INLINE SIGNUP CARD — in the scene, above the bubbles ── */}
                 {showSignup && (
