@@ -29,20 +29,11 @@ import {
 } from "@/lib/campaign-onboarding";
 
 // ── Greeting guard: fires at most once per browser tab session ────────────────
-// ── Assets ───────────────────────────────────────────────────────────────────
-const DOOR_CLOSED = "/splash/door-closed.png";
-const HQ_BG       = "/splash/hq-reveal-bg.png";
-const CHAR_JAC    = "/splash/hq-char-jac.png";
-const CHAR_GUBEE  = "/splash/hq-char-gubee.png";
-const CHAR_DD     = "/splash/hq-char-dd.png";
-
-// ── Timing (ms) ──────────────────────────────────────────────────────────────
-const SEAM_FLASH_MS  = 340;
-const DOORS_START_AT = 280;
-const DOORS_END_AT   = 1500;
-const GREETING_AT    = 3200;
-const BUTTONS_AT     = 3700;
-const DOOR_SLIDE_MS  = DOORS_END_AT - DOORS_START_AT;
+// ── Cinematic assets ─────────────────────────────────────────────────────────
+// The reference plates used to generate this shot are intentionally not loaded
+// by the app. The browser receives one cohesive film plus a tiny fallback poster.
+const DOOR_CINEMATIC = "/splash/guber-door-cinematic-1080.mp4";
+const DOOR_POSTER    = "/splash/guber-door-cinematic-poster.webp";
 
 const GREETING_TEXT = "Welcome to Team Guber. What brings you here?";
 
@@ -83,10 +74,10 @@ function ListenWave({ active }: { active: boolean }) {
 export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSplashProps) {
   // Door animation
   const [phase,        setPhase]        = useState<DoorPhase>("closed");
-  const [seamFlash,    setSeamFlash]    = useState(false);
   const [showGreeting, setShowGreeting] = useState(false);
   const [showButtons,  setShowButtons]  = useState(false);
   const [mounted,      setMounted]      = useState(true);
+  const [useLightweightFallback, setUseLightweightFallback] = useState(false);
 
   // JAC greeting TTS
   const [greetingPlaying, setGreetingPlaying] = useState(false);
@@ -112,6 +103,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   });
 
   const timerRefs      = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const cinematicRef   = useRef<HTMLVideoElement>(null);
   const realtimeRef    = useRef<JacOpenAIRealtimeSessionHandle | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef       = useRef<HTMLTextAreaElement>(null);
@@ -129,42 +121,52 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     return () => { timerRefs.current.forEach(clearTimeout); };
   }, [skip]);
 
+  useEffect(() => {
+    const connection = (navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    }).connection;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const constrainedConnection = connection?.saveData === true || connection?.effectiveType === "2g";
+    setUseLightweightFallback(reducedMotion || constrainedConnection);
+  }, []);
+
   // Auto-scroll message list
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   // ── Door open sequence ───────────────────────────────────────────────────
+  const finishCinematic = useCallback(() => {
+    setPhase("open");
+    setShowGreeting(true);
+    setMessages(current => current.length ? current : [{ role: "jac", text: GREETING_TEXT }]);
+
+    if (!greetingHasFired.current) {
+      greetingHasFired.current = true;
+      setGreetingPlaying(true);
+      jacSpeak(GREETING_TEXT)
+        .catch(() => {})
+        .finally(() => setGreetingPlaying(false));
+    }
+
+    schedule(() => setShowButtons(true), 420);
+  }, [schedule]);
+
   function handleEnter() {
     if (phase !== "closed") return;
     unlockAudioContext();
-    setPhase("unlocking");
+    setPhase("opening");
 
-    schedule(() => setSeamFlash(true),  80);
-    schedule(() => setSeamFlash(false), 80 + SEAM_FLASH_MS);
-    schedule(() => setPhase("opening"), DOORS_START_AT);
-    schedule(() => {
-      // Do not start the character move until the door panels have fully
-      // cleared the frame. This is the visual handoff from the door scene to
-      // the room beyond it.
-      setPhase("open");
-    }, DOORS_END_AT);
-    schedule(() => {
-      setShowGreeting(true);
+    if (useLightweightFallback || !cinematicRef.current) {
+      schedule(finishCinematic, 220);
+      return;
+    }
 
-      // First message bubble (always shown)
-      setMessages([{ role: "jac", text: GREETING_TEXT }]);
-
-      // Play greeting TTS exactly once
-      if (!greetingHasFired.current) {
-        greetingHasFired.current = true;
-        setGreetingPlaying(true);
-        jacSpeak(GREETING_TEXT)
-          .catch(() => {})
-          .finally(() => setGreetingPlaying(false));
-      }
-    }, GREETING_AT);
-    schedule(() => setShowButtons(true), BUTTONS_AT);
+    cinematicRef.current.currentTime = 0;
+    cinematicRef.current.play().catch(() => {
+      setUseLightweightFallback(true);
+      finishCinematic();
+    });
   }
 
   // ── Voice mode entry ──────────────────────────────────────────────────────
@@ -305,20 +307,8 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
 
   const isClosed  = phase === "closed" || phase === "unlocking";
   const isOpening = phase === "opening";
-  const isOpen    = phase === "open" || phase === "exiting";
   const exiting   = phase === "exiting";
   const inConv    = convMode !== "none";
-  const isJacSpeaking = jacSpeakingTx || realtimePhase === "speaking";
-  const jacPerformanceAnimation =
-    isJacSpeaking ? "jac-door-speak .72s ease-in-out infinite" :
-    realtimePhase === "listening" ? "jac-door-listen 2.4s ease-in-out infinite" :
-    realtimePhase === "thinking" ? "jac-door-think 1.7s ease-in-out infinite" :
-    "none";
-
-  const doorTx = (isOpening || isOpen)
-    ? `transform ${DOOR_SLIDE_MS}ms cubic-bezier(0.42,0,0.12,1)`
-    : "none";
-
   const isMuted       = realtimePhase === "muted";
   const isVoiceLive   = convMode === "voice" && realtimePhase !== "idle" && realtimePhase !== "connecting";
   const statusLabel   =
@@ -533,181 +523,45 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           overflow:"hidden", background:"#000",
         }}>
 
-        {/* ── HQ SCENE ──────────────────────────────────────────────────── */}
-        <div aria-hidden="true" style={{
-          position:"absolute", inset:0,
-            transform:isOpen ? "scale(1.075)" : "scale(1)",
-            transition:isOpen
-              ? "transform 1800ms cubic-bezier(.16,1,.3,1)"
-            : "none",
-          willChange:"transform",
-          }} className="gdoor-motion">
-          {/* Background */}
-          <img src={HQ_BG} alt="" draggable={false} style={{
-            position:"absolute", inset:0,
-            width:"100%", height:"100%",
-            objectFit:"fill", objectPosition:"center top",
-            display:"block", userSelect:"none",
-          }} />
-
-          {/* The background supplies the depth silhouettes; these sharp,
-              transparent character plates arrive as separate layers so they
-              can move forward without ever duplicating the visible artwork. */}
-          <div aria-hidden="true" style={{
-            position:"absolute", inset:0, pointerEvents:"none",
-            opacity:isOpen ? 1 : 0,
-            animation:isOpen
-              ? "jac-arrive 1500ms cubic-bezier(.16,1,.3,1) both, jac-door-idle 4.4s ease-in-out 1500ms infinite"
-              : "none",
-            transformOrigin:"50% 82%",
-            willChange:"transform, opacity",
-          }} className="gdoor-motion">
-            <img src={CHAR_JAC} alt="" draggable={false} style={{
-              width:"100%", height:"100%", objectFit:"fill", display:"block",
-              animation:jacPerformanceAnimation,
-              transformOrigin:"50% 82%",
-              willChange:"transform",
-            }} />
-          </div>
-          <div aria-hidden="true" style={{
-            position:"absolute", inset:0, pointerEvents:"none",
-            opacity:isOpen ? 1 : 0,
-            animation:isOpen
-              ? "gubee-arrive 1650ms cubic-bezier(.16,1,.3,1) both, gubee-door-idle 4.8s ease-in-out 1650ms infinite"
-              : "none",
-            transformOrigin:"50% 82%",
-            willChange:"transform, opacity",
-          }} className="gdoor-motion">
-            <img src={CHAR_GUBEE} alt="" draggable={false} style={{
-              width:"100%", height:"100%", objectFit:"fill", display:"block",
-            }} />
-          </div>
-          <div aria-hidden="true" style={{
-            position:"absolute", inset:0, pointerEvents:"none",
-            opacity:isOpen ? 1 : 0,
-            animation:isOpen
-              ? "dd-arrive 1550ms cubic-bezier(.16,1,.3,1) both, dd-door-idle 4.2s ease-in-out 1550ms infinite"
-              : "none",
-            transformOrigin:"50% 82%",
-            willChange:"transform, opacity",
-          }} className="gdoor-motion">
-            <img src={CHAR_DD} alt="" draggable={false} style={{
-              width:"100%", height:"100%", objectFit:"fill", display:"block",
-            }} />
-          </div>
-          {(!showButtons || inConv) && (
-            <div aria-hidden="true" style={{
-              position:"absolute", left:0, right:0, top:"83%", bottom:"7%",
-              zIndex:1, pointerEvents:"none",
-              background:"linear-gradient(to bottom,rgba(0,0,8,.38) 0%,rgba(0,0,8,.96) 35%,rgba(0,0,8,.98) 100%)",
-            }} />
-          )}
-        </div>
-        {/* ── end HQ scene ──────────────────────────────────────────────── */}
-
-
-        {/* ── DOOR PANELS ───────────────────────────────────────────────── */}
-        <div aria-hidden="true" style={{
-          position:"absolute", left:0, top:0,
-          width:"50%", height:"100%", overflow:"hidden",
-          willChange:"transform",
-          transform:(isOpening||isOpen)?"translateX(-100%)":"translateX(0)",
-          transition:doorTx,
-        }} data-testid="guber-door-panel-left" data-open={isOpening || isOpen ? "true" : "false"}>
-          <img src={DOOR_CLOSED} alt="" draggable={false} style={{
-            position:"absolute", left:0, top:0,
-            width:"200%", height:"100%",
-            objectFit:"fill", objectPosition:"left center",
-            display:"block", userSelect:"none",
-          }} />
-        </div>
-        <div aria-hidden="true" style={{
-          position:"absolute", left:"50%", top:0,
-          width:"50%", height:"100%", overflow:"hidden",
-          willChange:"transform",
-          transform:(isOpening||isOpen)?"translateX(100%)":"translateX(0)",
-          transition:doorTx,
-        }} data-testid="guber-door-panel-right" data-open={isOpening || isOpen ? "true" : "false"}>
-          <img src={DOOR_CLOSED} alt="" draggable={false} style={{
-            position:"absolute", left:"-100%", top:0,
-            width:"200%", height:"100%",
-            objectFit:"fill",
-            display:"block", userSelect:"none",
-          }} />
-        </div>
-
-        {/* A single intact plate owns the closed state. The split panels stay
-            underneath it until the opening begins, so the wordmark is always
-            pixel-perfect on first paint. */}
-        {isClosed && (
+        {/* ── ONE COHESIVE GENERATED CINEMATIC ──────────────────────────── */}
+        {useLightweightFallback ? (
           <img
-            src={DOOR_CLOSED}
+            src={DOOR_POSTER}
             alt=""
             draggable={false}
-            data-testid="guber-door-closed-art"
+            data-testid="guber-door-cinematic-fallback"
             style={{
-              position:"absolute", inset:0, zIndex:3,
-              width:"100%", height:"100%",
-              objectFit:"fill", display:"block",
-              userSelect:"none", pointerEvents:"none",
+              position:"absolute", inset:0, width:"100%", height:"100%",
+              objectFit:"cover", display:"block", userSelect:"none",
             }}
           />
+        ) : (
+          <video
+            ref={cinematicRef}
+            aria-hidden="true"
+            data-testid="guber-door-cinematic"
+            data-playing={isOpening ? "true" : "false"}
+            poster={DOOR_POSTER}
+            preload="metadata"
+            playsInline
+            muted
+            disablePictureInPicture
+            onEnded={finishCinematic}
+            onError={() => setUseLightweightFallback(true)}
+            style={{
+              position:"absolute", inset:0, width:"100%", height:"100%",
+              objectFit:"cover", display:"block", background:"#000",
+            }}
+          >
+            <source src={DOOR_CINEMATIC} type="video/mp4" />
+          </video>
         )}
 
-
-        {/* ── SEAM (closed only) ────────────────────────────────────────── */}
-        {isClosed && !seamFlash && (
+        {inConv && (
           <div aria-hidden="true" style={{
-            position:"absolute", left:"50%", top:0, bottom:0, width:2,
-            transform:"translateX(-50%)",
-            background:"linear-gradient(to bottom,transparent 0%,rgba(0,220,200,.22) 30%,rgba(0,220,200,.35) 50%,rgba(0,220,200,.22) 70%,transparent 100%)",
-            animation:"seam-pulse 2.6s ease-in-out infinite",
-            pointerEvents:"none", zIndex:4,
-          }} />
-        )}
-        {seamFlash && (
-          <>
-            <div aria-hidden="true" style={{
-              position:"absolute", left:"50%", top:0,
-              width:5, transform:"translateX(-50%)",
-              background:"linear-gradient(to bottom,rgba(200,240,255,1) 0%,rgba(80,200,255,.9) 60%,transparent 100%)",
-              animation:`seam-spark-top ${SEAM_FLASH_MS}ms ease-out forwards`,
-              zIndex:10, pointerEvents:"none",
-            }} />
-            <div aria-hidden="true" style={{
-              position:"absolute", left:"50%", bottom:0,
-              width:5, transform:"translateX(-50%)",
-              background:"linear-gradient(to top,rgba(200,240,255,1) 0%,rgba(80,200,255,.9) 60%,transparent 100%)",
-              animation:`seam-spark-bot ${SEAM_FLASH_MS}ms ease-out forwards`,
-              zIndex:10, pointerEvents:"none",
-            }} />
-            <div aria-hidden="true" style={{
-              position:"absolute", left:"50%", top:"50%",
-              width:6, transform:"translate(-50%,-50%)", height:"100%",
-              boxShadow:"0 0 60px 28px rgba(100,210,255,.9),0 0 120px 48px rgba(60,160,255,.5)",
-              animation:`seam-burst ${SEAM_FLASH_MS}ms ease-out forwards`,
-              zIndex:11, pointerEvents:"none",
-            }} />
-          </>
-        )}
-        {/* White flash on door open */}
-        {(isOpening||isOpen) && (
-          <div aria-hidden="true" style={{
-            position:"absolute", inset:0,
-            background:"rgba(180,240,255,.55)",
-            animation:"door-flash 500ms ease-out forwards",
-            zIndex:4, pointerEvents:"none",
-          }} />
-        )}
-        {isOpening && (
-          <div aria-hidden="true" style={{
-            position:"absolute", left:"50%", top:"48%",
-            width:"118%", height:"118%",
-            transform:"translate(-50%,-50%)",
-            background:"radial-gradient(circle,rgba(225,255,255,.95) 0%,rgba(50,220,255,.55) 9%,rgba(40,170,255,.18) 28%,transparent 58%), conic-gradient(from 0deg,transparent 0deg,rgba(90,230,255,.72) 5deg,transparent 11deg,transparent 31deg,rgba(110,120,255,.6) 37deg,transparent 45deg,transparent 74deg,rgba(60,255,210,.56) 80deg,transparent 88deg,transparent 120deg,rgba(70,200,255,.5) 126deg,transparent 135deg,transparent 180deg,rgba(100,100,255,.5) 187deg,transparent 195deg,transparent 240deg,rgba(40,255,220,.5) 247deg,transparent 255deg,transparent 300deg,rgba(80,200,255,.6) 307deg,transparent 315deg,transparent 360deg)",
-            mixBlendMode:"screen",
-            animation:"energy-burst 1200ms cubic-bezier(.16,1,.3,1) both",
-            pointerEvents:"none", zIndex:12,
+            position:"absolute", left:0, right:0, top:"82%", bottom:0,
+            zIndex:1, pointerEvents:"none",
+            background:"linear-gradient(to bottom,rgba(0,0,8,0) 0%,rgba(0,0,8,.94) 38%,#000008 100%)",
           }} />
         )}
 

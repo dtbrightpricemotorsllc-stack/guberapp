@@ -755,3 +755,17 @@ mtime_ms = 1788254741298
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:e56cd826-6031-480e-8c02-ef3bd7b48c68/57fb7548-284b-4b5a-adbf-e8b9fcc1f96a/e95b58fa-f5e4-4d5f-8197-0a9bc4e8aad7"
 storage_version_token = "1788254772720195"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "AKVFV9-QVBjyMu5_UxXSO"
+uri = "file://attached_assets/generated_videos/guber-door-cinematic-exact-master.mp4"
+type = "video"
+title = "Exact-brand GUBER door cinematic"
+description = "1080p reference-conditioned master using the branded doors and exact JAC, Gubee, and D.D. designs in one continuous generated scene."
+logical_id = "40f16d01-b9a8-49ee-bd6c-2cc96c5a307e"
+content_hash = "sha256:b05f3580dcbf1000b2045fc94b49eb2c6a50b0e1dc24e3b0c9612f84f95c85a1"
+size = 7260511
+mtime_ms = 1788255736246
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:e56cd826-6031-480e-8c02-ef3bd7b48c68/40f16d01-b9a8-49ee-bd6c-2cc96c5a307e/2657c1b4-be46-4c09-afc9-b144049cd5ca"
+storage_version_token = "1788256139265306"
+content_type = "video/mp4"

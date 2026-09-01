@@ -8,9 +8,9 @@ description: Architecture and key facts for the JAC two-surface homepage experie
 ## Entry flow (web)
 The full-screen door scene is the sole web launch visual on every refresh. The universal mascot loading splash is native-only, because stacking it above the door creates ghost layers. Native bypasses the door.
 
-**Why:** The door artwork must remain one undistorted portrait composition until opening; overlapping the universal loader visibly bleeds the old mascot and rotating copy through it.
+**Why:** The entry must feel like one continuous cinematic environment. CSS-composited doors, backgrounds, masks, and character plates read as pasted layers and break depth continuity.
 
-**How to apply:** Keep the closed door as one intact plate. Split it into moving halves only during opening, then reveal layered Team GUBER character art. The canonical JAC surface mounts only after optional Explore.
+**How to apply:** Serve one generated 9:16 video for the door, light bloom, physical opening, character approach, and camera push. Use source art only to condition generation, never as runtime scene layers. Keep a tiny branded poster only for first paint, reduced motion/data, or video failure. The canonical JAC surface mounts only after optional Explore.
 
 ## Core files
 - `client/src/components/guber-door-splash.tsx` — web door, greeting, in-scene conversation, and optional Explore handoff
@@ -18,11 +18,11 @@ The full-screen door scene is the sole web launch visual on every refresh. The u
 - `client/src/components/jac/jac-live-experience.tsx` — two-surface layout; ConversationProvider wrapper + JacLiveInner
 
 ## Door-scene character motion
-Use whole transparent character plates for arrival and conversation-state body motion. Do not use the canvas mouth patch in the cinematic door scene.
+Character arrival and camera movement are baked into the single cinematic video. Do not add transparent character plates, masks, split door panels, or CSS arrival animations back into the door scene.
 
-**Why:** The face patch can look like a hole or glitch when composited over the cinematic plate.
+**Why:** The supplied art is identity reference material; putting it on top of the scene recreates the rejected collage effect. The face patch can also look like a hole or glitch over a cinematic frame.
 
-**How to apply:** Drive the complete JAC plate from speaking/listening/thinking state; reserve mouth-canvas rendering for the canonical post-Explore experience.
+**How to apply:** Let the film finish, then place only accessible live controls and conversation copy over the settled frame. Reserve mouth-canvas rendering for the canonical post-Explore experience.
 
 ## JacCharacterRenderer
 - Image: `/splash/char-jac-v2.png` (public path, 574×1046 RGBA)

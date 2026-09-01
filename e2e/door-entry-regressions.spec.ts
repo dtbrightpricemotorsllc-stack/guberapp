@@ -21,6 +21,16 @@ async function expectDoorGatedHome(page: Page) {
   await expect(doorRegion(page)).toBeVisible();
   await expect(page.getByTestId("jac-live-surface")).toHaveCount(0);
   await expect(doorRegion(page).getByRole("button", { name: "Enter Team GUBER" })).toHaveCount(1);
+  await expect(page.getByTestId("guber-door-cinematic")).toBeAttached();
+}
+
+async function completeCinematic(page: Page) {
+  const cinematic = page.getByTestId("guber-door-cinematic");
+  await expect(cinematic).toHaveAttribute("data-playing", "true");
+  await cinematic.evaluate((video: HTMLVideoElement) => {
+    video.pause();
+    video.dispatchEvent(new Event("ended"));
+  });
 }
 
 test.describe("Team GUBER cinematic entry door", () => {
@@ -48,8 +58,7 @@ test.describe("Team GUBER cinematic entry door", () => {
     await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
     const scene = page.locator('[aria-label="Team GUBER HQ"]');
     await expect(scene).toBeVisible();
-    await expect(page.getByTestId("guber-door-panel-left")).toHaveAttribute("data-open", "true");
-    await expect(page.getByTestId("guber-door-panel-right")).toHaveAttribute("data-open", "true");
+    await completeCinematic(page);
     await expect(page.getByTestId("guber-greeting")).toHaveText(
       "Welcome to Team Guber. What brings you here?",
     );
@@ -66,6 +75,7 @@ test.describe("Team GUBER cinematic entry door", () => {
     await expectDoorGatedHome(page);
 
     await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
+    await completeCinematic(page);
     await page.getByRole("button", { name: "Type to JAC instead" }).click();
     await page.getByRole("button", { name: "Go to full app" }).click();
 
