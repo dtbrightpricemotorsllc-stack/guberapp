@@ -552,6 +552,20 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           from{ opacity:0; transform:translateY(10px) scale(.97) }
           to  { opacity:1; transform:translateY(0)    scale(1) }
         }
+         @keyframes transcript-rise {
+           from { opacity:0; transform:translate(-50%, 12px) }
+           to   { opacity:1; transform:translate(-50%, 0) }
+         }
+         .gdoor-transcript-scroll {
+           scrollbar-width:thin;
+           scrollbar-color:rgba(0,220,190,.55) transparent;
+         }
+         .gdoor-transcript-scroll::-webkit-scrollbar { width:4px; }
+         .gdoor-transcript-scroll::-webkit-scrollbar-track { background:transparent; }
+         .gdoor-transcript-scroll::-webkit-scrollbar-thumb {
+           background:rgba(0,220,190,.55);
+           border-radius:999px;
+         }
         @keyframes think-pulse {
           0%,100%{ box-shadow:0 0 0 0 rgba(130,80,255,0) }
           50%    { box-shadow:0 0 18px 6px rgba(130,80,255,.4) }
@@ -560,7 +574,8 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
         .gdoor-mode-btn:active{ transform:scale(.95) !important }
         .gdoor-mute-btn:active{ transform:scale(.9) !important }
         @media (prefers-reduced-motion: reduce) {
-          .gdoor-motion { animation:none !important; transition:none !important; }
+           .gdoor-motion,
+           .gdoor-transcript { animation:none !important; transition:none !important; }
         }
       `}</style>
 
@@ -697,57 +712,75 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
         )}
 
         {/* Once a mode is chosen, this upper scene region becomes the
-            conversation itself. It deliberately has no card chrome: the
-            gradient hides the baked welcome copy while preserving the HQ
-            lighting and the characters below it. */}
+            conversation itself. The translucent transcript rail keeps every
+            line legible while preserving the HQ lighting and characters below. */}
         {conversationVisible && (
           <div
+            className="gdoor-transcript"
             data-testid="guber-scene-conversation"
             role="log"
             aria-live="polite"
             style={{
-              position:"absolute", top:0,
+              position:"absolute", top:"clamp(12px,3.5vh,38px)",
               left:"50%", width:"min(100vw,56.25vh)",
-              height:"clamp(270px,33vh,330px)",
+              height:"clamp(248px,38svh,430px)",
               transform:"translateX(-50%)",
-              zIndex:6, pointerEvents:"none",
-              padding:"0 8%",
+              zIndex:6, pointerEvents:"auto",
+              padding:"clamp(10px,2.2vh,22px) 5% 0",
               boxSizing:"border-box",
               display:"flex", flexDirection:"column",
-              justifyContent:"flex-end",
-              background:"linear-gradient(to bottom,#00000e 0%,#00000e 76%,rgba(0,0,14,.82) 90%,rgba(0,0,14,0) 100%)",
-              animation:"scene-conv-in 420ms cubic-bezier(.22,1,.36,1) both",
+               overflow:"hidden",
+              background:"linear-gradient(180deg,rgba(3,10,26,.94) 0%,rgba(4,13,30,.9) 72%,rgba(4,13,30,.45) 100%)",
+              border:"1px solid rgba(0,220,190,.2)",
+              borderRadius:20,
+              boxShadow:"0 16px 40px rgba(0,0,12,.28), inset 0 1px 0 rgba(255,255,255,.07)",
+              backdropFilter:"blur(5px)",
+              animation:"transcript-rise 420ms cubic-bezier(.22,1,.36,1) both",
             }}
           >
-            <div style={{
+            <div className="gdoor-transcript-scroll" style={{
               display:"flex", flexDirection:"column", gap:8,
-              maxHeight:"clamp(128px,18vh,188px)",
-              overflowY:"auto", paddingBottom:"8%",
-              maskImage:"linear-gradient(to bottom,transparent 0%,black 18%,black 100%)",
-              WebkitMaskImage:"linear-gradient(to bottom,transparent 0%,black 18%,black 100%)",
+               flex:"1 1 auto",
+               minHeight:0,
+               width:"100%",
+              overflowY:"auto",
+               padding:"4px 8px clamp(20px,3vh,28px) 0",
+              boxSizing:"border-box",
+              overscrollBehavior:"contain",
+              WebkitOverflowScrolling:"touch",
+               touchAction:"pan-y",
             }}>
-              {messages.slice(-4).map((m, i) => (
+              {messages.map((m, i) => (
                 <div key={`${m.role}-${i}-${m.text.slice(0, 12)}`} style={{
                   alignSelf:m.role === "user" ? "flex-end" : "flex-start",
-                  maxWidth:"94%",
+                  maxWidth:"min(96%, 420px)",
                   textAlign:m.role === "user" ? "right" : "left",
                   animation:"bubble-in 280ms cubic-bezier(.22,1,.36,1) both",
+                  padding:"9px 12px 10px",
+                  borderRadius:m.role === "user" ? "16px 16px 5px 16px" : "16px 16px 16px 5px",
+                  background:m.role === "user"
+                    ? "rgba(49,36,91,.88)"
+                    : "rgba(7,67,70,.88)",
+                  border:`1px solid ${m.role === "user" ? "rgba(255,189,122,.3)" : "rgba(0,220,190,.28)"}`,
+                  boxShadow:"0 5px 16px rgba(0,0,10,.22)",
+                  overflowWrap:"anywhere",
                 }}>
                   <div style={{
-                    color:m.role === "user" ? "rgba(130,100,255,.95)" : "rgba(0,220,190,.95)",
-                    fontSize:"clamp(9px,2.5vw,11px)",
+                    color:m.role === "user" ? "#ffc58e" : "#69f1d3",
+                    fontSize:"clamp(10px,2.5vw,12px)",
                     fontFamily:"'Oxanium',sans-serif",
-                    letterSpacing:".16em", textTransform:"uppercase",
-                    marginBottom:3, textShadow:"0 0 12px rgba(0,200,220,.55)",
+                    fontWeight:700,
+                    letterSpacing:".13em", textTransform:"uppercase",
+                    marginBottom:4,
                   }}>
                     {m.role === "user" ? "You" : "JAC"}
                   </div>
                   <p style={{
-                    margin:0, color:"#fff",
-                    fontSize:"clamp(14px,3.8vw,18px)",
-                    lineHeight:1.32,
-                    fontFamily:"'Inter',sans-serif",
-                    textShadow:"0 2px 12px rgba(0,0,0,.9)",
+                    margin:0, color:"#f7fbff",
+                    fontSize:"clamp(15px,3.9vw,18px)",
+                    lineHeight:1.48,
+                    fontFamily:"'Plus Jakarta Sans',sans-serif",
+                    letterSpacing:"-.01em",
                   }}>{m.text}</p>
                 </div>
               ))}
@@ -755,7 +788,10 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                 <div style={{
                   alignSelf:"flex-start", color:"rgba(0,220,190,.95)",
                   fontSize:"clamp(14px,3.8vw,18px)",
-                  letterSpacing:".18em", textShadow:"0 0 12px rgba(0,200,220,.55)",
+                  letterSpacing:".18em", padding:"8px 12px",
+                  background:"rgba(7,67,70,.64)",
+                  border:"1px solid rgba(0,220,190,.2)",
+                  borderRadius:"16px 16px 16px 5px",
                 }}>
                   <span style={{ animation:"speak-dot .9s ease-in-out infinite" }}>•</span>
                   <span style={{ animation:"speak-dot .9s ease-in-out .2s infinite" }}>•</span>

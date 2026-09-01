@@ -133,7 +133,7 @@ function BizSidebar({ onClose }: { onClose?: () => void }) {
             data-testid="biz-nav-consumer-app"
           >
             <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 rotate-180" />
-            <span style={{ fontSize: "11.5px", letterSpacing: "0.01em" }}>Consumer App</span>
+            <span style={{ fontSize: "11.5px", letterSpacing: "0.01em" }}>Main Dashboard</span>
           </button>
         </Link>
         <button

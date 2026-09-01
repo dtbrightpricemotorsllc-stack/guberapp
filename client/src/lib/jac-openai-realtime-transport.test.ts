@@ -6,6 +6,7 @@ import {
   JacOpenAIRealtimeTransport,
   makeExactTextResponse,
 } from "./jac-openai-realtime-transport";
+import { JAC_VOLUME_BOUNDS, setJacVolume } from "./jac-tts";
 
 class MockSocket {
   static OPEN = 1;
@@ -27,7 +28,7 @@ function audioMocks() {
   const sources: any[] = [];
   const sourceNode = { connect: vi.fn(), disconnect: vi.fn() };
   const capture = { connect: vi.fn(), disconnect: vi.fn(), onaudioprocess: null };
-  const gain = { connect: vi.fn(), disconnect: vi.fn(), gain: { value: 1 } };
+  const gains: any[] = [];
   const context = {
     sampleRate: 24_000,
     currentTime: 0,
@@ -35,7 +36,11 @@ function audioMocks() {
     destination: {},
     createMediaStreamSource: vi.fn(() => sourceNode),
     createScriptProcessor: vi.fn(() => capture),
-    createGain: vi.fn(() => gain),
+    createGain: vi.fn(() => {
+      const gain = { connect: vi.fn(), disconnect: vi.fn(), gain: { value: 1 } };
+      gains.push(gain);
+      return gain;
+    }),
     createBuffer: vi.fn((_channels, length, rate) => ({
       duration: length / rate,
       getChannelData: () => new Float32Array(length),
@@ -48,7 +53,7 @@ function audioMocks() {
     resume: vi.fn(),
     close: vi.fn(async () => { context.state = "closed"; }),
   };
-  return { context, sourceNode, capture, gain, sources };
+  return { context, sourceNode, capture, gains, sources };
 }
 
 async function connectedTransport(callbacks: Record<string, any> = {}) {
@@ -73,6 +78,7 @@ describe("JacOpenAIRealtimeTransport", () => {
   beforeEach(() => {
     MockSocket.instances = [];
     vi.stubGlobal("AudioWorkletNode", undefined);
+    setJacVolume(JAC_VOLUME_BOUNDS.default);
   });
 
   it("parses valid events and ignores malformed frames", () => {
@@ -206,6 +212,17 @@ describe("JacOpenAIRealtimeTransport", () => {
     expect(socket.sent.map(JSON.parse)).not.toContainEqual({ type: "output_audio_buffer.clear" });
   });
 
+  it("routes realtime speech through the saved JAC volume gain", async () => {
+    setJacVolume(3.25);
+    const { socket, audio } = await connectedTransport();
+    const pcm = btoa(String.fromCharCode(0, 0, 1, 0));
+    socket.message({ type: "response.output_audio.delta", delta: pcm });
+
+    expect(audio.gains[0].gain.value).toBe(3.25);
+    expect(audio.sources[0].connect).toHaveBeenCalledWith(audio.gains[0]);
+    expect(audio.gains[0].connect).toHaveBeenCalledWith(audio.context.destination);
+  });
+
   it("fully cleans up socket, media, nodes, output, and the one context", async () => {
     const { transport, socket, audio, track } = await connectedTransport();
     const pcm = btoa(String.fromCharCode(0, 0));
@@ -215,7 +232,9 @@ describe("JacOpenAIRealtimeTransport", () => {
     expect(track.stop).toHaveBeenCalled();
     expect(audio.sourceNode.disconnect).toHaveBeenCalled();
     expect(audio.capture.disconnect).toHaveBeenCalled();
-    expect(audio.gain.disconnect).toHaveBeenCalled();
+    expect(audio.gains).toHaveLength(2);
+    expect(audio.gains[0].disconnect).toHaveBeenCalled();
+    expect(audio.gains[1].disconnect).toHaveBeenCalled();
     expect(audio.sources[0].stop).toHaveBeenCalled();
     expect(audio.context.close).toHaveBeenCalledTimes(1);
     expect(transport.phase).toBe("idle");

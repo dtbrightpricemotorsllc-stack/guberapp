@@ -1,3 +1,5 @@
+import { getJacVolume } from "./jac-tts";
+
 export type JacRealtimePhase =
   | "idle"
   | "connecting"
@@ -155,6 +157,7 @@ export class JacOpenAIRealtimeTransport {
   private mediaSource: MediaStreamAudioSourceNode | null = null;
   private captureNode: AudioNode | null = null;
   private captureSink: GainNode | null = null;
+  private outputGain: GainNode | null = null;
   private workletUrl: string | null = null;
   private outputSources = new Set<AudioBufferSourceNode>();
   private nextPlayTime = 0;
@@ -275,6 +278,9 @@ export class JacOpenAIRealtimeTransport {
       this.preparedContext = null;
       try {
         if (this.context.state === "suspended") await this.context.resume();
+        this.outputGain = this.context.createGain();
+        this.outputGain.gain.value = getJacVolume();
+        this.outputGain.connect(this.context.destination);
         await this.setupCapture();
       } catch (error) {
         throw new JacRealtimeStartError(errorMessage(error, "Realtime audio could not start."), "audio");
@@ -434,7 +440,14 @@ export class JacOpenAIRealtimeTransport {
     for (let i = 0; i < pcm.length; i++) channel[i] = pcm[i] / 0x8000;
     const source = this.context.createBufferSource();
     source.buffer = buffer;
-    source.connect(this.context.destination);
+    if (this.outputGain) {
+      // Read the live preference for every response chunk so moving the JAC
+      // volume slider takes effect without rebuilding the realtime session.
+      this.outputGain.gain.value = getJacVolume();
+      source.connect(this.outputGain);
+    } else {
+      source.connect(this.context.destination);
+    }
     const startAt = Math.max(this.context.currentTime, this.nextPlayTime);
     this.nextPlayTime = startAt + buffer.duration;
     this.outputSources.add(source);
@@ -504,9 +517,11 @@ export class JacOpenAIRealtimeTransport {
     try { this.mediaSource?.disconnect(); } catch {}
     try { this.captureNode?.disconnect(); } catch {}
     try { this.captureSink?.disconnect(); } catch {}
+    try { this.outputGain?.disconnect(); } catch {}
     this.mediaSource = null;
     this.captureNode = null;
     this.captureSink = null;
+    this.outputGain = null;
     this.captureChunks = [];
     this.captureSampleCount = 0;
     this.stream?.getTracks().forEach(track => track.stop());

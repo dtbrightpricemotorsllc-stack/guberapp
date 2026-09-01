@@ -188,17 +188,39 @@ const CampaignLabCampaignDetail = lazy(() => import("@/pages/campaign-lab").then
 const AdminCampaignLab = lazy(() => import("@/pages/admin-campaign-lab"));
 
 
-// Universal GUBER loading splash — replaces the legacy spinner-based loaders
-// so that every route-guard auth check and every lazy-loaded page Suspense
-// fallback shows the panda + neon shield splash with rotating messages.
-// Using `loading` literal-true here is intentional: the parent unmounts this
-// element when work is done, which provides a fast hand-off to the next view.
+function WebRouteTransition() {
+  return (
+    <div
+      role="status"
+      aria-label="Loading the next view"
+      data-testid="web-route-transition"
+      className="fixed inset-0 z-[9998] flex items-center justify-center bg-black"
+      style={{
+        background:
+          "radial-gradient(circle at 50% 44%, rgba(0, 220, 190, 0.08), transparent 28%), #000",
+        animation: "fade-in 180ms ease-out both",
+      }}
+    >
+      <div
+        className="h-px w-24 animate-pulse"
+        style={{
+          background: "linear-gradient(90deg, transparent, rgba(0, 229, 190, 0.9), transparent)",
+          boxShadow: "0 0 18px rgba(0, 229, 190, 0.45)",
+        }}
+      />
+      <span className="sr-only">Loading</span>
+    </div>
+  );
+}
+
+// Native retains its branded launch splash. Web uses a quiet dark bridge so
+// route guards and lazy chunks cannot flash the legacy mascot over the door.
 function PageLoader() {
-  return <LoadingSplash loading />;
+  return isNativeApp ? <LoadingSplash loading /> : <WebRouteTransition />;
 }
 
 function BizLoader() {
-  return <LoadingSplash loading />;
+  return <PageLoader />;
 }
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -380,7 +402,7 @@ function Router() {
         useEffect(() => { const t = new URLSearchParams(s).get("t"); nav(t ? `/login?t=${t}` : "/login"); }, []);
         return null;
       }} />
-      <Route path="/dashboard" component={() => <ConsumerRoute component={Dashboard} />} />
+      <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
       <Route path="/browse-jobs" component={() => <ProtectedRoute component={BrowseJobs} />} />
       <Route path="/jobs/:id/navigate" component={() => <ProtectedRoute component={JobNavigate} />} />
       <Route path="/jobs/:id" component={() => <ProtectedRoute component={JobDetail} />} />

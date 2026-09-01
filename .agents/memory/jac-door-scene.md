@@ -10,7 +10,7 @@ The full-screen door scene is the sole web launch visual on every refresh. The u
 
 **Why:** The entry must feel like one continuous cinematic environment. CSS-composited doors, backgrounds, masks, and character plates read as pasted layers and break depth continuity.
 
-**How to apply:** Serve one generated 9:16 video for the door, light bloom, physical opening, character approach, and camera push. Use source art only to condition generation, never as runtime scene layers. Keep a tiny branded poster only for first paint, reduced motion/data, or video failure. The canonical JAC surface mounts only after optional Explore.
+**How to apply:** Serve one generated 9:16 video for the door, light bloom, physical opening, character approach, and camera push. Use source art only to condition generation, never as runtime scene layers. Keep a tiny branded poster only for first paint, reduced motion/data, or video failure. The canonical JAC surface mounts only after optional Explore. Web auth guards and lazy-route fallbacks must use a quiet dark transition, never the mascot loader.
 
 ## Continuous cinematic-to-JAC handoff
 Warm the invisible realtime voice session behind the playing door film after the visitor's Enter gesture. On the final frame, keep the same video element mounted and reveal the greeting/conversation controls over it; do not mount another splash or startup surface.
@@ -25,6 +25,20 @@ Never let a voice startup failure switch the door scene into text mode or focus 
 **Why:** Samsung Browser showed that generic error fallback could mount and focus the textarea during the cinematic, opening the keyboard and overriding the visitor's ENTER choice.
 
 **How to apply:** Classify microphone failures separately from recoverable transport failures, retain the prepared microphone/audio activation across retries, and keep a clear connecting state through the reveal.
+
+## Realtime volume and transcript parity
+Every JAC audio transport must honor the shared persisted JAC volume, including raw realtime PCM playback. Door transcripts must use a genuinely touch-scrollable inner viewport with readable mobile type and no fade mask over conversation text.
+
+**Why:** Samsung Browser exposed two gaps: realtime output bypassed the visible volume preference, and a flex child without a shrinkable height appeared scrollable but ignored touch movement while clipping long replies.
+
+**How to apply:** Route realtime playback through a gain node that reads the live JAC volume. For the transcript, keep the scroll child at `min-height: 0`, enable vertical touch panning, preserve bottom clearance, and verify with an actual mobile swipe—not only a desktop wheel.
+
+## Account-aware sign-in handoff
+When JAC starts authentication without an explicit in-progress destination, do not synthesize `/dashboard` as `returnTo`; let resolved account type choose the landing dashboard. The shared `/dashboard` remains accessible afterward, including from Business navigation.
+
+**Why:** A generic return path overrode business routing and caused a consumer-dashboard redirect hop before the correct Business dashboard, making sign-in feel broken and preventing access to the shared hub.
+
+**How to apply:** Preserve explicit campaign/workflow resume paths only. Default consumers to the shared dashboard, businesses to the Business dashboard, and label the Business navigation link back to the shared hub clearly.
 
 ## Core files
 - `client/src/components/guber-door-splash.tsx` — web door, greeting, in-scene conversation, and optional Explore handoff

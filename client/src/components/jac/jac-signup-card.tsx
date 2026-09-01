@@ -37,7 +37,7 @@ export function SignupCard({ onDismiss, onAuthed, returnTo }: SignupCardProps) {
           return;
         }
         if (result.reason === "plugin_not_available") {
-          const browserResult = await browserGoogleSignIn({ returnTo: returnTo || "/dashboard" });
+          const browserResult = await browserGoogleSignIn({ returnTo });
           if (browserResult.ok) {
             onAuthed(browserResult.accountType);
             return;
@@ -45,7 +45,10 @@ export function SignupCard({ onDismiss, onAuthed, returnTo }: SignupCardProps) {
         }
       } else {
         const googleUrl = new URL(`${window.location.origin}/api/auth/google`);
-        googleUrl.searchParams.set("returnTo", returnTo || "/dashboard");
+        // With no explicit work-in-progress destination, let auth-success route
+        // from the resolved account type instead of forcing every user through
+        // the consumer dashboard first.
+        if (returnTo) googleUrl.searchParams.set("returnTo", returnTo);
         window.location.href = googleUrl.toString();
         return; // full-page redirect — no state to reset
       }
