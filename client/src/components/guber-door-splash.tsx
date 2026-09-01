@@ -140,6 +140,8 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     setPhase("open");
     setShowGreeting(true);
     setMessages(current => current.length ? current : [{ role: "jac", text: GREETING_TEXT }]);
+    setConvMode("voice");
+    setRealtimeActive(true);
 
     if (!greetingHasFired.current) {
       greetingHasFired.current = true;
@@ -513,9 +515,8 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
         }}
       >
 
-        {/* The art is a portrait composition. Keeping one fixed-ratio stage
-            prevents the centered logo and wordmark from being stretched or
-            misaligned when the preview is wider than a phone. */}
+            {/* The film is a portrait composition. Keeping one fixed-ratio stage
+                prevents the single generated set from being stretched or cropped. */}
         <div style={{
           position:"absolute", top:0, bottom:0, left:"50%",
           width:"min(100vw, 56.25vh)",
@@ -580,7 +581,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
         {/* ═══════════════════════════════════════════════════════════════
             OPEN SCENE OVERLAY
             ═══════════════════════════════════════════════════════════════ */}
-        {showGreeting && !inConv && (
+        {showGreeting && (
           <>
             <div
               role="status"
@@ -595,7 +596,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
             >
               {GREETING_TEXT}
             </div>
-            {showButtons && (
+            {!inConv && showButtons && (
               <div style={{
                 position:"absolute", left:"50%", width:"min(100vw, 56.25vh)",
                 transform:"translateX(-50%)",
@@ -787,7 +788,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                       {isMuted ? "🔇" : "🎙️"}
                     </button>
 
-                    {/* Switch to type */}
+                    {/* Type Instead remains available while auto-started voice is live. */}
                     <button
                       onClick={() => {
                         setConvMode("text");
@@ -801,7 +802,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                         fontFamily:"'Inter',sans-serif", letterSpacing:".04em",
                         flexShrink:0, padding:"4px 0",
                       }}
-                    >⌨️</button>
+                     >Type instead</button>
 
                     {/* Explore → */}
                     <button onClick={() => exitToApp(true)} aria-label="Go to full app"

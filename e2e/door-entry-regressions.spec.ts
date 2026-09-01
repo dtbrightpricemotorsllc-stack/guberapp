@@ -62,8 +62,8 @@ test.describe("Team GUBER cinematic entry door", () => {
     await expect(page.getByTestId("guber-greeting")).toHaveText(
       "Welcome to Team Guber. What brings you here?",
     );
-    await expect(page.getByRole("button", { name: "Talk to JAC with voice" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Type to JAC instead" })).toBeVisible();
+    await expect(page.getByTestId("guber-scene-conversation")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Switch to typing" })).toBeVisible();
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByTestId("jac-live-surface")).toHaveCount(0);
   });
@@ -76,7 +76,7 @@ test.describe("Team GUBER cinematic entry door", () => {
 
     await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
     await completeCinematic(page);
-    await page.getByRole("button", { name: "Type to JAC instead" }).click();
+    await page.getByRole("button", { name: "Switch to typing" }).click();
     await page.getByRole("button", { name: "Go to full app" }).click();
 
     await expect(doorRegion(page)).toHaveCount(0);

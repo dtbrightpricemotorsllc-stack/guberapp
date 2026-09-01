@@ -81,34 +81,37 @@ const startPath = resolve(
 );
 const tailPath = resolve(
   __dirname,
-  "../attached_assets/generation_refs/guber-door-final-exact.png",
+  "../attached_assets/generation_refs/guber-door-final-clean.png",
 );
 
 console.log("Uploading exact branded generation references");
 const [startUrl, tailUrl] = await Promise.all([
   uploadReference(startPath, "guber-door-start-branded-exact"),
-  uploadReference(tailPath, "guber-door-final-characters-exact"),
+  uploadReference(tailPath, "guber-door-final-characters-clean"),
 ]);
 
 console.log("Generating cohesive reference-conditioned cinematic");
 const result = await submitAndWait({
   image_url: startUrl,
   tail_image_url: tailUrl,
-  duration: "10",
+    duration: "5",
   aspect_ratio: "9:16",
   prompt:
-    "One continuous premium cinematic shot. Preserve the exact branded GUBER doors, logos, typography, " +
-    "and the exact three character identities from the supplied start and tail frames. Begin with the doors " +
-    "fully sealed. Ignite a narrow cyan center beam, intensify volumetric cyan, violet and emerald light, " +
-    "then create a bright doorway flash as the physical double doors slide completely clear. Reveal the same " +
-    "continuous GUBER headquarters environment shown in the tail frame. The exact JAC, Gubee and D.D. from the " +
-    "tail frame walk visibly forward from real depth toward the camera with stable faces, outfits, proportions, " +
-    "logos and colors. Smooth camera push, natural footsteps and floor reflections. Settle precisely into the " +
-    "tail-frame composition. No cuts, no pasted layers, no substitutions, no duplicate characters.",
+     "One continuous premium cinematic shot with no cuts or dissolves. Preserve the exact branded GUBER doors " +
+     "and the exact three character identities from the supplied start and tail frames. Hold the doors fully " +
+     "sealed only briefly, then complete the physical double-door opening and bright doorway flash by 3.5 seconds. " +
+     "The panels slide completely out of frame as real solid doors; their printed logo and wordmark leave with " +
+     "the doors. Reveal one clean, continuous GUBER headquarters environment behind them with no free-floating " +
+     "branding or typography. The exact JAC, Gubee and D.D. walk visibly forward from real depth toward the camera " +
+     "with stable faces, outfits, proportions, colors and natural floor reflections. Use the final second to settle " +
+     "on JAC fully revealed and centered. This must look like one physical set of doors revealing the real room, " +
+     "not one branded image dissolving into another.",
   negative_prompt:
-    "different characters, redesigned mascot, generic badger, duplicate character, extra character, morphing, " +
-    "changed face, changed outfit, changed logo, garbled text, cropped face, stretched face, missing limb, " +
-    "flat collage, pasted cutout, static pop-in, jump cut, camera shake, watermark",
+     "ghosted branding, mirrored logo, duplicate logo, duplicate TEAM GUBER text, floating typography, " +
+     "partially visible wordmark, transparent text, reflected text, text smear, dissolving image, crossfade, " +
+     "double exposure, image overlay, flat collage, pasted cutout, static pop-in, jump cut, different characters, " +
+     "redesigned mascot, generic badger, duplicate character, extra character, morphing, changed face, " +
+     "changed outfit, changed colors, garbled text, cropped face, stretched face, missing limb, camera shake, watermark",
 });
 
 const videoUrl = result.video?.url ?? result.url;
