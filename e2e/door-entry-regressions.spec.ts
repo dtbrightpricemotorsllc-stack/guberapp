@@ -58,12 +58,13 @@ test.describe("Team GUBER cinematic entry door", () => {
     await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
     const scene = page.locator('[aria-label="Team GUBER HQ"]');
     await expect(scene).toBeVisible();
+    await expect(page.getByTestId("guber-scene-conversation")).toHaveCount(0);
     await completeCinematic(page);
     await expect(page.getByTestId("guber-greeting")).toHaveText(
       "Welcome to Team Guber. What brings you here?",
     );
     await expect(page.getByTestId("guber-scene-conversation")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Switch to typing" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Switch to typing" })).toHaveText("Type Instead");
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByTestId("jac-live-surface")).toHaveCount(0);
   });

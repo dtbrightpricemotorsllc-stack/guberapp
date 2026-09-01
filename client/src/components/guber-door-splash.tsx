@@ -140,8 +140,6 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     setPhase("open");
     setShowGreeting(true);
     setMessages(current => current.length ? current : [{ role: "jac", text: GREETING_TEXT }]);
-    setConvMode("voice");
-    setRealtimeActive(true);
 
     if (!greetingHasFired.current) {
       greetingHasFired.current = true;
@@ -158,6 +156,10 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     if (phase !== "closed") return;
     unlockAudioContext();
     setPhase("opening");
+    // Warm voice invisibly behind the film so the reveal lands directly in a
+    // listening JAC instead of showing a second startup state.
+    setConvMode("voice");
+    setRealtimeActive(true);
 
     if (useLightweightFallback || !cinematicRef.current) {
       schedule(finishCinematic, 220);
@@ -311,6 +313,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const isOpening = phase === "opening";
   const exiting   = phase === "exiting";
   const inConv    = convMode !== "none";
+  const conversationVisible = phase === "open" && inConv;
   const isMuted       = realtimePhase === "muted";
   const isVoiceLive   = convMode === "voice" && realtimePhase !== "idle" && realtimePhase !== "connecting";
   const statusLabel   =
@@ -558,7 +561,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           </video>
         )}
 
-        {inConv && (
+        {conversationVisible && (
           <div aria-hidden="true" style={{
             position:"absolute", left:0, right:0, top:"82%", bottom:0,
             zIndex:1, pointerEvents:"none",
@@ -637,7 +640,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
             conversation itself. It deliberately has no card chrome: the
             gradient hides the baked welcome copy while preserving the HQ
             lighting and the characters below it. */}
-        {inConv && (
+        {conversationVisible && (
           <div
             data-testid="guber-scene-conversation"
             role="log"
