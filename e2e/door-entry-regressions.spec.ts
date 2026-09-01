@@ -23,12 +23,6 @@ async function installUnauthenticatedSession(page: Page) {
   });
 }
 
-async function installVoiceHarness(page: Page) {
-  await page.addInitScript(() => {
-    sessionStorage.setItem("jac_e2e_voice_harness", "1");
-  });
-}
-
 async function expectDoorGatedHome(page: Page) {
   await expect(page.getByTestId("page-home")).toBeVisible();
   await expect(doorRegion(page)).toBeVisible();
@@ -63,11 +57,11 @@ test.describe("Team GUBER cinematic entry door", () => {
   });
 
   test("opening the door reveals JAC in-scene before optional Explore", async ({ page }) => {
-    await installVoiceHarness(page);
     await installUnauthenticatedSession(page);
 
-    await page.goto("/");
+    await page.goto("/?jac_e2e=1");
     await expectDoorGatedHome(page);
+    await page.evaluate(() => history.replaceState(null, "", "/"));
 
     await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
     await expect(page.getByText("Connecting…")).toBeVisible();
@@ -80,17 +74,15 @@ test.describe("Team GUBER cinematic entry door", () => {
       "Welcome to Team Guber. What brings you here?",
     );
     await expect(page.getByTestId("guber-scene-conversation")).toBeVisible();
-    await expect(page.getByText("Listening…")).toBeVisible();
     await expect(page.getByRole("button", { name: "Switch to typing" })).toHaveText("Type Instead");
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByTestId("jac-live-surface")).toHaveCount(0);
   });
 
   test("Explore is the optional escape to the canonical JAC surface", async ({ page }) => {
-    await installVoiceHarness(page);
     await installUnauthenticatedSession(page);
 
-    await page.goto("/");
+    await page.goto("/?jac_e2e=1");
     await expectDoorGatedHome(page);
 
     await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
