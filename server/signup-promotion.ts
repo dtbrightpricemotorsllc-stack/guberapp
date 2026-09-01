@@ -292,6 +292,17 @@ export async function getPromotionForUser(userId: number): Promise<PromotionEntr
   }
 }
 
+export async function recordSignupPromotionSafely(user: PromotionUser): Promise<void> {
+  try {
+    await recordSignupPromotionForNewUser(user);
+  } catch (err: any) {
+    await enqueueSignupPromotionRetry(user.id, err?.message || "Promotion allocation failed").catch((queueErr: any) => {
+      console.error(`[signup-promotion] could not queue retry for user ${user.id}:`, queueErr?.message || queueErr);
+    });
+    console.error(`[signup-promotion] allocation deferred for user ${user.id}:`, err?.message || err);
+  }
+}
+
 export async function enqueueSignupPromotionRetry(userId: number, errorMessage: string): Promise<void> {
   await pool.query(
     `INSERT INTO signup_promotion_retries (user_id, last_error, next_attempt_at)

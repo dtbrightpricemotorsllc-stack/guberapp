@@ -104,7 +104,7 @@ import {
   getPromotionStatus,
   listPromotionWinners,
   recordSignupPromotionForNewUser,
-  enqueueSignupPromotionRetry,
+  recordSignupPromotionSafely,
   acknowledgePromotionAlert,
   updatePromotionConfig,
   updatePromotionWinner,
@@ -2846,17 +2846,6 @@ export async function registerRoutes(
       }
     } catch {
       // Silently fail — user stays "none" and appears in Safety Queue for manual review
-    }
-  }
-
-  async function recordSignupPromotionSafely(user: any): Promise<void> {
-    try {
-      await recordSignupPromotionForNewUser(user);
-    } catch (err: any) {
-      await enqueueSignupPromotionRetry(user.id, err?.message || "Promotion allocation failed").catch((queueErr: any) => {
-        console.error(`[signup-promotion] could not queue retry for user ${user.id}:`, queueErr?.message || queueErr);
-      });
-      console.error(`[signup-promotion] allocation deferred for user ${user.id}:`, err?.message || err);
     }
   }
 
