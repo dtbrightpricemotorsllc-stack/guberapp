@@ -311,7 +311,7 @@ export default function Signup() {
                 </p>
               </div>
               {jacPrefill.business_owner && (
-                <a href="/biz/signup"
+                <a href="/business-signup"
                   className="text-[10px] font-display font-semibold flex items-center gap-1 flex-shrink-0 whitespace-nowrap"
                   style={{ color: "hsl(270 100% 78%)" }}>
                   <Building2 className="w-3 h-3" /> Business →

@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Gift, Pause, Play, RefreshCw } from "lucide-react";
+import { Gift, Pause, Play, RefreshCw, Check } from "lucide-react";
 
 type PromotionData = {
   status: {
@@ -32,6 +32,7 @@ type PromotionData = {
     paidAt: string | null;
     disqualificationReason: string | null;
     adminNotes: string | null;
+    alertId: number | null;
     alertStatus: string | null;
     alertDetails: Record<string, unknown> | null;
     alertAcknowledgedAt: string | null;
@@ -60,13 +61,22 @@ export function AdminSignupPromotionTab() {
   });
 
   const winnerMutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: string }) =>
-      apiRequest("PATCH", `/api/admin/signup-promotion/winners/${id}`, { status }),
+    mutationFn: ({ id, status, payoutMethod, payoutHandle, adminNotes }: { id: number; status: string; payoutMethod?: string; payoutHandle?: string; adminNotes?: string }) =>
+      apiRequest("PATCH", `/api/admin/signup-promotion/winners/${id}`, { status, payoutMethod, payoutHandle, adminNotes }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/signup-promotion"] });
       toast({ title: "Winner updated" });
     },
     onError: (error: any) => toast({ title: "Winner update failed", description: error?.message, variant: "destructive" }),
+  });
+
+  const alertMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("PATCH", `/api/admin/signup-promotion/alerts/${id}/acknowledge`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/signup-promotion"] });
+      toast({ title: "Alert acknowledged" });
+    },
+    onError: (error: any) => toast({ title: "Alert update failed", description: error?.message, variant: "destructive" }),
   });
 
   if (isLoading || !data) {
@@ -139,9 +149,21 @@ export function AdminSignupPromotionTab() {
                 </div>
                 {winner.disqualificationReason && <p className="text-xs text-destructive">{winner.disqualificationReason}</p>}
                 <div className="flex flex-wrap gap-2">
-                  {winner.status !== "paid" && winner.status !== "disqualified" && (
-                    <Button size="sm" onClick={() => winnerMutation.mutate({ id: winner.id, status: "paid" })} disabled={winnerMutation.isPending}>
+                  {winner.status === "claimed" && (
+                    <Button size="sm" onClick={() => {
+                      const payoutMethod = winner.payoutMethod || window.prompt("Payout method: cash_app or venmo", "cash_app")?.trim();
+                      const payoutHandle = winner.payoutHandle || window.prompt("Payout handle")?.trim();
+                      const adminNotes = window.prompt("Audit note for this payout")?.trim();
+                      if (payoutMethod && payoutHandle && adminNotes) {
+                        winnerMutation.mutate({ id: winner.id, status: "paid", payoutMethod, payoutHandle, adminNotes });
+                      }
+                    }} disabled={winnerMutation.isPending}>
                       Mark paid
+                    </Button>
+                  )}
+                  {winner.alertStatus === "open" && winner.alertId && (
+                    <Button size="sm" variant="outline" onClick={() => alertMutation.mutate(winner.alertId!)} disabled={alertMutation.isPending}>
+                      <Check className="w-3 h-3 mr-1" /> Acknowledge alert
                     </Button>
                   )}
                   {winner.status !== "disqualified" && winner.status !== "paid" && (

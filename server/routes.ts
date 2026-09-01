@@ -104,6 +104,8 @@ import {
   getPromotionStatus,
   listPromotionWinners,
   recordSignupPromotionForNewUser,
+  enqueueSignupPromotionRetry,
+  acknowledgePromotionAlert,
   updatePromotionConfig,
   updatePromotionWinner,
 } from "./signup-promotion";
@@ -2847,6 +2849,17 @@ export async function registerRoutes(
     }
   }
 
+  async function recordSignupPromotionSafely(user: any): Promise<void> {
+    try {
+      await recordSignupPromotionForNewUser(user);
+    } catch (err: any) {
+      await enqueueSignupPromotionRetry(user.id, err?.message || "Promotion allocation failed").catch((queueErr: any) => {
+        console.error(`[signup-promotion] could not queue retry for user ${user.id}:`, queueErr?.message || queueErr);
+      });
+      console.error(`[signup-promotion] allocation deferred for user ${user.id}:`, err?.message || err);
+    }
+  }
+
   app.post("/api/auth/signup", handleSignup(storage, {
     generateGuberId,
     isGuberIdTaken: async (id) => !!(await storage.getUserByGuberId(id)),
@@ -2893,7 +2906,7 @@ export async function registerRoutes(
       }
     },
     onUserCreated: async (user) => {
-      await recordSignupPromotionForNewUser(user);
+      await recordSignupPromotionSafely(user);
     },
     runBackgroundCheck: (userId, fullName) => {
       runNSOPWBackgroundCheck(userId, fullName).catch(() => {});
@@ -2953,6 +2966,21 @@ export async function registerRoutes(
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
       }
       const { businessName, workEmail, phone, industry, companyNeedsSummary, fullName, password, businessAddress, website, ein, invitationCode } = parsed.data;
+      const normalizedEin = typeof ein === "string" ? ein.trim() : "";
+      if (normalizedEin && !/^\d{9}$/.test(normalizedEin)) {
+        return res.status(400).json({ message: "EIN must be exactly 9 digits" });
+      }
+      if (normalizedEin) {
+        const existingEin = await db.execute(sql`
+          SELECT 1 FROM business_profiles WHERE ein = ${normalizedEin}
+          UNION ALL
+          SELECT 1 FROM users WHERE business_ein = ${normalizedEin}
+          LIMIT 1
+        `);
+        if (existingEin.rows.length > 0) {
+          return res.status(409).json({ message: "A business with this EIN already has an account or access request" });
+        }
+      }
       const suppliedUsername = parsed.data.username?.trim();
       const username = suppliedUsername || `business_${randomBytes(8).toString("hex")}`;
 
@@ -3000,7 +3028,7 @@ export async function registerRoutes(
           termsAcceptedAt: new Date(),
           businessAddress: businessAddress || null,
           businessWebsite: website || null,
-          businessEin: ein || null,
+          businessEin: normalizedEin || null,
         });
 
         bizAccount = await storage.createBusinessAccount({
@@ -3023,6 +3051,7 @@ export async function registerRoutes(
           companyName: businessName.trim(),
           industry,
           contactPhone: phone || null,
+          ein: normalizedEin || null,
         });
 
         await storage.createLegalAcceptance({
@@ -3053,6 +3082,10 @@ export async function registerRoutes(
         res.status(201).json({ user: sanitizeUser(user), businessAccount: bizAccount });
       });
     } catch (err: any) {
+      const databaseCode = err?.code ?? err?.cause?.code;
+      if (databaseCode === "23505") {
+        return res.status(409).json({ message: "A business with these details already has an account or access request" });
+      }
       res.status(500).json({ message: err.message });
     }
   });
@@ -3984,7 +4017,26 @@ export async function registerRoutes(
       });
       res.json({ ok: true, winner: updated });
     } catch (err: any) {
-      res.status(500).json({ message: err?.message || "Could not update winner" });
+      res.status(Number.isInteger(err?.statusCode) ? err.statusCode : 500).json({ message: err?.message || "Could not update winner" });
+    }
+  });
+
+  app.patch("/api/admin/signup-promotion/alerts/:id/acknowledge", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const alertId = Number(req.params.id);
+      if (!Number.isInteger(alertId) || alertId <= 0) {
+        return res.status(400).json({ message: "Invalid alert id" });
+      }
+      const updated = await acknowledgePromotionAlert(alertId, req.session.userId!);
+      if (!updated) return res.status(404).json({ message: "Signup promotion alert not found" });
+      await storage.createAuditLog({
+        userId: req.session.userId!,
+        action: "admin_signup_promotion_alert_acknowledge",
+        details: `Acknowledged signup promotion alert ${alertId}`,
+      });
+      res.json({ ok: true, alert: updated });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message || "Could not acknowledge alert" });
     }
   });
 
@@ -4069,7 +4121,7 @@ export async function registerRoutes(
         performanceShareWindowEndsAt: psWindowEnd,
         performanceShareEligible: !!referrerId,
       } as any);
-       await recordSignupPromotionForNewUser(user);
+       await recordSignupPromotionSafely(user);
 
       if (referrerId) {
         await db.insert(referrals).values({ referrerId, referredId: user.id, status: "pending" }).onConflictDoNothing();
@@ -4200,7 +4252,7 @@ export async function registerRoutes(
         performanceShareWindowEndsAt: psWindowEnd,
         performanceShareEligible: !!referrerId,
       } as any);
-       await recordSignupPromotionForNewUser(user);
+       await recordSignupPromotionSafely(user);
 
       if (referrerId) {
         await db.insert(referrals).values({ referrerId, referredId: user.id, status: "pending" }).onConflictDoNothing();
@@ -25143,13 +25195,11 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         ).catch(() => ({ rows: [] as { id: number; display_title: string }[] })),
         pool.query<{ count: string }>(
           `SELECT COUNT(*)::text AS count
-           FROM job_applications ja
-           JOIN jobs j ON j.id = ja.job_id
-           WHERE ja.applicant_id = $1
-             AND ja.status = 'approved'
+           FROM jobs j
+           WHERE j.assigned_helper_id = $1
              AND j.status NOT IN ('completed', 'cancelled', 'disputed')`,
           [userId]
-        ),
+        ).catch(() => ({ rows: [{ count: "0" }] })),
         pool.query<{ count: string }>(
           `SELECT COUNT(*)::text AS count
            FROM growth_task_templates
@@ -25172,10 +25222,8 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
              WHERE zip = $1
                AND status = 'open'
                AND created_at > NOW() - INTERVAL '7 days'
-               AND id NOT IN (
-                 SELECT job_id FROM job_applications WHERE applicant_id = $2
-               )`,
-            [u.zipcode, userId]
+                AND assigned_helper_id IS NULL`,
+            [u.zipcode]
           ).catch(() => ({ rows: [{ count: "0" }] }))
         : { rows: [{ count: "0" }] };
 

@@ -2670,6 +2670,19 @@ app.use((req, res, next) => {
       acknowledged_by INTEGER,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS signup_promotion_retries (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      resolved_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_business_profiles_ein_unique
+      ON business_profiles (ein)
+      WHERE ein IS NOT NULL AND ein <> '';
     CREATE INDEX IF NOT EXISTS idx_signup_promotion_alerts_status
       ON signup_promotion_alerts (status, created_at DESC);
     INSERT INTO signup_promotion_config

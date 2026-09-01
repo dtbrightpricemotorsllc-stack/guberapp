@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { notifyUploadStart, notifyUploadDone, notifyUploadError } from "@/lib/upload-events";
+import { fileToBase64 } from "@/lib/file-base64";
 import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { BizLayout } from "@/components/biz-layout";
@@ -117,10 +118,17 @@ export default function BizAccount() {
     setUploading(true);
     notifyUploadStart();
     try {
-      const formData = new FormData();
-      formData.append("photo", file);
-      const res = await fetch("/api/upload-photo", { method: "POST", credentials: "include", body: formData });
+      const fileBase64 = await fileToBase64(file);
+      const res = await fetch("/api/upload-photo", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileBase64, fileName: file.name, fileType: file.type }),
+      });
       const data = await res.json();
+      if (!res.ok || typeof data.url !== "string" || !data.url) {
+        throw new Error(data.error || "Logo upload failed");
+      }
       setForm((f) => ({ ...f, companyLogo: data.url }));
       setLogoPreview(data.url);
       notifyUploadDone();

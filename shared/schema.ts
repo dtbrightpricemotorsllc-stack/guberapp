@@ -1676,7 +1676,7 @@ export const businessAccessRequestSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
   businessAddress: z.string().min(5, "Business address is required"),
   website: z.string().optional(),
-  ein: z.string().optional(),
+  ein: z.string().regex(/^\d{9}$/, "EIN must be exactly 9 digits").optional().or(z.literal("")),
   invitationCode: z.string().trim().max(32).optional().or(z.literal("")),
 });
 

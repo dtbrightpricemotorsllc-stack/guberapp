@@ -5,6 +5,45 @@ export const SIGNUP_PROMOTION_BASELINE = 517;
 export const SIGNUP_PROMOTION_INTERVAL = 500;
 export const SIGNUP_PROMOTION_PRIZE_CENTS = 5000;
 
+export class PromotionWinnerUpdateError extends Error {
+  statusCode: number;
+
+  constructor(message: string, statusCode = 400) {
+    super(message);
+    this.name = "PromotionWinnerUpdateError";
+    this.statusCode = statusCode;
+  }
+}
+
+export function validatePromotionWinnerUpdate(
+  currentStatus: string,
+  nextStatus: string,
+  payoutMethod: string | null | undefined,
+  payoutHandle: string | null | undefined,
+  adminNotes: string | null | undefined,
+): void {
+  const validTransitions: Record<string, string[]> = {
+    pending_claim: ["pending_claim", "claimed", "disqualified"],
+    claimed: ["claimed", "paid", "disqualified"],
+    paid: ["paid"],
+    disqualified: ["disqualified"],
+  };
+  if (!validTransitions[currentStatus]?.includes(nextStatus)) {
+    throw new PromotionWinnerUpdateError(`Cannot change winner from ${currentStatus} to ${nextStatus}`);
+  }
+  if (nextStatus !== "paid") return;
+
+  if (payoutMethod !== "cash_app" && payoutMethod !== "venmo") {
+    throw new PromotionWinnerUpdateError("Payout method is required before marking the prize paid");
+  }
+  if (!/^[$@]?[A-Za-z0-9._-]{1,50}$/.test(String(payoutHandle ?? "").trim())) {
+    throw new PromotionWinnerUpdateError("A valid payout handle is required before marking the prize paid");
+  }
+  if (String(adminNotes ?? "").trim().length < 5) {
+    throw new PromotionWinnerUpdateError("An audit note of at least 5 characters is required before marking the prize paid");
+  }
+}
+
 type PromotionUser = {
   id: number;
   email?: string | null;
@@ -253,6 +292,82 @@ export async function getPromotionForUser(userId: number): Promise<PromotionEntr
   }
 }
 
+export async function enqueueSignupPromotionRetry(userId: number, errorMessage: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO signup_promotion_retries (user_id, last_error, next_attempt_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (user_id) DO UPDATE
+       SET attempts = signup_promotion_retries.attempts + 1,
+           last_error = EXCLUDED.last_error,
+           next_attempt_at = NOW(),
+           updated_at = NOW(),
+           resolved_at = NULL`,
+    [userId, errorMessage.slice(0, 500)],
+  );
+}
+
+export async function retrySignupPromotionAllocations(limit = 25): Promise<number> {
+  const pending = await pool.query<{ user_id: number }>(
+    `SELECT user_id
+       FROM signup_promotion_retries
+      WHERE resolved_at IS NULL
+        AND next_attempt_at <= NOW()
+      ORDER BY updated_at ASC
+      LIMIT $1`,
+    [limit],
+  );
+  let resolved = 0;
+  for (const row of pending.rows) {
+    try {
+      const userResult = await pool.query(
+        `SELECT id, email, account_type AS "accountType", role,
+                is_test_user AS "isTestUser", suspended, banned,
+                deleted_at AS "deletedAt"
+           FROM users WHERE id = $1`,
+        [row.user_id],
+      );
+      const user = userResult.rows[0];
+      if (!user) {
+        await pool.query(
+          `UPDATE signup_promotion_retries SET resolved_at = NOW(), updated_at = NOW() WHERE user_id = $1`,
+          [row.user_id],
+        );
+      } else {
+        await recordSignupPromotionForNewUser(user);
+        await pool.query(
+          `UPDATE signup_promotion_retries SET resolved_at = NOW(), updated_at = NOW() WHERE user_id = $1`,
+          [row.user_id],
+        );
+      }
+      resolved++;
+    } catch (err: any) {
+      await pool.query(
+        `UPDATE signup_promotion_retries
+            SET attempts = attempts + 1,
+                last_error = $2,
+                next_attempt_at = NOW() + INTERVAL '5 minutes',
+                updated_at = NOW()
+          WHERE user_id = $1`,
+        [row.user_id, String(err?.message || err).slice(0, 500)],
+      ).catch(() => {});
+    }
+  }
+  return resolved;
+}
+
+export async function acknowledgePromotionAlert(alertId: number, adminId: number) {
+  const result = await pool.query(
+    `UPDATE signup_promotion_alerts
+        SET status = 'acknowledged',
+            acknowledged_at = COALESCE(acknowledged_at, NOW()),
+            acknowledged_by = COALESCE(acknowledged_by, $2)
+      WHERE id = $1
+      RETURNING *`,
+    [alertId, adminId],
+  );
+  return result.rows[0] ?? null;
+}
+
 export async function getPromotionStatus() {
   const client = await pool.connect();
   try {
@@ -287,7 +402,7 @@ export async function listPromotionWinners() {
   const result = await pool.query(
     `SELECT w.*, e.sequence_number, e.normalized_email, e.created_at AS signup_at,
             u.username, u.full_name, u.email,
-            a.status AS alert_status, a.details AS alert_details,
+             a.id AS alert_id, a.status AS alert_status, a.details AS alert_details,
             a.acknowledged_at AS alert_acknowledged_at
        FROM signup_promotion_winners w
        JOIN signup_promotion_entries e ON e.id = w.entry_id
@@ -312,6 +427,7 @@ export async function listPromotionWinners() {
     disqualificationReason: row.disqualification_reason,
     adminNotes: row.admin_notes,
     alertStatus: row.alert_status ?? null,
+    alertId: row.alert_id == null ? null : Number(row.alert_id),
     alertDetails: row.alert_details ?? null,
     alertAcknowledgedAt: row.alert_acknowledged_at ?? null,
     signupAt: row.signup_at,
@@ -362,6 +478,13 @@ export async function updatePromotionWinner(
     }
     const row = current.rows[0];
     const nextStatus = patch.status ?? row.status;
+    validatePromotionWinnerUpdate(
+      row.status,
+      nextStatus,
+      patch.payoutMethod ?? row.payout_method,
+      patch.payoutHandle ?? row.payout_handle,
+      patch.adminNotes ?? row.admin_notes,
+    );
     const paidNow = nextStatus === "paid" && row.status !== "paid";
     const result = await client.query(
       `UPDATE signup_promotion_winners

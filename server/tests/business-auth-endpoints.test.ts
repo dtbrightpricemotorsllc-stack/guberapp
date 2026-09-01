@@ -125,12 +125,13 @@ const mockPool = vi.hoisted(() => ({
   query: vi.fn(),
   connect: vi.fn(),
 }));
+const mockDbExecute = vi.hoisted(() => vi.fn(async () => ({ rows: [] as unknown[] })));
 
 vi.mock("../db", () => {
   return {
     pool: mockPool,
     db: {
-      execute: vi.fn(async () => ({ rows: [] as unknown[] })),
+      execute: mockDbExecute,
     },
   };
 });
@@ -296,6 +297,8 @@ const stubFetch = (): MockFetchResponse => ({
 beforeEach(() => {
   globalThis.fetch = vi.fn<typeof fetch>(async () => stubFetch() as unknown as Response);
   mockPool.query.mockReset();
+  mockDbExecute.mockReset();
+  mockDbExecute.mockResolvedValue({ rows: [] });
   mockPool.connect.mockReset();
   mockPool.connect.mockImplementation(async () => ({
     query: vi.fn(async (statement: string, params?: unknown[]) => {
@@ -502,6 +505,29 @@ describe("POST /api/auth/business-access-request", () => {
     expect(ba.workEmail).toBe(VALID_ACCESS_REQUEST.workEmail);
 
     expect(mockState.businessProfiles).toHaveLength(1);
+  });
+
+  it("stores the optional EIN on the access-request profile", async () => {
+    const app = await getApp();
+    await supertest(app)
+      .post("/api/auth/business-access-request")
+      .send({ ...VALID_ACCESS_REQUEST, ein: "987654321" })
+      .expect(201);
+
+    expect(mockState.businessProfiles[0].ein).toBe("987654321");
+    expect(mockState.users[0].accountType).toBe("business");
+  });
+
+  it("rejects an EIN that is already registered", async () => {
+    mockDbExecute.mockResolvedValueOnce({ rows: [{ exists: 1 }] });
+    const app = await getApp();
+    const res = await supertest(app)
+      .post("/api/auth/business-access-request")
+      .send({ ...VALID_ACCESS_REQUEST, ein: "987654321" })
+      .expect(409);
+
+    expect(res.body.message).toContain("EIN already");
+    expect(mockState.users).toHaveLength(0);
   });
 
   it("records a normalized invitation attribution during business onboarding", async () => {

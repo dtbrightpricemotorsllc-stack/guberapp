@@ -13,6 +13,7 @@ import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-
 import { evaluatePayoutMultiFactor } from "./payout-guard";
 import { settleStandardDestinationCharge } from "./job-payment-settlement";
 import Stripe from "stripe";
+import { retrySignupPromotionAllocations } from "./signup-promotion";
 
 const stripe = new Stripe(process.env.STRIPE_CONNECT_SECRET_KEY!, { apiVersion: "2025-01-27.acacia" as any });
 
@@ -1394,6 +1395,12 @@ async function payoutSetupNudgeSweep(): Promise<number> {
 // node-cron schedules below. Idempotent and safe to call concurrently —
 // each helper either updates rows by status or is dedup-gated.
 export async function runAllScheduledSweeps(): Promise<void> {
+  try {
+    const recovered = await retrySignupPromotionAllocations();
+    if (recovered > 0) console.log(`[cron] recovered ${recovered} signup promotion allocation(s)`);
+  } catch (err) {
+    console.error("[cron] signup promotion retry sweep failed:", err);
+  }
   // 2-min cadence work
   try {
     const expired = await autoExpireCashDrops();
@@ -1764,6 +1771,7 @@ export function startCron() {
 
   cron.schedule("*/5 * * * *", async () => {
     try {
+      await retrySignupPromotionAllocations();
       const expired = await expireUnacceptedJobs();
       if (expired > 0) console.log(`[cron] expired ${expired} unaccepted job(s)`);
 

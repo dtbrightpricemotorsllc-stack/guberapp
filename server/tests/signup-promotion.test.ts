@@ -6,6 +6,7 @@ import {
   classifyPromotionUser,
   isPromotionWinner,
   promotionGlobalSignupNumber,
+  validatePromotionWinnerUpdate,
 } from "../signup-promotion";
 
 const user = (overrides: Record<string, unknown> = {}) => ({
@@ -45,5 +46,14 @@ describe("fixed-baseline signup promotion", () => {
     expect(classifyPromotionUser(user({ banned: true }))).toBe("banned_account");
     expect(classifyPromotionUser(user({ deletedAt: new Date() }))).toBe("deleted_account");
     expect(classifyPromotionUser(user({ email: "  " }))).toBe("missing_email");
+  });
+
+  it("only permits a claimed winner to become paid with payout and audit details", () => {
+    expect(() => validatePromotionWinnerUpdate("pending_claim", "paid", "cash_app", "$winner", "Paid manually")).toThrow("Cannot change");
+    expect(() => validatePromotionWinnerUpdate("claimed", "paid", null, "$winner", "Paid manually")).toThrow("Payout method");
+    expect(() => validatePromotionWinnerUpdate("claimed", "paid", "cash_app", "", "Paid manually")).toThrow("payout handle");
+    expect(() => validatePromotionWinnerUpdate("claimed", "paid", "cash_app", "$winner", "no")).toThrow("audit note");
+    expect(() => validatePromotionWinnerUpdate("claimed", "paid", "cash_app", "$winner", "Paid manually")).not.toThrow();
+    expect(() => validatePromotionWinnerUpdate("paid", "claimed", "cash_app", "$winner", "Paid manually")).toThrow("Cannot change");
   });
 });
