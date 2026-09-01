@@ -31,7 +31,10 @@ import {
 // ── Greeting guard: fires at most once per browser tab session ────────────────
 // ── Assets ───────────────────────────────────────────────────────────────────
 const DOOR_CLOSED = "/splash/door-closed.png";
-const HQ_BG       = "/splash/hq-reveal.png";
+const HQ_BG       = "/splash/hq-reveal-bg.png";
+const CHAR_JAC    = "/splash/hq-char-jac.png";
+const CHAR_GUBEE  = "/splash/hq-char-gubee.png";
+const CHAR_DD     = "/splash/hq-char-dd.png";
 
 // ── Timing (ms) ──────────────────────────────────────────────────────────────
 const SEAM_FLASH_MS  = 340;
@@ -341,6 +344,37 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           20% { opacity:.5 }
           100%{ opacity:0 }
         }
+        @keyframes camera-push {
+          0%   { transform:scale(.96) }
+          100% { transform:scale(1.075) }
+        }
+        @keyframes jac-arrive {
+          0%   { opacity:0; transform:translateY(42px) scale(.76) }
+          58%  { opacity:1; transform:translateY(-5px) scale(1.045) }
+          100% { opacity:1; transform:translateY(0) scale(1) }
+        }
+        @keyframes jac-door-idle {
+          0%,100% { transform:translateY(0) scale(1) rotate(-.2deg) }
+          50%     { transform:translateY(-7px) scale(1.008) rotate(.2deg) }
+        }
+        @keyframes gubee-arrive {
+          0%   { opacity:0; transform:translate(24px,34px) scale(.78) }
+          65%  { opacity:1; transform:translate(-2px,-3px) scale(1.035) }
+          100% { opacity:1; transform:translate(0,0) scale(1) }
+        }
+        @keyframes gubee-door-idle {
+          0%,100% { transform:translateY(0) scale(1) }
+          50%     { transform:translateY(-5px) scale(1.012) }
+        }
+        @keyframes dd-arrive {
+          0%   { opacity:0; transform:translate(-22px,30px) scale(.8) }
+          68%  { opacity:1; transform:translate(2px,-3px) scale(1.035) }
+          100% { opacity:1; transform:translate(0,0) scale(1) }
+        }
+        @keyframes dd-door-idle {
+          0%,100% { transform:translateY(0) rotate(-1deg) }
+          50%     { transform:translateY(-8px) rotate(1deg) }
+        }
         @keyframes jac-idle {
           0%,100%{ transform:translateY(0px)  rotate(-.3deg) scale(1) }
           25%    { transform:translateY(-5px) rotate(.3deg)  scale(1.004) }
@@ -445,27 +479,75 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
         }}
       >
 
+        {/* The art is a portrait composition. Keeping one fixed-ratio stage
+            prevents the centered logo and wordmark from being stretched or
+            misaligned when the preview is wider than a phone. */}
+        <div style={{
+          position:"absolute", top:0, bottom:0, left:"50%",
+          width:"min(100vw, 56.25vh)",
+          transform:"translateX(-50%)",
+          overflow:"hidden", background:"#000",
+        }}>
+
         {/* ── HQ SCENE ──────────────────────────────────────────────────── */}
         <div aria-hidden="true" style={{
           position:"absolute", inset:0,
-          transform:(isOpening||isOpen) ? "scale(1)" : "scale(0.94)",
+          transform:(isOpening||isOpen) ? "scale(1.075)" : "scale(1)",
           transition:(isOpening||isOpen)
-            ? `transform 900ms cubic-bezier(.4,0,.2,1) ${Math.round(DOOR_SLIDE_MS*.55)}ms`
+            ? "transform 1800ms cubic-bezier(.16,1,.3,1)"
             : "none",
           willChange:"transform",
         }}>
           {/* Background */}
-        <img src={HQ_BG} alt="" draggable={false} style={{
+          <img src={HQ_BG} alt="" draggable={false} style={{
             position:"absolute", inset:0,
             width:"100%", height:"100%",
             objectFit:"fill", objectPosition:"center top",
             display:"block", userSelect:"none",
           }} />
-          <div style={{
-            position:"absolute", inset:0, pointerEvents:"none",
-            background:"linear-gradient(to bottom,rgba(0,0,10,.7) 0%,rgba(0,0,10,.06) 28%,rgba(0,0,10,.04) 55%,rgba(0,0,10,.82) 100%)",
-          }} />
 
+          {/* The background supplies the depth silhouettes; these sharp,
+              transparent character plates arrive as separate layers so they
+              can move forward without ever duplicating the visible artwork. */}
+          <div aria-hidden="true" style={{
+            position:"absolute", inset:0, pointerEvents:"none",
+            opacity:(isOpening||isOpen) ? 1 : 0,
+            animation:(isOpening||isOpen)
+              ? "jac-arrive 1200ms cubic-bezier(.16,1,.3,1) both, jac-door-idle 4.4s ease-in-out 1200ms infinite"
+              : "none",
+            transformOrigin:"50% 82%",
+            willChange:"transform, opacity",
+          }}>
+            <img src={CHAR_JAC} alt="" draggable={false} style={{
+              width:"100%", height:"100%", objectFit:"fill", display:"block",
+            }} />
+          </div>
+          <div aria-hidden="true" style={{
+            position:"absolute", inset:0, pointerEvents:"none",
+            opacity:(isOpening||isOpen) ? 1 : 0,
+            animation:(isOpening||isOpen)
+              ? "gubee-arrive 1350ms cubic-bezier(.16,1,.3,1) 140ms both, gubee-door-idle 4.8s ease-in-out 1490ms infinite"
+              : "none",
+            transformOrigin:"50% 82%",
+            willChange:"transform, opacity",
+          }}>
+            <img src={CHAR_GUBEE} alt="" draggable={false} style={{
+              width:"100%", height:"100%", objectFit:"fill", display:"block",
+            }} />
+          </div>
+          <div aria-hidden="true" style={{
+            position:"absolute", inset:0, pointerEvents:"none",
+            opacity:(isOpening||isOpen) ? 1 : 0,
+            animation:(isOpening||isOpen)
+              ? "dd-arrive 1250ms cubic-bezier(.16,1,.3,1) 260ms both, dd-door-idle 4.2s ease-in-out 1510ms infinite"
+              : "none",
+            transformOrigin:"50% 82%",
+            willChange:"transform, opacity",
+          }}>
+            <img src={CHAR_DD} alt="" draggable={false} style={{
+              width:"100%", height:"100%", objectFit:"fill", display:"block",
+            }} />
+          </div>
         </div>
         {/* ── end HQ scene ──────────────────────────────────────────────── */}
 
@@ -481,7 +563,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           <img src={DOOR_CLOSED} alt="" draggable={false} style={{
             position:"absolute", left:0, top:0,
             width:"200%", height:"100%",
-            objectFit:"cover", objectPosition:"left center",
+            objectFit:"fill", objectPosition:"left center",
             display:"block", userSelect:"none",
           }} />
         </div>
@@ -499,6 +581,24 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
             display:"block", userSelect:"none",
           }} />
         </div>
+
+        {/* A single intact plate owns the closed state. The split panels stay
+            underneath it until the opening begins, so the wordmark is always
+            pixel-perfect on first paint. */}
+        {isClosed && (
+          <img
+            src={DOOR_CLOSED}
+            alt=""
+            draggable={false}
+            data-testid="guber-door-closed-art"
+            style={{
+              position:"absolute", inset:0, zIndex:3,
+              width:"100%", height:"100%",
+              objectFit:"fill", display:"block",
+              userSelect:"none", pointerEvents:"none",
+            }}
+          />
+        )}
 
 
         {/* ── SEAM (closed only) ────────────────────────────────────────── */}
@@ -556,6 +656,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           }} />
         )}
 
+        </div>
 
         {/* ═══════════════════════════════════════════════════════════════
             OPEN SCENE OVERLAY
@@ -577,9 +678,10 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
             </div>
             {showButtons && (
               <div style={{
-                position:"absolute", left:0, right:0,
+                position:"absolute", left:"50%", width:"min(100vw, 56.25vh)",
+                transform:"translateX(-50%)",
                 bottom:"clamp(72px,15vh,150px)",
-                padding:"0 clamp(18px,8vw,96px)",
+                padding:"0 9%",
                 display:"flex", gap:"clamp(10px,3vw,28px)",
                 zIndex:7,
                 animation:"btn-appear 400ms cubic-bezier(.34,1.1,.64,1) both",
