@@ -868,9 +868,6 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
               </div>
             )}
             {/* ── end in-conversation UI ─────────────────────────────── */}
-
-          </>
-        )}
         {/* ── end open-scene UI ─────────────────────────────────────────── */}
 
 
