@@ -40,13 +40,13 @@ JAC voice.
 
 The web entry door is the deliberate exception: ENTER is already an explicit
 voice activation gesture, so it must request microphone permission and start the
-OpenAI Realtime session immediately. It must not reveal a second Start Voice
+signed ElevenLabs ConvAI session immediately. It must not reveal a second Start Voice
 control. Any startup failure stops the lifecycle and exposes one explicit Retry
 control plus text fallback; provider callbacks must never schedule reconnects or
 switch providers. Connection state must remain truthful throughout.
 
 ### One public voice owner across the auth boundary
-The web door owns the only public OpenAI Realtime connection and unmounts after
+The web door owns the only public signed ConvAI connection and unmounts after
 optional Explore. The canonical post-Explore and dashboard surfaces are text-only
 and resume the shared transcript. A full-page OAuth navigation necessarily ends
 the socket, so continuity across authentication comes from an awaited guest

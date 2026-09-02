@@ -1,30 +1,29 @@
 ---
 name: JAC voice transport split
-description: Canonical OpenAI Realtime ownership and the boundary around legacy ConvAI surfaces.
+description: Canonical signed ElevenLabs ConvAI ownership and the boundary around non-canonical voice surfaces.
 ---
 
 ## Current transport status
 
-The ENTER door and canonical public live experience use OpenAI Realtime as their
-only live voice transport. They never switch to ElevenLabs ConvAI, browser
-speech, cached/local greeting audio, or another provider after failure.
+The ENTER door and canonical public live experience use signed ElevenLabs ConvAI
+as their only live voice transport. They never switch to OpenAI Realtime,
+browser speech, cached/local greeting audio, or another provider after failure.
 
-ENTER synchronously primes microphone/audio and starts the Realtime session.
-The welcome is requested exactly once through that same live session. Approved
-assistant text is the only content sent for speech, and the locked voice remains
-`alloy`.
+ENTER synchronously primes microphone/audio and starts the ConvAI session.
+The configured agent owns audible voice output, and displayed transcripts are
+deduplicated separately.
 
 **Why:** Provider fallback created a failing second lifecycle, duplicate
 greetings, and unpredictable microphone ownership. The previously reliable
-Realtime path is now the intentional single owner.
+signed ConvAI path is now the intentional single owner.
 
 **How to apply:** On startup failure, stop in the calm text-capable error state
 with one explicit Retry control; do not switch providers. Text remains usable.
 The post-Explore canonical surface and authenticated dashboard are text-only,
 and the door controller must unmount after handoff.
 
-Legacy ConvAI components may remain for explicitly specialized surfaces, but
-must never be imported into the public door/canonical live path.
+OpenAI Realtime components may remain for explicitly legacy or protected test
+surfaces, but must never become a fallback for the public door/canonical path.
 
 ## One brain, never forked
 JAC's brain lives in a single function `runGuberAssistBrain(sessionUser, sanitized, voiceMode)` inside the `registerRoutes` closure in `server/routes.ts`. BOTH the text route (`POST /api/ai/guber-assist`) and the ElevenLabs custom-LLM adapter (`POST /api/jac/convai/llm`) call it.
@@ -33,15 +32,13 @@ JAC's brain lives in a single function `runGuberAssistBrain(sessionUser, sanitiz
 
 **How to apply:** Extend JAC by editing `runGuberAssistBrain` only. Do not duplicate the prompt or the deterministic short-circuits (voice-tech Q, admin monitoring, D.D.) anywhere else.
 
-## Security invariants (hold these before flipping the flag)
+## Security invariants
 - Identity (`userId`) is derived ONLY from the verified per-conversation HMAC token (`server/jac-voice-token.ts`, signed with `SESSION_SECRET`), NEVER from model/agent/body fields. The `resolveVoiceToken()` helper only *locates* a candidate string; it is not trusted until `verifyJacVoiceToken()` validates it.
 - The adapter STAGES nothing and EXECUTES nothing — it only returns JAC's spoken reply. Real actions must stay on the existing client-side, session-cookie-authed "user approves" path so the confirm-before-charge invariant holds by construction. Do not add a server-side "execute" tool to the voice path.
-- Before enabling `voice_pipeline_v2` in production (architect-required, not optional):
-  1. Set `JAC_CONVAI_SHARED_SECRET` in prod and enforce the `x-guber-convai-secret` header — the voice token lives in the browser, so a leaked token alone must not be able to burn OpenAI/ElevenLabs cost.
-  2. Add per-user / per-conversation-id rate limiting to the adapter — a 2h replayable token with no limit is an LLM-cost DoS vector once a mint endpoint exists.
-
-## Cost gate
-ElevenLabs Conversational AI is billed per-minute. Web rollout (Phase 2) and native (Phase 3) require explicit user cost sign-off + spend caps first. The old STT/TTS pipeline must stay intact as a fallback — never delete those routes when rolling out.
+- Never weaken signed-session issuance or identity verification to recover from a
+  provider configuration failure. Repair the workspace secret/configuration and
+  retain rate limits rather than adding an unauthenticated or alternate-provider
+  code path.
 
 ## Web client (@elevenlabs/react) gotchas
 - `useConversation()` MUST be rendered inside `<ConversationProvider>` or it throws. The provider's own `useEffect` auto-calls `endSession()` on unmount, so a component-level cleanup effect is redundant — don't add one.

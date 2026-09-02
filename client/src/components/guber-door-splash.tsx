@@ -220,11 +220,17 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     if (phase !== "closed") return;
     unlockAudioContext();
     // ENTER is the one user-activation gesture for the live voice path:
-    // unlock audio now; the Talk button starts ConvAI after the scene opens.
+    // prime the microphone and start ConvAI before the cinematic so mobile
+    // browsers preserve the gesture and the reveal lands in a live session.
     convaiConnected.current = false;
     convaiIssueRef.current = null;
     setVoiceIssue(null);
     setVoiceRetryAvailable(false);
+    convaiRef.current?.activate();
+    setConvMode("voice");
+    setConvaiPhase("connecting");
+    setConvaiActive(true);
+    armVoiceDeadline();
     phaseRef.current = "opening";
     setPhase("opening");
 

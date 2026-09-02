@@ -23,7 +23,7 @@
 - [Growth Engine architecture](growth-engine-arch.md) — growth tasks are NOT in the jobs table; 4 separate tables; awardReferralGrowthCredits() exists but must be explicitly called at referral trigger points; flag zip_fallback_growth_tasks is off by default.
 - [Android CI pipeline setup](android-ci-pipeline.md) — .github/ gitignored; push workflows via Git Trees API + workflow-scoped PAT; untracked assets break Vite build; decode keystore secret pre-Gradle.
 - [iOS CI Xcode version strategy](ios-ci-xcode-strategy.md) — Apple mandated iOS 26 SDK (July 2026); must use Xcode 26 on macos-15; Xcode 16.x fails (ibtool needs separate platform download, simulator daemon won't start on headless CI); Xcode 15.x archive succeeds but upload rejected.
-- [JAC voice transport split](jac-voice-elevenlabs.md) — the door/canonical live path is OpenAI Realtime only; no ConvAI/provider fallback, local greeting audio, or second dashboard voice owner.
+- [JAC voice transport split](jac-voice-elevenlabs.md) — the door/canonical live path is signed ElevenLabs ConvAI only; no provider fallback, local greeting audio, or second dashboard voice owner.
 - [ElevenLabs ConvAI custom-LLM auth trap](elevenlabs-convai-auth-trap.md) — ElevenLabs does NOT forward shared-secret headers or secret__ dynamic vars to custom LLM endpoint; returning 401 terminates the conversation; must warn+continue.
 - [JAC Brain system](jac-brain-system.md) — local KB + intent + cache bypass; confidence ≥0.85 skips OpenAI; admin UI at /admin/jac-brain. (Both-surface rule → jac-system-guardian.md.)
 - [JAC Deep Profile system](jac-deep-profile.md) — syncJacProfile() auto-syncs DB→jac_memory on every context fetch; buildJacProfileContext() reads back for prompt enrichment; briefing+opportunities are separate auth-gated endpoints.
@@ -51,7 +51,7 @@
 - [iPad black screen diagnosis](ipad-black-screen.md) — LoadingSplash (#000 fixed overlay) + no auth fetch timeout = permanent black on Autoscale cold starts; fix: timeout + skip splash on native.
 - [ElevenLabs API key workspace + permissions](elevenlabs-api-key-workspace.md) — JAC voice credentials need the agent-owning workspace and convai_write scope; mismatches return 404 or 401.
 - [JAC in-scene signup card](jac-inline-signup.md) — show_signup action is door-surface-only, slot-reserved before the 4-action cap, once per guest session; guest KB-shortcut bypass must stay.
-- [JAC Door Scene](jac-door-scene.md) — GuberDoorSplash is the sole web live-voice entry; ENTER starts OpenAI Realtime, and Explore hands off to text-only JAC.
+- [JAC Door Scene](jac-door-scene.md) — GuberDoorSplash is the sole web live-voice entry; ENTER starts signed ConvAI, and Explore hands off to text-only JAC.
 - [Release check baseline](release-check-baseline.md) — keep strict checks green by quarantining only documented legacy diagnostics; new TypeScript errors must fail the gate.
 - [JAC browser E2E fixtures](jac-route-e2e-fixtures.md) — seed the returning-visitor door marker when testing downstream canonical JAC behavior; avoid ambiguous intents and CI mic reliance.
 - [JAC mouth live amplitude](jac-mouth-live-amplitude.md) — real-audio mouth needs gesture-unlocked analyser ctx; cross-context local streams read silent in Chromium — test via WebRTC loopback.
