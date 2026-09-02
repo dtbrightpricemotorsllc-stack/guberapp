@@ -7,6 +7,7 @@ import { Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ALLOWED_RETURN_TO_PREFIXES } from "@shared/oauth-config";
 import { setGoogleAuthPhase } from "@/components/google-auth-overlay";
+import { transferGuestJacSession } from "@/hooks/use-guest-jac-session";
 
 function isAllowedReturnTo(value: string): boolean {
   if (!value || !value.startsWith("/")) return false;
@@ -87,7 +88,8 @@ export default function AuthSuccess() {
         console.log("[GUBER auth-success] token saved, fetching /api/auth/me");
         return queryClient.fetchQuery({ queryKey: ["/api/auth/me"] });
       })
-      .then((me) => {
+      .then(async (me) => {
+        await transferGuestJacSession();
         const accountType = (me as { accountType?: string } | null)?.accountType;
         console.log("[GUBER auth-success] /api/auth/me succeeded — accountType:", accountType);
         clearTimeout(spinnerTimer);
@@ -117,7 +119,7 @@ export default function AuthSuccess() {
         className="min-h-screen flex flex-col items-center justify-center bg-background gap-5 px-6"
         data-testid="auth-success-error"
       >
-        <GuberLogo className="mb-2" />
+        <div className="mb-2"><GuberLogo /></div>
         <AlertCircle className="h-10 w-10 text-destructive" />
         <p className="text-sm text-muted-foreground text-center max-w-xs">
           Something went wrong completing sign-in. Please try again.
@@ -151,7 +153,7 @@ export default function AuthSuccess() {
       className="min-h-screen flex flex-col items-center justify-center bg-background"
       data-testid="auth-success-page"
     >
-      <GuberLogo className="mb-8" />
+      <div className="mb-8"><GuberLogo /></div>
       <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
       <p className="text-muted-foreground text-sm">Signing you in...</p>
     </div>

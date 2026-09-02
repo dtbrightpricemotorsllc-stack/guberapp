@@ -446,7 +446,7 @@ function WaveformBars({ active, color }: { active: boolean; color: string }) {
 }
 
 // ── Inner component ──────────────────────────────────────────────────────────
-function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: string; isAuthenticated: boolean }) {
+function JacLiveInner({ sessionEndpoint, isAuthenticated, voiceDisabled = false }: { sessionEndpoint: string; isAuthenticated: boolean; voiceDisabled?: boolean }) {
   // The web/PWA experience is text-first. Voice is an optional attachment and
   // must never be allowed to block the conversation surface.
   const mountedRef = useRef(false);
@@ -712,6 +712,10 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
     // granted access (including an installed PWA revisit), starting voice is
     // safe and restores the hands-free experience. Browsers that cannot prove
     // readiness stay text-first with the Start voice button.
+    if (voiceDisabled) return () => {
+      cancelled = true;
+      mountedRef.current = false;
+    };
     void isJacMicrophoneReady().then(ready => {
       if (
         ready &&
@@ -728,7 +732,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
       if (recoveryTimerRef.current) clearTimeout(recoveryTimerRef.current);
       sessionRef.current?.end();
     };
-  }, [startVoice]);
+  }, [startVoice, voiceDisabled]);
 
   useEffect(() => {
     if (!campaignSessionId || campaignStartedRef.current) return;
@@ -790,6 +794,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
                                  "hsl(0 0% 40%)";
 
   const phaseLabel =
+    voiceDisabled ? "Text chat ready" :
     reconnecting ? "Reconnecting…" :
     error      ? "Voice unavailable — text is ready" :
     ended      ? "Ended" :
@@ -810,7 +815,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
         flexDirection: "column",
       }}
     >
-      {voiceTransport === "openai" ? (
+      {!voiceDisabled && (voiceTransport === "openai" ? (
         <JacOpenAIRealtimeSession
           ref={sessionRef}
           e2eTarget="homepage"
@@ -845,7 +850,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
             onError={onVoiceError}
           />
         </ConversationProvider>
-      )}
+      ))}
       {/* ── Two-surface layout ────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row flex-1 gap-0 lg:gap-6 items-stretch">
 
@@ -884,6 +889,10 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
 
           {/* Voice controls */}
           <div className="flex items-center gap-2 justify-center w-full mb-3">
+            {voiceDisabled ? (
+              <span className="text-xs text-muted-foreground">Text chat is ready</span>
+            ) : (
+              <>
             {connected ? (
               <button
                 onClick={toggleMute}
@@ -925,6 +934,8 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
               >
                 <Mic className="w-3 h-3" /> Start voice
               </button>
+            )}
+              </>
             )}
 
             {/* Transcript toggle */}
@@ -1039,7 +1050,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated }: { sessionEndpoint: s
 }
 
 // ── Public export ─────────────────────────────────────────────────────────────
-export function JacLiveExperience() {
+export function JacLiveExperience({ voiceDisabled = false }: { voiceDisabled?: boolean }) {
   const { user } = useAuth();
 
   // Authentication hydrates after the initial public render. The endpoint is
@@ -1052,6 +1063,7 @@ export function JacLiveExperience() {
       key={sessionEndpoint}
       sessionEndpoint={sessionEndpoint}
       isAuthenticated={!!user}
+      voiceDisabled={voiceDisabled}
     />
   );
 }

@@ -16,6 +16,7 @@ import { nativeGoogleSignIn, browserGoogleSignIn } from "@/lib/native-google-sig
 import { nativeAppleSignIn } from "@/lib/native-apple-sign-in";
 import { getToken } from "@/lib/token-storage";
 import { setGoogleAuthPhase } from "@/components/google-auth-overlay";
+import { transferGuestJacSession } from "@/hooks/use-guest-jac-session";
 import {
   claimAndResolveCampaignPath,
   getActiveCampaignSessionId,
@@ -75,7 +76,9 @@ export default function Login() {
     else if (error === "invalid_state") {
       getToken().then((token) => {
         if (token) {
-          setLocation(returnTo || "/dashboard");
+          void transferGuestJacSession().finally(() => {
+            setLocation(returnTo || "/dashboard");
+          });
         } else {
           toast({ title: "Sign-In Link Expired", description: "That sign-in link already expired. Please tap 'Continue with Google' again.", variant: "destructive" });
         }
@@ -95,6 +98,7 @@ export default function Login() {
         void recordCampaignEvent(campaignSessionId, "auth_started", "auth_started:login");
       }
       const loggedInUser = await login(email, password);
+      await transferGuestJacSession();
       const fallback = returnTo || (loggedInUser?.accountType === "business" ? "/biz/dashboard" : "/dashboard");
       setLocation(await claimAndResolveCampaignPath(fallback));
     } catch (err: any) {
@@ -123,6 +127,7 @@ export default function Login() {
         const result = await nativeGoogleSignIn();
         if (result.ok) {
           setGoogleAuthPhase("completing");
+          await transferGuestJacSession();
           // Navigate immediately — the global overlay survives the route change
           // and is cleared once the destination has had time to mount.
           setLocation(
@@ -144,6 +149,7 @@ export default function Login() {
           });
           if (browserResult.ok) {
             setGoogleAuthPhase("completing");
+            await transferGuestJacSession();
             setLocation(
               await claimAndResolveCampaignPath(returnTo || (browserResult.accountType === "business" ? "/biz/dashboard" : "/dashboard")),
               { replace: true },
@@ -194,6 +200,7 @@ export default function Login() {
     try {
       const result = await nativeAppleSignIn();
       if (result.ok) {
+        await transferGuestJacSession();
         setLocation(await claimAndResolveCampaignPath(returnTo || "/dashboard"), { replace: true });
       } else if (result.reason !== "cancelled") {
         toast({ title: "Sign-In Failed", description: result.message || "Please try again.", variant: "destructive" });

@@ -879,7 +879,7 @@ export default function Home() {
           The door scene is the first-visit guest experience. It is mounted
           instead of (not alongside) the canonical surface so its JAC greeting
           and realtime session can never be duplicated. ── */}
-      {!doorSplashDone && (
+      {!isNativeApp && (
         <GuberDoorSplash
           onEnterVoice={finishDoorSplash}
           onEnterText={finishDoorSplash}
@@ -887,7 +887,11 @@ export default function Home() {
       )}
       {doorSplashDone && (
         <section className="relative z-10 w-full px-4 sm:px-6 pb-8 max-w-5xl mx-auto">
-          <JacLiveExperience />
+          {/* The entry scene remains the sole public voice owner after Explore.
+              This surface deliberately remains text-only, so it cannot open a
+              second microphone/session while the hidden entry controller keeps
+              the established ConvAI conversation alive. */}
+          <JacLiveExperience voiceDisabled={!isNativeApp} />
         </section>
       )}
 

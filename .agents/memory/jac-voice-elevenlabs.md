@@ -23,10 +23,10 @@ path was never engaged, leaving a text-looking conversation with no usable
 two-way audio.
 
 **How to apply:** For the door, prime microphone/audio synchronously from ENTER,
-prewarm the signed session, and let ConvAI connect during the cinematic. Retry
-one recoverable startup failure automatically; after that, show an explicit
-not-connected status. Microphone denial may expose Type Instead but must not
-focus it.
+prewarm the signed session, and let ConvAI connect during the cinematic. On any
+startup failure, stop and show one explicit Retry control; never reconnect
+automatically from an error/disconnect callback. Microphone denial may expose
+Type Instead but must not focus it.
 
 ## One brain, never forked
 JAC's brain lives in a single function `runGuberAssistBrain(sessionUser, sanitized, voiceMode)` inside the `registerRoutes` closure in `server/routes.ts`. BOTH the text route (`POST /api/ai/guber-assist`) and the ElevenLabs custom-LLM adapter (`POST /api/jac/convai/llm`) call it.

@@ -88,6 +88,16 @@ describe("JacLiveExperience realtime voice", () => {
     expect(view.getByLabelText("Message JAC")).toBeTruthy();
   });
 
+  it("stays text-only when the public door owns the voice lifecycle", async () => {
+    const view = render(<JacLiveExperience voiceDisabled />);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(realtimeProps.current).toBeNull();
+    expect(convaiProps.current).toBeNull();
+    expect(view.queryByRole("button", { name: /start voice/i })).toBeNull();
+    expect(view.getByLabelText("Message JAC")).toBeTruthy();
+    expect(view.getByText("Text chat is ready")).toBeTruthy();
+  });
+
   it("routes a voice transcript through onboard once and speaks only approved text", async () => {
     const view = render(<JacLiveExperience />);
     fireEvent.click(view.getByRole("button", { name: /start voice/i }));

@@ -6,9 +6,10 @@ description: Root causes of greeting replay + mic restart bugs, and how they wer
 ## Root causes of "greeting replays on mic tap" (fixed Aug 2026)
 
 ### 1. ElevenLabs firstMessage override — the #1 cause
-`jac-convai-session.tsx` was setting `overrides.agent.firstMessage = "Hey, I'm Jack…"` on EVERY `startSession()` call.
-Every mic tap → new session → ElevenLabs speaks that greeting.
-**Fix**: always set `firstMessage: ""`. Greeting is text-only, shown instantly in React state.
+An explicit first-message override is replayed on every new session. Do not send
+`firstMessage: ""` either: ElevenLabs treats the empty override as a disconnect.
+Let the configured agent greeting own audible welcome and deduplicate only the
+displayed transcript.
 
 ### 2. Auto-start on any gesture triggered voice on text input click
 The `startOnGesture` effect registered click/touchstart/keydown at document level.
@@ -40,8 +41,23 @@ JAC voice.
 The web entry door is the deliberate exception: ENTER is already an explicit
 voice activation gesture, so it must request microphone permission and start the
 signed ConvAI session immediately. It must not reveal a second Start Voice
-control. One recoverable startup failure retries automatically; connection state
-must remain truthful throughout.
+control. Any startup failure stops the lifecycle and exposes one explicit Retry
+control plus text fallback; provider callbacks must never schedule reconnects.
+Connection state must remain truthful throughout.
+
+### One public voice owner across the auth boundary
+The web door owns the only public ConvAI connection and remains mounted after
+optional Explore. The canonical post-Explore and dashboard surfaces are text-only
+and resume the shared transcript. A full-page OAuth navigation necessarily ends
+the socket, so continuity across authentication comes from an awaited guest
+session transfer and persisted transcript—not a second automatic voice owner.
+
+**Why:** Independent door, homepage, and dashboard controllers created duplicate
+greetings, overlapping microphone leases, and Connecting/Reconnecting loops.
+
+**How to apply:** Never mount a second public/dashboard voice transport beside
+the door. After authentication is established, transfer the guest session before
+navigating and keep authenticated refreshes out of the door route.
 
 ### 3. handleConvaiError replayed the greeting via TTS
 Any voice failure called `jacSpeak(GREETING_TTS)` — the greeting text spoken aloud.

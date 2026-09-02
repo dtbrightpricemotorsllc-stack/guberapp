@@ -18,6 +18,7 @@ import {
   getCampaignSession,
   recordCampaignEvent,
 } from "@/lib/campaign-onboarding";
+import { transferGuestJacSession } from "@/hooks/use-guest-jac-session";
 
 const INDUSTRIES = [
   "Insurance / Claims",
@@ -179,6 +180,7 @@ export default function BusinessSignup() {
       // completed, otherwise PublicOnly can redirect before the handoff.
       const responseBody = await response.json().catch(() => null);
       const authenticatedUser = responseBody?.user ?? (responseBody?.id ? responseBody : null);
+      await transferGuestJacSession();
       const destination = await claimAndResolveCampaignPath("/biz/dashboard");
       if (authenticatedUser) {
         queryClient.setQueryData(["/api/auth/me"], authenticatedUser);

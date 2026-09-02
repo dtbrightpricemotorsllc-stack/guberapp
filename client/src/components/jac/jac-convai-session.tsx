@@ -494,11 +494,13 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
         // captures 401 auth failures, 429 rate limits, WebSocket close codes,
         // and any other status the SDK surfaces — rather than silently swapping
         // to the fallback state loop.
-        console.error(
-          "[JAC ConvAI] onError — msg=" + (msg || "(empty)") +
-          " active=" + activeRef.current +
-          " platform=" + platformRef.current
-        );
+        // Do not put provider text in client logs: SDK messages may contain
+        // signed connection details. Keep only safe lifecycle dimensions.
+        console.warn("[JAC voice]", {
+          category: "provider",
+          active: activeRef.current,
+          platform: platformRef.current,
+        });
         clearConnectTimeout();
         setJacConvaiActive(false);
         // Disarm this instance's mic-lost token so a track "ended" event that
@@ -679,9 +681,12 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
             const micErr = micResult.reason as any;
             // Log the full error name + message so adb logcat / browser console
             // shows exactly why getUserMedia failed (NotAllowedError, etc.).
-            console.error(
-              `[JAC MIC TEST 1] getUserMedia FAILED: ${micErr?.name ?? "unknown"} — ${micErr?.message ?? "(no message)"}`
-            );
+            console.warn("[JAC voice]", {
+              category: "microphone",
+              outcome: "unavailable",
+              errorName: typeof micErr?.name === "string" ? micErr.name.slice(0, 48) : "unknown",
+              platform,
+            });
             intentionalReconnectRef.current = false;
             cbRef.current.onError(
               platform === "android_native"
@@ -729,6 +734,11 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
 
           // Store the server-issued token so telemetry beacons can be verified.
           voiceTokenRef.current = session.voiceToken ?? null;
+          console.info("[JAC voice]", {
+            category: "session-issuance",
+            outcome: "issued",
+            platform,
+          });
 
           const dynVars: Record<string, string> = {
             [session.dynamicVariableName]: session.voiceToken,

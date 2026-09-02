@@ -15,6 +15,7 @@ import { isIOS } from "@/lib/platform";
 import { nativeGoogleSignIn, browserGoogleSignIn } from "@/lib/native-google-sign-in";
 import { nativeAppleSignIn } from "@/lib/native-apple-sign-in";
 import { setGoogleAuthPhase } from "@/components/google-auth-overlay";
+import { transferGuestJacSession } from "@/hooks/use-guest-jac-session";
 import {
   claimAndResolveCampaignPath,
   getActiveCampaignSessionId,
@@ -111,6 +112,7 @@ export default function Signup() {
       }
       const authenticatedUser = await signup({ ...form, referralCode: refCode || undefined } as any);
       localStorage.removeItem("guber_ref");
+      await transferGuestJacSession();
       const destination = await claimAndResolveCampaignPath(returnTo || "/dashboard");
       if (authenticatedUser) {
         queryClient.setQueryData(["/api/auth/me"], authenticatedUser);
@@ -135,6 +137,7 @@ export default function Signup() {
       const result = await nativeAppleSignIn();
       if (result.ok) {
         localStorage.removeItem("guber_ref");
+        await transferGuestJacSession();
         setLocation(await claimAndResolveCampaignPath(returnTo || "/dashboard"), { replace: true });
       } else if (result.reason !== "cancelled") {
         toast({ title: "Sign-In Failed", description: result.message || "Please try again.", variant: "destructive" });
@@ -160,6 +163,7 @@ export default function Signup() {
         if (result.ok) {
           setGoogleAuthPhase("completing");
           localStorage.removeItem("guber_ref");
+          await transferGuestJacSession();
           setLocation(await claimAndResolveCampaignPath(returnTo || "/dashboard"), { replace: true });
           setTimeout(() => setGoogleAuthPhase(null), 600);
         } else if (result.reason === "plugin_not_available") {
@@ -176,6 +180,7 @@ export default function Signup() {
           if (browserResult.ok) {
             setGoogleAuthPhase("completing");
             localStorage.removeItem("guber_ref");
+            await transferGuestJacSession();
             setLocation(await claimAndResolveCampaignPath(returnTo || "/dashboard"), { replace: true });
             setTimeout(() => setGoogleAuthPhase(null), 600);
           } else if (browserResult.reason !== "cancelled") {

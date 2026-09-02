@@ -17,14 +17,14 @@ Warm the canonical signed ConvAI session behind the playing door film after the 
 
 **Why:** The door previously used the direct OpenAI realtime relay even when no direct realtime credential existed, so the UI could appear ready while JAC could neither hear nor speak. The cinematic and live JAC must remain one experience.
 
-**How to apply:** Keep the voice controller mounted behind the closed door. Use ENTER for getUserMedia, audio unlock, and signed-session prewarm; require SDK connection confirmation before showing a live state. Let ConvAI own welcome, STT, turn-taking, and voice replies. Keep Type Instead optional.
+**How to apply:** Keep the signed ConvAI controller mounted behind the closed door and after optional Explore. Use ENTER for getUserMedia, audio unlock, and signed-session prewarm; require SDK connection confirmation before showing a live state. Let ConvAI own welcome, STT, turn-taking, and voice replies. The post-Explore and dashboard surfaces stay text-only so they cannot start competing transports.
 
 ## ENTER remains the authoritative voice choice
 Never let a voice startup failure switch the door scene into text mode or focus the composer. Microphone denial/unavailability may expose Type Instead, but the keyboard opens only after the visitor explicitly chooses text. Recoverable session, audio, token, and transport failures remain voice-first and preserve gesture-acquired resources for retry.
 
 **Why:** Samsung Browser showed that generic error fallback could mount and focus the textarea during the cinematic, opening the keyboard and overriding the visitor's ENTER choice.
 
-**How to apply:** Classify microphone failures separately from recoverable transport failures, retain the prepared microphone/audio activation across retries, and keep a clear connecting state through the reveal.
+**How to apply:** Classify microphone failures separately from session/provider/transport failures. Stop after any initialization failure and show exactly one explicit Retry control plus Type Instead; never schedule an automatic reconnect from a provider callback.
 
 ## Realtime volume and transcript parity
 Every JAC audio transport must honor the shared persisted JAC volume, including raw realtime PCM playback. Door transcripts must use a genuinely touch-scrollable inner viewport with readable mobile type and no fade mask over conversation text.
@@ -39,6 +39,8 @@ When JAC starts authentication without an explicit in-progress destination, do n
 **Why:** A generic return path overrode business routing and caused a consumer-dashboard redirect hop before the correct Business dashboard, making sign-in feel broken and preventing access to the shared hub.
 
 **How to apply:** Preserve explicit campaign/workflow resume paths only. Default consumers to the shared dashboard, businesses to the Business dashboard, and label the Business navigation link back to the shared hub clearly.
+
+Guest-to-account continuity is persisted, not a promise that a WebSocket survives a full-page OAuth navigation. Transfer the guest JAC session only after authentication is verifiably established, await that transfer before dashboard navigation, and keep the shared browser-session transcript available to the authenticated text surface.
 
 ## Core files
 - `client/src/components/guber-door-splash.tsx` — web door, greeting, in-scene conversation, and optional Explore handoff

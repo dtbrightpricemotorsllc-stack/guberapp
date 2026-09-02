@@ -21,8 +21,15 @@ import {
 } from "@/components/jac/jac-convai-session";
 import type { JacRealtimeErrorKind } from "@/lib/jac-openai-realtime-transport";
 import { SignupCard } from "@/components/jac/jac-signup-card";
-import { getGuestSessionId } from "@/hooks/use-guest-jac-session";
+import {
+  getGuestSessionId,
+  transferGuestJacSession,
+} from "@/hooks/use-guest-jac-session";
 import { saveServiceOfferPrefill } from "@/lib/jac-listing-prefill";
+import {
+  appendSharedJacMessage,
+  JAC_WELCOME_GREETING,
+} from "@/lib/jac-live-coordination";
 import {
   claimAndResolveCampaignPath,
   getActiveCampaignSessionId,
@@ -37,7 +44,7 @@ import {
 const DOOR_CINEMATIC = "/splash/guber-door-cinematic-1080.mp4";
 const DOOR_POSTER    = "/splash/guber-door-cinematic-poster.webp";
 
-const GREETING_TEXT = "Welcome to Team Guber. What brings you here?";
+const GREETING_TEXT = JAC_WELCOME_GREETING;
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type DoorPhase = "closed" | "unlocking" | "opening" | "open" | "exiting";
@@ -117,8 +124,6 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const signupOffered  = useRef(false); // in-scene signup card fires at most once per conversation
   const greetingHasFired = useRef(false);
   const realtimeConnected = useRef(false);
-  const retryAtReveal = useRef(false);
-  const automaticRetryCount = useRef(0);
 
   const schedule = useCallback((fn: () => void, ms: number) => {
     const t = setTimeout(fn, ms);
@@ -150,13 +155,14 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     phaseRef.current = "open";
     setPhase("open");
     setShowGreeting(true);
-    setMessages(current => current.length ? current : [{ role: "jac", text: GREETING_TEXT }]);
-    if (!realtimeConnected.current && retryAtReveal.current) {
-      retryAtReveal.current = false;
-      setRealtimePhase("connecting");
-      realtimeRef.current?.reconnect();
-    }
-
+    setMessages(current => {
+      if (current.length) return current;
+      if (!greetingHasFired.current) {
+        greetingHasFired.current = true;
+        appendSharedJacMessage({ role: "assistant", content: GREETING_TEXT, source: "homepage" });
+      }
+      return [{ role: "jac", text: GREETING_TEXT }];
+    });
     schedule(() => setShowButtons(true), 420);
   }, [schedule]);
 
@@ -167,8 +173,6 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     // acquire the mic and prime realtime audio before the film begins, rather
     // than waiting for a post-render effect.
     realtimeConnected.current = false;
-    retryAtReveal.current = false;
-    automaticRetryCount.current = 0;
     setRealtimeIssue(null);
     realtimeRef.current?.activate();
     phaseRef.current = "opening";
@@ -193,13 +197,11 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   // ── Voice mode entry ──────────────────────────────────────────────────────
   function enterVoice() {
     if (phase !== "open") return;
-    unlockAudioContext();
     cancelAllJacAudio();
     setGreetingPlaying(false);
-    realtimeConnected.current = false;
-    setConvMode("voice");
-    realtimeRef.current?.activate();
-    setRealtimeActive(true);
+    // ENTER is intentionally the only mic/session activation gesture.  This
+    // button only returns to the already-established voice surface.
+    if (realtimeActive) setConvMode("voice");
   }
 
   // ── Text mode entry ───────────────────────────────────────────────────────
@@ -217,6 +219,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     if (!text || textLoading) return;
     setInputText("");
     const userMsg: Msg = { role: "user", text };
+    appendSharedJacMessage({ role: "user", content: text, source: "homepage" });
     setMessages(prev => [...prev, userMsg]);
     setTextLoading(true);
 
@@ -279,14 +282,12 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
         setShowSignup(true);
       }
       if (reply) {
+        appendSharedJacMessage({ role: "assistant", content: reply, source: "homepage" });
         setMessages(prev => [...prev, { role: "jac", text: reply }]);
         setJacSpeakingTx(true);
-        if (convMode === "voice") {
-          realtimeRef.current?.speakApprovedText(reply);
-          setJacSpeakingTx(false);
-        } else {
-          jacSpeak(reply).catch(() => {}).finally(() => setJacSpeakingTx(false));
-        }
+        // sendText is the text-mode path. ElevenLabs owns every voice-mode
+        // response, so a second local speech call would duplicate JAC.
+        jacSpeak(reply).catch(() => {}).finally(() => setJacSpeakingTx(false));
       }
     } catch {
       setMessages(prev => [...prev, {
@@ -303,45 +304,42 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     setRealtimePhase(p);
     if (p === "listening" || p === "speaking" || p === "thinking" || p === "muted") {
       realtimeConnected.current = true;
-      retryAtReveal.current = false;
       setRealtimeIssue(null);
     }
   }, []);
 
   const handleRealtimeError = useCallback((message: string, kind: JacRealtimeErrorKind = "transport") => {
     const microphoneFailure = kind === "microphone-denied" || kind === "microphone-unavailable";
-    console.warn("[JAC realtime startup]", {
+    console.warn("[JAC voice]", {
+      category: microphoneFailure ? "microphone" : kind === "session" ? "session-issuance" : "transport",
       kind,
-      message,
       doorPhase: phaseRef.current,
       connectedBeforeFailure: realtimeConnected.current,
-      userAgent: navigator.userAgent,
     });
     setRealtimeIssue({ kind, message });
-    if (microphoneFailure) {
-      retryAtReveal.current = false;
-      setRealtimeActive(false);
-      setRealtimePhase("error");
-      return;
-    }
-    // ENTER remains authoritative. Recoverable session/audio/transport failures
-    // retry once automatically and never require another user gesture.
-    if (automaticRetryCount.current < 1) {
-      automaticRetryCount.current += 1;
-      retryAtReveal.current = phaseRef.current !== "open";
-      setRealtimePhase("connecting");
-      if (phaseRef.current === "open") {
-        schedule(() => realtimeRef.current?.reconnect(), 500);
-      }
-      return;
-    }
-    retryAtReveal.current = false;
+    // Initialization failures stop here. A single explicit Retry control owns
+    // any later attempt, so provider callbacks cannot create a reconnect loop.
+    setRealtimeActive(false);
     setRealtimePhase("error");
-  }, [schedule]);
+  }, []);
+
+  const retryVoice = useCallback(() => {
+    // A terminal failure is recoverable only through this explicit gesture.
+    // reconnect() serializes endSession before booting a replacement.
+    realtimeConnected.current = false;
+    setRealtimeIssue(null);
+    setRealtimePhase("connecting");
+    // Retry is itself a user gesture, so it can safely reacquire a microphone
+    // after the user changes browser permission. React's active transition is
+    // the only boot owner; do not call reconnect in this turn as well.
+    realtimeRef.current?.activate();
+    setRealtimeActive(true);
+  }, []);
 
   const handleRealtimeUser = useCallback((text: string) => {
     const t = text.trim();
     if (!t || /^[.\s!?,]*$/.test(t)) return;
+    appendSharedJacMessage({ role: "user", content: t, source: "homepage" });
     setMessages(prev => [...prev, { role: "user", text: t }]);
   }, []);
 
@@ -352,6 +350,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     setGreetingPlaying(false);
     setMessages(prev => {
       if (prev.at(-1)?.role === "jac" && prev.at(-1)?.text === t) return prev;
+      appendSharedJacMessage({ role: "assistant", content: t, source: "homepage" });
       return [...prev, { role: "jac", text: t }];
     });
   }, []);
@@ -360,10 +359,10 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   function exitToApp(voice: boolean) {
     phaseRef.current = "exiting";
     setPhase("exiting");
-    setRealtimeActive(false);
     cancelAllJacAudio();
     schedule(() => {
-      setMounted(false);
+      // Keep this controller mounted.  The full-app surface is text-only and
+      // must not replace an established public ConvAI socket.
       if (voice) onEnterVoice(); else onEnterText();
     }, 440);
   }
@@ -381,13 +380,12 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const statusLabel   =
     realtimeIssue?.kind === "microphone-denied" ? "Microphone permission needed — Type Instead is available" :
     realtimeIssue?.kind === "microphone-unavailable" ? "Microphone unavailable — Type Instead is available" :
-    realtimeIssue && realtimePhase === "connecting" ? "Reconnecting JAC…" :
     realtimeIssue && realtimePhase === "error" ? `Voice not connected — ${realtimeIssue.message}` :
     realtimePhase === "connecting" ? "Connecting…" :
     realtimePhase === "thinking"   ? "JAC is thinking…" :
     realtimePhase === "speaking"   ? "JAC is speaking" :
     realtimePhase === "listening"  ? "Listening…" :
-    realtimePhase === "muted"      ? "Muted — tap 🎙️ to unmute" : "JAC is here";
+    realtimePhase === "muted"      ? "Muted — tap 🎙️ to unmute" : "Waiting for voice connection";
 
   return (
     <>
@@ -595,6 +593,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           position:"fixed", inset:0, zIndex:9999,
           background:"#000", overflow:"hidden",
           opacity: exiting ? 0 : 1,
+          pointerEvents: exiting ? "none" : "auto",
           transition: exiting ? "opacity 440ms ease-in" : "none",
         }}
       >
@@ -827,6 +826,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                       onDismiss={() => setShowSignup(false)}
                       onAuthed={async (accountType) => {
                         // Door scene exits → standard new-user onboarding/dashboard
+                        await transferGuestJacSession();
                         const fallback = signupReturnTo || (accountType === "business" ? "/biz/dashboard" : "/dashboard");
                         const destination = await claimAndResolveCampaignPath(fallback);
                         setPhase("exiting");
@@ -870,7 +870,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                     </div>
 
                     {/* MUTE / UNMUTE toggle (replaces push-to-talk) */}
-                    <button
+                    {isVoiceLive && <button
                       onClick={() => realtimeRef.current?.toggleMute()}
                       aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
                       className="gdoor-mute-btn"
@@ -891,7 +891,20 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                       }}
                     >
                       {isMuted ? "🔇" : "🎙️"}
-                    </button>
+                    </button>}
+
+                    {realtimePhase === "error" && (
+                      <button
+                        onClick={retryVoice}
+                        aria-label="Retry JAC voice"
+                        style={{
+                          fontSize:12, color:"rgba(0,220,140,.9)",
+                          background:"none", border:"1px solid rgba(0,220,140,.35)",
+                          borderRadius:12, padding:"7px 10px", cursor:"pointer",
+                          fontFamily:"'Inter',sans-serif", flexShrink:0,
+                        }}
+                      >Retry voice</button>
+                    )}
 
                     {/* Type Instead remains available while auto-started voice is live. */}
                     <button
@@ -969,25 +982,6 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                         transition:"background 200ms ease, transform 120ms ease",
                       }}
                     >↑</button>
-
-                    {/* Switch to voice */}
-                    <button
-                      onClick={() => {
-                        cancelAllJacAudio();
-                        setConvMode("voice");
-                        realtimeRef.current?.activate();
-                        setRealtimeActive(true);
-                      }}
-                      aria-label="Switch to voice"
-                      style={{
-                        width:44, height:44, borderRadius:"50%", flexShrink:0,
-                        background:"rgba(100,60,255,.25)",
-                        border:"1px solid rgba(130,80,255,.4)",
-                        cursor:"pointer",
-                        display:"flex", alignItems:"center", justifyContent:"center",
-                        fontSize:20,
-                      }}
-                    >🎙️</button>
 
                     {/* Explore → */}
                     <button onClick={() => exitToApp(false)} aria-label="Go to full app"

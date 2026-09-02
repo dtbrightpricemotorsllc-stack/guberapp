@@ -129,23 +129,89 @@ test.describe("Team GUBER cinematic entry door", () => {
     await expect(page.getByTestId("jac-live-surface")).toHaveCount(1);
   });
 
-  test("a recoverable startup failure stays voice-first and never opens the keyboard", async ({ page }) => {
+  test("a startup failure stops cleanly with one calm retry and no reconnect loop", async ({ page }) => {
     await installUnauthenticatedSession(page);
     await page.goto("/?jac_e2e=1");
     await expectDoorGatedHome(page);
 
     await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
     await emitVoice(page, "error", "transport");
-
-    await expect(page.getByText("Reconnecting JAC…")).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Message JAC" })).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).not.toBe("TEXTAREA");
 
     await completeCinematic(page);
-    await expect(page.getByText("Reconnecting JAC…")).toBeVisible();
+    await expect(page.getByText(/Voice not connected/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Retry JAC voice" })).toHaveCount(1);
+    await page.waitForTimeout(2_000);
+    await expect(page.getByText(/Reconnecting JAC/)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Retry JAC voice" })).toHaveCount(1);
+
+    await page.getByRole("button", { name: "Retry JAC voice" }).click();
+    await expect(page.getByText("Connecting…")).toBeVisible();
     await emitVoice(page, "listening");
     await expect(page.getByText("Listening…")).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Message JAC" })).toHaveCount(0);
+  });
+
+  test("an authenticated refresh skips the entrance doors", async ({ page }) => {
+    await page.route("**/api/auth/me", route => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 44,
+        email: "worker@example.test",
+        username: "worker",
+        fullName: "Test Worker",
+        firstName: "Test",
+        role: "user",
+        accountType: "individual",
+      }),
+    }));
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByTestId("guber-door-scene")).toHaveCount(0);
+  });
+
+  test("browser sign-in return transfers the guest JAC session once before dashboard navigation", async ({ page }) => {
+    let transfers = 0;
+    await page.addInitScript(() => {
+      localStorage.setItem("jac_guest_session_id", "door-oauth-guest");
+      sessionStorage.setItem("jac_shared_conversation_v1", JSON.stringify([
+        { id: "before-auth", role: "user", content: "I need delivery work", source: "homepage" },
+      ]));
+    });
+    await page.route("**/api/auth/me", route => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 45,
+        email: "oauth@example.test",
+        username: "oauth_worker",
+        fullName: "OAuth Worker",
+        firstName: "OAuth",
+        role: "user",
+        accountType: "individual",
+      }),
+    }));
+    await page.route("**/api/jac/guest-transfer", async route => {
+      transfers += 1;
+      expect(route.request().postDataJSON()).toEqual({
+        guest_session_id: "door-oauth-guest",
+      });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ success: true, transferred: 1 }),
+      });
+    });
+
+    await page.goto("/auth-success?token=oauth-test-token");
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect.poll(() => transfers).toBe(1);
+    await expect(page.getByTestId("guber-door-scene")).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => (
+      JSON.parse(sessionStorage.getItem("jac_shared_conversation_v1") || "[]")[0]?.content
+    ))).toBe("I need delivery work");
   });
 
   test("microphone denial offers text fallback without focusing it", async ({ page }) => {

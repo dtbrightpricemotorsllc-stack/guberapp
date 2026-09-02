@@ -12,10 +12,7 @@ import {
 } from "lucide-react";
 import { useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
-import {
-  JacOpenAIRealtimeSession,
-  type JacOpenAIRealtimeSessionHandle,
-} from "@/components/jac/jac-openai-realtime-session";
+import type { JacOpenAIRealtimeSessionHandle } from "@/components/jac/jac-openai-realtime-session";
 import type { JacRealtimePhase } from "@/lib/jac-openai-realtime-transport";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
@@ -94,6 +91,9 @@ const SESSION_KEY = "jac_v1_messages";
 const SEEN_KEY = "jac_v1_seen";
 const FAB_HINT_KEY = "jac_fab_hint_shown";
 const MIC_HINT_KEY_DD = "jac_dd_mic_hint_done";
+// The dashboard must not create a second microphone/provider session after the
+// public entry lifecycle. Keep its established text conversation fully usable.
+const DASHBOARD_INDEPENDENT_VOICE_ENABLED = false;
 
 const LISTING_PATTERNS = [
   /\bstart a listing\b/i,
@@ -481,27 +481,6 @@ export function GUBERAssistant() {
     }
     window.addEventListener("jac:wake", onWake);
     return () => window.removeEventListener("jac:wake", onWake);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Choose one welcome owner on main-app entry. Only native apps may resume a
-  // previously granted session; web/PWA voice always requires the mic tap.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      if (
-        Capacitor.isNativePlatform()
-        && await isJacMicrophoneReady()
-        && !cancelled
-        && automaticStartClaimRef.current?.()
-      ) {
-        startConvai();
-        return;
-      }
-      if (!cancelled && messages.length === 1 && claimJacWelcomeGreeting()) {
-        void jacSpeak(JAC_WELCOME_GREETING, { muted });
-      }
-    })();
-    return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -923,18 +902,9 @@ export function GUBERAssistant() {
 
   return (
     <>
-    {/* Keep the live controller mounted independently of the visual sheet so a
-        previously-granted microphone can auto-start from the main app entry. */}
-    <JacOpenAIRealtimeSession
-      ref={convaiSessionRef}
-      active={convaiActive}
-      sessionEndpoint="/api/jac/realtime-token/session"
-      e2eTarget="assistant"
-      onPhaseChange={handleConvaiPhaseChange}
-      onUserTranscript={handleConvaiUserTranscript}
-      onJacResponse={handleConvaiJacResponse}
-      onError={handleConvaiError}
-    />
+    {/* Dashboard JAC is deliberately text-only. The public entry owns the
+        single ConvAI microphone lifecycle; mounting this legacy realtime
+        controller here would compete for audio/provider ownership. */}
     <Sheet
       open={s.open}
       onOpenChange={(v) => {
@@ -1406,7 +1376,7 @@ export function GUBERAssistant() {
             </div>
           )}
           {/* Voice status strip — inline in JAC, visible only when ConvAI session is active */}
-          {convaiActive && (
+          {DASHBOARD_INDEPENDENT_VOICE_ENABLED && convaiActive && (
             <div className="flex items-center gap-2 mb-2 px-1">
               <span className="relative flex h-2 w-2 flex-shrink-0">
                 {convaiPulsing && (
@@ -1486,7 +1456,7 @@ export function GUBERAssistant() {
             </button>
 
             {/* Mic button — realtime voice session */}
-            <div className="relative flex flex-col items-center">
+            {DASHBOARD_INDEPENDENT_VOICE_ENABLED && <div className="relative flex flex-col items-center">
               {/* "Tap to talk" guidance label — shows until first mic use */}
               {!convaiActive && !micHintDone && (
                 <span
@@ -1541,7 +1511,7 @@ export function GUBERAssistant() {
                   <Mic className="w-3.5 h-3.5 relative" />
                 )}
               </button>
-            </div>
+            </div>}
 
             {/* Send button */}
             <Button
