@@ -1,0 +1,49 @@
+import { useEffect, useState } from "react";
+import { Link, useParams } from "wouter";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Check, RefreshCw, Send, Sparkles, Store } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { DISCLOSURE, ErrorState, Estimate, Field, Layout, panel, range, SectionTitle, shell, Shop, Status, estimateTitle } from "./shared";
+
+export function EstimateDetail() {
+  const { id } = useParams<{ id: string }>();
+  const { data: e, isLoading, isError, refetch } = useQuery<Estimate>({ queryKey: [`/api/repairmatch/estimates/${id}`], enabled: Boolean(id) });
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [zip, setZip] = useState("");
+  const [selected, setSelected] = useState<number | null>(null);
+  const [mode, setMode] = useState<"single" | "nearby">("single");
+  const [shareApproved, setShareApproved] = useState(false);
+  const { data: shops = [] } = useQuery<Shop[]>({
+    queryKey: [`/api/repairmatch/shops?zip=${zip}`],
+    enabled: Boolean(zip),
+  });
+  const action = useMutation({
+    mutationFn: (p: any) => apiRequest("POST", `/api/repairmatch/estimates/${id}/${p.type}`, p.body, p.headers),
+    onSuccess: () => { toast({ title: "RepairMatch updated" }); qc.invalidateQueries({ queryKey: [`/api/repairmatch/estimates/${id}`] }); },
+    onError: (x: Error) => toast({ title: "Could not complete that action", description: x.message, variant: "destructive" }),
+  });
+  useEffect(() => { if (e?.vehicle?.zip && !zip) setZip(e.vehicle.zip); }, [e?.vehicle?.zip, zip]);
+  if (isLoading) return <Layout><main className={`${shell} p-6`}><div className="mx-auto max-w-4xl h-56 animate-pulse rounded-2xl bg-muted" /></main></Layout>;
+  if (isError || !e) return <Layout><main className={`${shell} p-6`}><div className="mx-auto max-w-4xl"><ErrorState message="This repair record is unavailable or expired." retry={() => refetch()} /></div></main></Layout>;
+  const totals = e.ai_result?.totals || {};
+  const responses = (e.responses || []).filter((r: any) => r.status === "sent" || r.status === "responded" || r.status === "accepted");
+  const retry = () => { const key = crypto.randomUUID(); action.mutate({ type: "generate", body: { idempotencyKey: key }, headers: { "Idempotency-Key": key } }); };
+  return <Layout><main className={`${shell} px-4 py-7 sm:px-8`}><div className="mx-auto max-w-5xl">
+    <Link href="/repairmatch" className="mb-6 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-muted-foreground"><ArrowLeft className="h-4 w-4" /> Repair timeline</Link>
+    <div className="flex flex-wrap items-end justify-between gap-3"><SectionTitle eyebrow="REPAIRMATCH RECORD" title={estimateTitle(e)} detail={`${e.incident?.date || "Incident"} · ${e.photo_urls?.length || 0} photos`} /><Status value={e.status} /></div>
+    <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="space-y-5">
+        <Card className={`${panel} p-5`}><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary"><Sparkles className="h-5 w-5" /></div><div><h2 className="font-display font-bold">Preliminary visual assessment</h2><p className="text-xs text-muted-foreground">Original AI findings · not a shop quote</p></div></div>
+          {e.ai_result ? <><p className="mt-5 text-sm leading-relaxed">{e.ai_result.summary || "Visible damage has been organized for shop review."}</p><div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">{[["Severity", e.ai_result.severity || "unknown"], ["Confidence", e.ai_result.confidence ? `${Math.round(e.ai_result.confidence * 100)}%` : "Unknown"], ["Inspection", e.ai_result.inspectionRequired?.length ? "Required" : "Review"], ["Body labor", range(totals.bodyHoursLow, totals.bodyHoursHigh, " hrs")], ["Refinish labor", range(totals.refinishHoursLow, totals.refinishHoursHigh, " hrs")], ["Mechanical labor", range(totals.mechanicalHoursLow, totals.mechanicalHoursHigh, " hrs")], ["Total labor", range((totals.bodyHoursLow || 0) + (totals.refinishHoursLow || 0) + (totals.mechanicalHoursLow || 0), (totals.bodyHoursHigh || 0) + (totals.refinishHoursHigh || 0) + (totals.mechanicalHoursHigh || 0), " hrs")], ["Parts allowance", range(totals.partsAllowanceLow, totals.partsAllowanceHigh)]].map(([a,b]) => <div key={a} className="rounded-lg bg-muted/50 p-3"><p className="text-[10px] font-mono uppercase text-muted-foreground">{a}</p><p className="mt-1 font-bold capitalize">{b}</p></div>)}</div><div className="mt-5 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b text-xs text-muted-foreground"><th className="pb-2">Visible component</th><th className="pb-2">Recommendation</th><th className="pb-2">Review</th></tr></thead><tbody>{(e.lines || []).map((l: any) => <tr key={l.id} className="border-b last:border-0"><td className="py-3 font-semibold">{l.component}</td><td className="py-3 capitalize">{l.recommendation}</td><td className="py-3">{l.inspection_required ? <Badge variant="outline" className="text-[10px]">Inspection needed</Badge> : "Visible"}</td></tr>)}</tbody></table></div></> : <div className="mt-5"><p className="text-sm text-muted-foreground">Analysis is not available yet. Your photos are preserved for another attempt.</p>{(e.generation_status === "failed" || e.generation_status !== "complete") && <Button className="mt-4 min-h-11 rounded-xl" onClick={retry} disabled={action.isPending}><RefreshCw className="mr-2 h-4 w-4" />{action.isPending ? "Retrying analysis…" : "Retry analysis"}</Button>}</div>}
+        </Card><p className="text-xs leading-relaxed text-muted-foreground"><b>Permanent disclosure:</b> {e.disclosure || DISCLOSURE}</p>
+      </div>
+      <Card className={`${panel} p-5`}><h2 className="font-display font-bold">Shop responses</h2><p className="mt-1 text-xs text-muted-foreground">Compare timing, service, warranty, and fit. RepairMatch does not rank by lowest price.</p>{e.status === "draft" && <div className="mt-5 grid gap-3"><Field label="ZIP for nearby shops"><Input value={zip} onChange={x => setZip(x.target.value)} placeholder="Enter ZIP" /></Field>{mode === "single" && (shops.length ? shops.map(shop => <button type="button" key={shop.id} onClick={() => setSelected(shop.id)} className={`flex min-h-16 items-center gap-3 rounded-xl border p-3 text-left ${selected === shop.id ? "border-primary bg-primary/5" : "border-border"}`}><Store className="h-5 w-5 text-primary" /><span className="flex-1"><b>{shop.company_name}</b><small className="block text-muted-foreground">{shop.service_radius_miles || 25} mile service area</small></span>{selected === shop.id && <Check className="h-4 w-4 text-primary" />}</button>) : zip ? <p className="rounded-lg bg-muted p-3 text-xs">No participating shop is enrolled for that ZIP yet. You can use nearby matching or try another ZIP.</p> : null)}<Field label="Distribution"><select className="h-11 rounded-md border bg-background px-3" value={mode} onChange={x => setMode(x.target.value as "single" | "nearby")}><option value="single">Send to one selected shop</option><option value="nearby">Let nearby repair shops come to you</option></select></Field>{mode === "nearby" && <p className="rounded-lg bg-primary/5 p-3 text-xs text-muted-foreground">A capped set of eligible participating shops can review the same record and come to you. This is not a price auction.</p>}<label className="flex min-h-11 items-start gap-3 text-sm"><Checkbox checked={shareApproved} onCheckedChange={value => setShareApproved(Boolean(value))} /><span>I approve sharing the vehicle details, incident information, photos, approximate location, and preliminary assessment shown here. My direct contact stays private until I accept a shop.</span></label><Button className="min-h-11 rounded-xl" disabled={action.isPending || !e.ai_result || !shareApproved || (mode === "single" && !selected)} onClick={() => action.mutate({ type: "distribute", body: { mode, shopProfileId: selected, zip, approveSharing: shareApproved } })}><Send className="mr-2 h-4 w-4" /> Share for review</Button></div>}{responses.length ? <div className="mt-5 grid gap-3">{responses.map((r: any) => { const opp = (e.opportunities || []).find((x: any) => x.id === r.opportunity_id); const accepted = opp?.status === "accepted" || r.status === "accepted"; return <div key={r.id} className="rounded-xl border p-3"><div className="flex items-center gap-2"><Store className="h-4 w-4 text-primary" /><b className="flex-1">{opp?.company_name || "Participating shop"}</b><Status value={accepted ? "accepted" : "responded"} /></div><p className="mt-2 text-sm">{r.customer_note || "The shop has reviewed your record."}</p><p className="mt-2 text-xs text-muted-foreground">{r.expected_repair_timing || "Timing to be discussed"} · {r.warranty || "Warranty details available from shop"}</p>{!accepted && r.status === "sent" && <Button className="mt-3 min-h-11 w-full rounded-xl" onClick={() => action.mutate({ type: "accept-shop", body: { opportunityId: r.opportunity_id } })}>Accept this shop</Button>}{accepted && <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-primary"><Check className="h-4 w-4" /> Shop accepted; contact handoff is complete.</p>}</div>})}</div> : e.status !== "draft" && <p className="mt-5 rounded-lg bg-muted p-3 text-sm text-muted-foreground">Waiting for participating shops to respond.</p>}</Card>
+    </div></div></main></Layout>;
+}
