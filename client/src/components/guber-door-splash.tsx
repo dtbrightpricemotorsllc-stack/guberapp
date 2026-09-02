@@ -1081,7 +1081,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
           <JacConvaiSession
             ref={convaiRef}
             active={convaiActive}
-            sessionEndpoint="/api/jac/convai/public-session"
+            sessionEndpoint="/api/jac/convai/investor-session"
             e2eTarget="homepage"
             onPhaseChange={handleConvaiPhase}
             onUserTranscript={handleConvaiUser}

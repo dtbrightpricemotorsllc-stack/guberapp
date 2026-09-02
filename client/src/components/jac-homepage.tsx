@@ -3,11 +3,12 @@ import { Link, useLocation } from "wouter";
 import { Send, Mic, Volume2, ArrowRight, MessageSquare, Minus, Loader2, FileText, Sparkles } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
+import { ConversationProvider } from "@elevenlabs/react";
 import {
-  JacOpenAIRealtimeSession,
-  type JacOpenAIRealtimeSessionHandle,
-} from "@/components/jac/jac-openai-realtime-session";
-import type { JacRealtimePhase } from "@/lib/jac-openai-realtime-transport";
+  JacConvaiSession,
+  type ConvaiPhase,
+  type JacConvaiSessionHandle,
+} from "@/components/jac/jac-convai-session";
 import { useJacDraftCardPoll } from "@/hooks/use-jac-draft-card-poll";
 import { useGuestJacSession } from "@/hooks/use-guest-jac-session";
 import {
@@ -16,7 +17,7 @@ import {
   readSharedJacConversation,
 } from "@/lib/jac-live-coordination";
 import { saveServiceOfferPrefill } from "@/lib/jac-listing-prefill";
-type ConversationState = JacRealtimePhase;
+type ConversationState = ConvaiPhase;
 
 const LIVE_PHASE_LABEL: Record<ConversationState, string> = {
   idle: "ready",
@@ -132,13 +133,8 @@ const GREETING: JacMsg = {
   buttons: OPENING_OPTIONS,
 };
 
-// Kept for reference — the greeting is shown as text only, never spoken by TTS.
-// Realtime voice never replays the greeting.
+// The greeting is shown as text only; ConvAI supplies the audible greeting.
 const _GREETING_TTS_UNUSED = "";
-
-function toSpeechText(text: string): string {
-  return text.replace(/GUBER/g, "Goober").replace(/Guber/g, "Goober").replace(/guber/g, "goober");
-}
 
 function getVisitorId(): string {
   try {
@@ -356,12 +352,12 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
   const { listening, transcribing, start: startListening, stop: stopListening, supported: micSupported } =
     useSpeechInput((text) => processInput(text));
 
-  // ── OpenAI Realtime voice — runs behind the explicit mic button ──────────
+  // ── ElevenLabs ConvAI voice — runs behind the explicit mic button ────────
   const [liveMode, setLiveMode] = useState(false);
   const [liveState, setLiveState] = useState<ConversationState>("idle");
   const [jacVolume, setJacVolumeState] = useState(() => getJacVolume());
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
-  const realtimeSessionRef = useRef<JacOpenAIRealtimeSessionHandle | null>(null);
+  const convaiSessionRef = useRef<JacConvaiSessionHandle | null>(null);
   // Skip the CRT animation for returning visitors — they've seen it.
   // First-timers get the full 3.2s effect; everybody else goes straight to "done".
   const _crtAlreadySeen = typeof window !== "undefined" && localStorage.getItem("jac_crt_seen") === "1";
@@ -374,12 +370,12 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
   // Tracks whether JAC is currently speaking — used to suppress echo turns
   const isSpeakingRef = useRef(false);
 
-  const handleRealtimePhaseChange = useCallback((phase: JacRealtimePhase) => {
+  const handleConvaiPhaseChange = useCallback((phase: ConvaiPhase) => {
     isSpeakingRef.current = phase === "speaking";
     setLiveState(phase);
   }, []);
 
-  const handleRealtimeUserTranscript = useCallback((text: string) => {
+  const handleConvaiUserTranscript = useCallback((text: string) => {
     // ── Transcript guards ────────────────────────────────────────────────────
     // 1. Skip while JAC is speaking — prevents her own audio from becoming a user turn.
     if (isSpeakingRef.current) return;
@@ -390,14 +386,18 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
     if (/^[.…\s]+$/.test(trimmed)) return;
     // 4. Skip punctuation-only strings (no letters or digits — not a real utterance).
     if (!/[a-zA-Z0-9]/.test(trimmed)) return;
-    // The homepage brain owns the turn, message history, drafts, and actions.
-    // Do not add a second transcript bubble here.
-    void processInput(trimmed);
-  }, [processInput]);
+    setMessages(prev => [...prev, { role: "user" as const, content: trimmed }]);
+  }, []);
 
-  const handleRealtimeJacResponse = useCallback((_text: string) => {
-    // The realtime transport reports the audio transcript for the response
-    // already approved and rendered by processInput. Never append it again.
+  const handleConvaiJacResponse = useCallback((text: string) => {
+    const sanitized = text.replace(/\[[^\]]*\]/g, "").trim();
+    if (!sanitized) return;
+    setMessages(prev => {
+      if (prev.length === 1 && prev[0].role === "assistant") {
+        return [{ role: "assistant" as const, content: sanitized }];
+      }
+      return [...prev, { role: "assistant" as const, content: sanitized }];
+    });
   }, []);
 
   // ── Guest session — persisted UUID for anonymous JAC drafts ─────────────
@@ -414,7 +414,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
     }]);
   }, []));
 
-  const handleRealtimeError = useCallback((msg: string) => {
+  const handleConvaiError = useCallback((msg: string) => {
     setLiveMode(false);
     setLiveState("idle");
     liveModeRef.current = false;
@@ -444,9 +444,9 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
       // If the session is already connected, toggle mute rather than ending the
       // session.  This lets users pause/resume mic mid-conversation without a
       // cold reconnect. Avoiding reconnect latency is better UX.
-      if (realtimeSessionRef.current?.connected) {
-        realtimeSessionRef.current.toggleMute();
-        // liveState updates via handleRealtimePhaseChange when mute changes.
+      if (convaiSessionRef.current?.connected) {
+        convaiSessionRef.current.toggleMute();
+        // liveState updates via handleConvaiPhaseChange when mute changes.
         return;
       }
       // Session exists but is still connecting or errored — stop it.
@@ -471,7 +471,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
     }
   }
 
-  // speak — text-mode TTS only; realtime voice handles its own audio.
+  // speak — text-mode TTS only; ConvAI handles its own audio.
   const speak = useCallback((text: string) => {
     if (mutedRef.current || liveModeRef.current) return;
     jacSpeak(text, { muted: mutedRef.current });
@@ -519,7 +519,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
   //
   // Auto-start-on-gesture was removed because:
   //  1. Any click — including focusing the text input — triggered a voice connection attempt.
-  //  2. When that attempt failed (mic permission denied, network, IAB browser), handleRealtimeError
+  //  2. When that attempt failed (mic permission denied, network, IAB browser), handleConvaiError
   //     was called which previously replayed the TTS greeting — a confusing double-greeting.
   //  3. The user explicitly wants: text = ready immediately, voice = explicit mic tap only.
   //
@@ -567,7 +567,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
     // Greeting is shown as text immediately.
     // Audio is intentionally NOT auto-played here:
     //   - Web Speech (boring robot voice) is a poor first impression.
-    //   - Voice responses use JAC's realtime OpenAI voice after the user speaks.
+    //   - Voice responses use JAC's ElevenLabs ConvAI voice after the user speaks.
     //   - Playing both causes a double-welcome (boring voice → excited voice).
     // greetingSpokenRef stays false so text-mode TTS still works for replies.
   }
@@ -710,9 +710,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
       const final = [...next, aMsg];
       appendSharedJacMessage({ role: "assistant", content: aMsg.content, source: "homepage" });
       setMessages(final);
-       if (liveModeRef.current) {
-         realtimeSessionRef.current?.speakApprovedText(toSpeechText(aMsg.content));
-       } else if (!muted) {
+       if (!muted) {
          speak(aMsg.content);
        }
       try { localStorage.setItem("jac_returning", "1"); } catch {}
@@ -990,17 +988,20 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
 
   return (
     <>
-    {/* Realtime voice only mounts after an explicit mic gesture. */}
+    {/* ElevenLabs ConvAI only mounts after an explicit mic gesture. */}
     {liveMode && (
-      <JacOpenAIRealtimeSession
-        ref={realtimeSessionRef}
-        active={liveMode}
-        sessionEndpoint="/api/jac/realtime-token/guest"
-        onPhaseChange={handleRealtimePhaseChange}
-        onUserTranscript={handleRealtimeUserTranscript}
-        onJacResponse={handleRealtimeJacResponse}
-        onError={handleRealtimeError}
-      />
+      <ConversationProvider>
+        <JacConvaiSession
+          ref={convaiSessionRef}
+          active={liveMode}
+          sessionEndpoint="/api/jac/convai/investor-session"
+          e2eTarget="homepage"
+          onPhaseChange={handleConvaiPhaseChange}
+          onUserTranscript={handleConvaiUserTranscript}
+          onJacResponse={handleConvaiJacResponse}
+          onError={handleConvaiError}
+        />
+      </ConversationProvider>
     )}
     <section
       className="relative z-10 w-full overflow-hidden"

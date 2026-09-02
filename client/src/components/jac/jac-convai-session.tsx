@@ -21,7 +21,6 @@ import type { ReactNode } from "react";
 import { useConversation } from "@elevenlabs/react";
 import { apiRequest } from "@/lib/queryClient";
 import { unlockAudioContext, setJacConvaiActive, cancelAllJacAudio } from "@/lib/jac-tts";
-import { createJacConvaiVoiceOverride } from "@/lib/jac-convai-voice-lock";
 import {
   isJacE2EVoiceHarnessEnabled,
   subscribeToJacE2EVoiceEvents,
@@ -761,10 +760,11 @@ export const JacConvaiSession = forwardRef<JacConvaiSessionHandle, Props>(
           // on Samsung Internet.  We always pass signedUrl so WebSocket is used.
           // NOTE: connectionType and connectionDelay are NOT in the SDK v1.9.0 type
           // and are silently dropped — do not add them.
-          const params: Record<string, any> = {
-            dynamicVariables: dynVars,
-            overrides: createJacConvaiVoiceOverride(),
-          };
+          // Match the known-working August 23 signed-session payload exactly:
+          // dynamic context plus signedUrl, with the agent's configured voice.
+          // Later client-side TTS overrides caused accepted sockets to close
+          // before the greeting could play on the guest entrance.
+          const params: Record<string, any> = { dynamicVariables: dynVars };
           if (session.signedUrl) params.signedUrl = session.signedUrl;
           else                   params.agentId   = session.agentId;
 

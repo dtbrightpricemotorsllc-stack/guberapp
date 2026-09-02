@@ -40,6 +40,7 @@ describe("JAC ElevenLabs voice lock", () => {
     for (const relativePath of [
       "client/src/components/guber-door-splash.tsx",
       "client/src/components/jac/jac-live-experience.tsx",
+      "client/src/components/jac-homepage.tsx",
     ]) {
       const source = readFileSync(path.join(projectRoot, relativePath), "utf8");
       expect(source, relativePath).toContain("@elevenlabs/react");
@@ -48,16 +49,11 @@ describe("JAC ElevenLabs voice lock", () => {
     }
   });
 
-  it("keeps legacy dashboard/test surfaces from becoming a second canonical owner", () => {
-    for (const relativePath of [
-      "client/src/components/guber-assistant.tsx",
-      "client/src/components/jac-homepage.tsx",
-    ]) {
-      const source = readFileSync(path.join(projectRoot, relativePath), "utf8");
-      expect(source, relativePath).toContain("JacOpenAIRealtimeSession");
-      expect(source, relativePath).not.toContain("JacConvaiSession");
-      expect(source, relativePath).not.toContain("JacConvaiVoice");
-    }
+  it("keeps the authenticated dashboard text-only without a competing provider", () => {
+    const source = readFileSync(path.join(projectRoot, "client/src/components/guber-assistant.tsx"), "utf8");
+    expect(source).toContain("DASHBOARD_INDEPENDENT_VOICE_ENABLED = false");
+    expect(source).not.toContain("JacOpenAIRealtimeSession");
+    expect(source).not.toContain("ConversationProvider");
   });
 
   it("does not retain static-audio or browser-speech fallbacks in JAC TTS", () => {

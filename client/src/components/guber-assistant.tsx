@@ -12,8 +12,7 @@ import {
 } from "lucide-react";
 import { useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
-import type { JacOpenAIRealtimeSessionHandle } from "@/components/jac/jac-openai-realtime-session";
-import type { JacRealtimePhase } from "@/lib/jac-openai-realtime-transport";
+import type { ConvaiPhase, JacConvaiSessionHandle } from "@/components/jac/jac-convai-session";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { saveListingPrefill, clearListingPrefill } from "@/lib/jac-listing-prefill";
@@ -123,7 +122,7 @@ function hasListingIntent(text: string): boolean {
   return LISTING_PATTERNS.some((p) => p.test(text));
 }
 
-const CONVAI_PHASE_COLOR: Record<JacRealtimePhase, string> = {
+const CONVAI_PHASE_COLOR: Record<ConvaiPhase, string> = {
   idle:       "hsl(0 0% 45%)",
   connecting: "hsl(270 100% 65%)",
   listening:  "hsl(152 100% 44%)",
@@ -132,7 +131,7 @@ const CONVAI_PHASE_COLOR: Record<JacRealtimePhase, string> = {
   muted:      "hsl(0 0% 50%)",
   error:      "hsl(0 85% 60%)",
 };
-const CONVAI_PHASE_LABEL: Record<JacRealtimePhase, string> = {
+const CONVAI_PHASE_LABEL: Record<ConvaiPhase, string> = {
   idle:       "",
   connecting: "Connecting…",
   listening:  "Listening…",
@@ -390,12 +389,12 @@ export function GUBERAssistant() {
   const { cancel: cancelSpeech, muted, toggleMute, supported: ttsSupported } =
     useSpeechOutput();
 
-  // ── Realtime voice session state ───────────────────────────────────────────
+  // ── Dormant ConvAI state retained for the text-only dashboard UI ──────────
   const [convaiActive, setConvaiActive] = useState(false);
-  const [convaiPhase, setConvaiPhase] = useState<JacRealtimePhase>("idle");
+  const [convaiPhase, setConvaiPhase] = useState<ConvaiPhase>("idle");
   const [convaiError, setConvaiError] = useState<string | null>(null);
   const convaiActiveRef = useRef(false);
-  const convaiSessionRef = useRef<JacOpenAIRealtimeSessionHandle | null>(null);
+  const convaiSessionRef = useRef<JacConvaiSessionHandle | null>(null);
   const automaticStartClaimRef = useRef<(() => boolean) | null>(null);
   if (!automaticStartClaimRef.current) {
     automaticStartClaimRef.current = createJacAutomaticVoiceStartClaim();
@@ -443,13 +442,9 @@ export function GUBERAssistant() {
     convaiSessionRef.current?.reconnect();
   }
 
-  // Voice replies are played by Realtime; browser TTS is reserved for text mode.
+  // ConvAI owns voice replies whenever a session is active.
   function speak(text: string) {
-    if (convaiActiveRef.current) {
-      convaiSessionRef.current?.speakApprovedText(text);
-      return;
-    }
-    if (muted) return;
+    if (muted || convaiActiveRef.current) return;
     jacSpeak(text, { muted });
   }
 
@@ -878,7 +873,7 @@ export function GUBERAssistant() {
     }]);
   }, []));
 
-  const handleConvaiPhaseChange = useCallback((phase: JacRealtimePhase) => {
+  const handleConvaiPhaseChange = useCallback((phase: ConvaiPhase) => {
     setConvaiPhase(phase);
   }, []);
   function handleConvaiUserTranscript(text: string) {
@@ -903,8 +898,7 @@ export function GUBERAssistant() {
   return (
     <>
     {/* Dashboard JAC is deliberately text-only. The public entry owns the
-        single ConvAI microphone lifecycle; mounting this legacy realtime
-        controller here would compete for audio/provider ownership. */}
+        single ConvAI microphone lifecycle, so no second provider mounts here. */}
     <Sheet
       open={s.open}
       onOpenChange={(v) => {

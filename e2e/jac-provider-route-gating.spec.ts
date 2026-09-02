@@ -159,7 +159,7 @@ test("guest JAC asks whether to browse or post before showing a destination", as
   const requests = await installJacResponses(page, "guest");
   const voiceRequests: string[] = [];
   page.on("request", (request) => {
-    if (/\/api\/jac\/convai\/(?:public-)?session/.test(request.url())) {
+    if (/\/api\/jac\/convai\/(?:investor-|public-)?session/.test(request.url())) {
       voiceRequests.push(request.url());
     }
   });
@@ -167,10 +167,10 @@ test("guest JAC asks whether to browse or post before showing a destination", as
   await page.goto("/?jac_e2e=1");
   await expect(page.getByTestId("page-home")).toBeVisible();
   await enterCanonicalJac(page);
-  // ENTER may prewarm and then start the signed public ConvAI session, but it
+  // ENTER may prewarm and then start the signed guest ConvAI session, but it
   // must never fall through to another voice provider or endpoint.
   expect(voiceRequests.length).toBeGreaterThan(0);
-  expect(voiceRequests.every((url) => url.includes("/api/jac/convai/public-session"))).toBe(true);
+  expect(voiceRequests.every((url) => url.includes("/api/jac/convai/investor-session"))).toBe(true);
   await sendGuestMessage(page, "I need help finding someone for a repair.");
 
   await page.getByRole("button", { name: "Chat", exact: true }).click();
