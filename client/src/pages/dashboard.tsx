@@ -16,6 +16,7 @@ import {
   Zap, ShieldCheck, Hammer, Wrench, Repeat,
   Plus, Search, Briefcase, ChevronRight, Bot, MapPin as MapPinIcon,
   TrendingUp, X, Loader2, Rocket, Users, Bell, DollarSign, ShoppingBag, Truck, ArrowRight,
+  Activity, CircleUserRound, Wallet, Map, Sparkles,
 } from "lucide-react";
 import { readJacPrefill, clearJacPrefill } from "@/components/jac-homepage";
 import type { CashDropPin } from "@/components/google-map";
@@ -380,6 +381,85 @@ function CityDarkCard({
   );
 }
 
+function PersonalDashboardSummary({
+  user,
+  postedJobs,
+  acceptedJobs,
+  activeJobs,
+  unreadNotifications,
+}: {
+  user: any;
+  postedJobs: Job[];
+  acceptedJobs: Job[];
+  activeJobs: Job[];
+  unreadNotifications: number;
+}) {
+  const displayName = user?.publicUsername || user?.fullName?.split(" ")[0] || "there";
+  const profileComplete = !!user?.profileComplete;
+  const isAvailable = !!user?.isAvailable;
+  const recentJobs = [...postedJobs, ...acceptedJobs]
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+    .slice(0, 2);
+
+  const cards = [
+    { href: "/my-jobs?mode=hire", icon: Briefcase, label: "Posted", value: postedJobs.length, detail: "jobs you need done", color: "#93c5fd" },
+    { href: "/my-jobs?mode=work", icon: Hammer, label: "Accepted", value: acceptedJobs.length, detail: "jobs you're handling", color: "#86efac" },
+    { href: "/my-jobs", icon: Activity, label: "Active", value: activeJobs.length, detail: "in progress or awaiting action", color: "#fcd34d" },
+    { href: "/notifications", icon: Bell, label: "Updates", value: unreadNotifications, detail: unreadNotifications === 1 ? "unread notification" : "unread notifications", color: "#c4b5fd" },
+  ];
+
+  return (
+    <section className="mb-4 rounded-2xl overflow-hidden animate-fade-in" style={{ background: "linear-gradient(135deg,rgba(6,19,25,0.96),rgba(9,13,25,0.94))", border: "1px solid rgba(34,197,94,0.22)" }} data-testid="section-personal-summary">
+      <div className="px-4 pt-3.5 pb-3 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[9px] font-display font-black tracking-[0.22em] text-primary/75 uppercase">Your GUBER home</p>
+          <h1 className="mt-0.5 text-lg font-display font-black text-foreground">Welcome back, {displayName}</h1>
+          <p className="text-[10px] text-muted-foreground mt-0.5">Your jobs, money, activity, and account at a glance.</p>
+        </div>
+        <Link href="/profile" className="shrink-0">
+          <div className="rounded-xl px-2.5 py-2 text-center" style={{ background: profileComplete ? "rgba(34,197,94,0.10)" : "rgba(245,158,11,0.10)", border: `1px solid ${profileComplete ? "rgba(34,197,94,0.28)" : "rgba(245,158,11,0.28)"}` }}>
+            <CircleUserRound className="w-4 h-4 mx-auto" style={{ color: profileComplete ? "#86efac" : "#fcd34d" }} />
+            <span className="block mt-1 text-[8px] font-display font-black tracking-wide" style={{ color: profileComplete ? "#86efac" : "#fcd34d" }}>{profileComplete ? "PROFILE READY" : "FINISH PROFILE"}</span>
+          </div>
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 border-y border-white/[0.06]">
+        {cards.map(({ href, icon: Icon, label, value, detail, color }) => (
+          <Link key={label} href={href} className="min-w-0 even:border-l border-white/[0.06]">
+            <div className="p-3 hover:bg-white/[0.03] transition-colors">
+              <div className="flex items-center gap-1.5">
+                <Icon className="w-3.5 h-3.5" style={{ color }} />
+                <span className="text-[9px] font-display font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
+              </div>
+              <p className="text-lg leading-none font-display font-black mt-1.5" style={{ color }}>{value}</p>
+              <p className="mt-1 text-[9px] text-muted-foreground/75 truncate">{detail}</p>
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      <div className="px-3 py-2.5 flex items-center gap-2 overflow-x-auto">
+        <Link href="/wallet" className="shrink-0">
+          <span className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-display font-bold text-emerald-300" style={{ background: "rgba(34,197,94,0.09)" }}><Wallet className="w-3.5 h-3.5" /> Earnings & spending</span>
+        </Link>
+        <Link href="/profile" className="shrink-0">
+          <span className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-display font-bold text-foreground/80" style={{ background: "rgba(255,255,255,0.05)" }}><span className={`w-1.5 h-1.5 rounded-full ${isAvailable ? "bg-primary" : "bg-muted-foreground"}`} /> {isAvailable ? "Available for work" : "Currently unavailable"}</span>
+        </Link>
+        <Link href="/my-jobs" className="shrink-0">
+          <span className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-display font-bold text-foreground/80" style={{ background: "rgba(255,255,255,0.05)" }}><Activity className="w-3.5 h-3.5" /> Recent activity{recentJobs.length ? ` · ${recentJobs.length}` : ""}</span>
+        </Link>
+      </div>
+      <div className="px-3 pb-3 flex items-center gap-1.5">
+        <span className="text-[9px] font-display font-bold text-muted-foreground uppercase tracking-wider mr-1">GUBER</span>
+        <Link href="/map"><span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[9px] font-display font-bold text-primary hover:bg-primary/10"><Map className="w-3 h-3" /> Map</span></Link>
+        <Link href="/marketplace"><span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[9px] font-display font-bold text-primary hover:bg-primary/10"><ShoppingBag className="w-3 h-3" /> Market</span></Link>
+        <Link href="/cash-drops"><span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[9px] font-display font-bold text-primary hover:bg-primary/10"><Sparkles className="w-3 h-3" /> Drops</span></Link>
+      </div>
+    </section>
+  );
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
@@ -601,6 +681,15 @@ export default function Dashboard() {
     enabled: !!user,
   });
 
+  // This is the same user-scoped notification feed used by the global header;
+  // React Query shares the cached response, so the personal summary adds no
+  // separate source of account data.
+  const { data: notifications } = useQuery<Array<{ id: number; read: boolean }>>({
+    queryKey: ["/api/notifications"],
+    enabled: !!user,
+    staleTime: 30_000,
+  });
+
   const { data: mapPins } = useQuery<JobPin[]>({
     queryKey: mapCenter
       ? [`/api/map-jobs?lat=${mapCenter.lat}&lng=${mapCenter.lng}&radiusMiles=100`]
@@ -651,6 +740,10 @@ export default function Dashboard() {
 
   const postedJobs = myJobs?.filter((j) => j.postedById === user?.id) || [];
   const acceptedJobs = myJobs?.filter((j) => j.assignedHelperId === user?.id) || [];
+  const activePersonalJobs = myJobs?.filter((j) =>
+    ["accepted_pending_payment", "funded", "in_progress", "proof_submitted"].includes(j.status),
+  ) || [];
+  const unreadNotifications = notifications?.filter((notification) => !notification.read).length || 0;
   // Poster action items: fund the worker or review submitted proof.
   const awaitingHireAction = postedJobs.filter((j) =>
     ["accepted_pending_payment", "proof_submitted"].includes(j.status),
@@ -832,6 +925,17 @@ export default function Dashboard() {
 
         {/* ── Subtle install hint (right-aligned, secondary) ── */}
         <InstallHint />
+
+        {/* ── Personal account snapshot and protected shortcuts ── */}
+        {!!user && (
+          <PersonalDashboardSummary
+            user={user}
+            postedJobs={postedJobs}
+            acceptedJobs={acceptedJobs}
+            activeJobs={activePersonalJobs}
+            unreadNotifications={unreadNotifications}
+          />
+        )}
 
         {/* ── JAC Dashboard Card ── */}
         <JacDashboardCard />

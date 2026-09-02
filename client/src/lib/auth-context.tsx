@@ -4,6 +4,8 @@ import { queryClient, apiRequest } from "./queryClient";
 import { getToken, setToken, clearToken } from "./token-storage";
 import { signOutFromGoogle } from "./native-google-sign-in";
 import { Capacitor } from "@capacitor/core";
+import { useLocation } from "wouter";
+import { resetSignedOutEntrance } from "./entrance-session";
 import type { User } from "@shared/schema";
 
 type AuthContextType = {
@@ -21,6 +23,7 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [, navigate] = useLocation();
   const { data: user, isLoading } = useQuery<User | null>({
     queryKey: ["/api/auth/me"],
     queryFn: async () => {
@@ -108,9 +111,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       await apiRequest("POST", "/api/auth/logout");
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-    },
   });
 
   // Task #318: one-time global liability disclaimer acknowledgement.
@@ -132,8 +132,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [signupMutation]);
 
   const logout = useCallback(async () => {
+    // Update the client synchronously, before any best-effort native or server
+    // cleanup. This prevents protected UI from lingering during logout and
+    // makes the next root visit a new signed-out entrance.
+    void queryClient.cancelQueries({ queryKey: ["/api/auth/me"] });
+    queryClient.setQueryData(["/api/auth/me"], null);
+    resetSignedOutEntrance();
+    navigate("/");
     await logoutMutation.mutateAsync();
-  }, [logoutMutation]);
+  }, [logoutMutation, navigate]);
 
   const isDemoUser = useMemo(() => {
     return !!user?.email?.endsWith("@guberapp.internal");

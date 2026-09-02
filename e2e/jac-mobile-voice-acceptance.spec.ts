@@ -39,7 +39,7 @@ for (const profile of MOBILE_PROFILES) {
       );
 
       await page.getByRole("button", { name: "Enter Team GUBER" }).click();
-      await expect(page.getByText("Connecting…")).toBeVisible();
+      await expect(page.getByText("Connecting to JAC…")).toBeVisible();
       await emitVoice(page, "connect");
       await emitVoice(page, "speaking");
 

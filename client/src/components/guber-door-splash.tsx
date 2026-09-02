@@ -45,11 +45,14 @@ const DOOR_CINEMATIC = "/splash/guber-door-cinematic-1080.mp4";
 const DOOR_POSTER    = "/splash/guber-door-cinematic-poster.webp";
 
 const GREETING_TEXT = JAC_WELCOME_GREETING;
+const VOICE_CONNECTION_DEADLINE_MS = 12_000;
+const VOICE_FALLBACK_TEXT = "Voice couldn’t connect. You can keep chatting here.";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type DoorPhase = "closed" | "unlocking" | "opening" | "open" | "exiting";
 type ConvMode  = "none" | "voice" | "text";
 interface Msg   { role: "jac" | "user"; text: string }
+type VoiceIssue = { kind: JacRealtimeErrorKind; message: string };
 
 export interface GuberDoorSplashProps {
   onEnterVoice: () => void;
@@ -99,10 +102,8 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const [jacSpeakingTx,setJacSpeakingTx] = useState(false); // TTS for text replies
   const [realtimePhase,  setRealtimePhase]  = useState<ConvaiPhase>("idle");
   const [realtimeActive, setRealtimeActive] = useState(false);
-  const [realtimeIssue, setRealtimeIssue] = useState<{
-    kind: JacRealtimeErrorKind;
-    message: string;
-  } | null>(null);
+  const [, setRealtimeIssue] = useState<VoiceIssue | null>(null);
+  const [voiceRetryAvailable, setVoiceRetryAvailable] = useState(false);
   const [showSignup,   setShowSignup]   = useState(false);
   const [signupReturnTo, setSignupReturnTo] = useState<string | undefined>();
   const [campaignSessionId] = useState(() => getActiveCampaignSessionId());
@@ -124,6 +125,9 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const signupOffered  = useRef(false); // in-scene signup card fires at most once per conversation
   const greetingHasFired = useRef(false);
   const realtimeConnected = useRef(false);
+  const realtimeIssueRef = useRef<VoiceIssue | null>(null);
+  const voiceDeadlineRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const manualRetryUsedRef = useRef(false);
 
   const schedule = useCallback((fn: () => void, ms: number) => {
     const t = setTimeout(fn, ms);
@@ -131,10 +135,52 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     return t;
   }, []);
 
+  const clearVoiceDeadline = useCallback(() => {
+    if (voiceDeadlineRef.current === null) return;
+    clearTimeout(voiceDeadlineRef.current);
+    voiceDeadlineRef.current = null;
+  }, []);
+
+  const enterVoiceFallback = useCallback((
+    kind: JacRealtimeErrorKind,
+    technicalMessage: string,
+  ) => {
+    clearVoiceDeadline();
+    realtimeConnected.current = false;
+    const issue = { kind, message: technicalMessage };
+    realtimeIssueRef.current = issue;
+    setRealtimeIssue(issue);
+    setRealtimePhase("error");
+    setRealtimeActive(false);
+    setConvMode("text");
+    setVoiceRetryAvailable(!manualRetryUsedRef.current);
+    cancelAllJacAudio();
+    setGreetingPlaying(false);
+    setMessages(current => {
+      if (current.some(message => message.text === VOICE_FALLBACK_TEXT)) return current;
+      return [...current, { role: "jac", text: VOICE_FALLBACK_TEXT }];
+    });
+  }, [clearVoiceDeadline]);
+
+  const armVoiceDeadline = useCallback(() => {
+    clearVoiceDeadline();
+    voiceDeadlineRef.current = setTimeout(() => {
+      console.warn("[JAC voice]", {
+        category: "transport",
+        kind: "connection-deadline",
+        connectedBeforeFailure: realtimeConnected.current,
+      });
+      enterVoiceFallback("transport", "connection deadline exceeded");
+    }, VOICE_CONNECTION_DEADLINE_MS);
+  }, [clearVoiceDeadline, enterVoiceFallback]);
+
   useEffect(() => {
     if (skip) setMounted(false);
-    return () => { timerRefs.current.forEach(clearTimeout); };
-  }, [skip]);
+    return () => {
+      timerRefs.current.forEach(clearTimeout);
+      clearVoiceDeadline();
+    };
+  }, [clearVoiceDeadline, skip]);
 
   useEffect(() => {
     const connection = (navigator as Navigator & {
@@ -173,14 +219,18 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     // acquire the mic and prime realtime audio before the film begins, rather
     // than waiting for a post-render effect.
     realtimeConnected.current = false;
+    realtimeIssueRef.current = null;
     setRealtimeIssue(null);
+    setVoiceRetryAvailable(false);
     realtimeRef.current?.activate();
     phaseRef.current = "opening";
     setPhase("opening");
     // Warm voice invisibly behind the film so the reveal lands directly in a
     // listening JAC instead of showing a second startup state.
     setConvMode("voice");
+    setRealtimePhase("connecting");
     setRealtimeActive(true);
+    armVoiceDeadline();
 
     if (useLightweightFallback || !cinematicRef.current) {
       schedule(finishCinematic, 220);
@@ -209,6 +259,8 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     if (phase !== "open") return;
     cancelAllJacAudio();
     setGreetingPlaying(false);
+    clearVoiceDeadline();
+    setRealtimeActive(false);
     setConvMode("text");
     setTimeout(() => inputRef.current?.focus(), 300);
   }
@@ -301,12 +353,19 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
 
   // ── Realtime callbacks ────────────────────────────────────────────────────
   const handleRealtimePhase = useCallback((p: ConvaiPhase) => {
+    // Deactivating after a real failure makes the SDK report idle. That late
+    // idle callback must never erase the terminal fallback and recreate the
+    // Samsung "Waiting for voice connection" trap.
+    if (p === "idle" && realtimeIssueRef.current) return;
     setRealtimePhase(p);
     if (p === "listening" || p === "speaking" || p === "thinking" || p === "muted") {
+      clearVoiceDeadline();
       realtimeConnected.current = true;
+      realtimeIssueRef.current = null;
       setRealtimeIssue(null);
+      setVoiceRetryAvailable(false);
     }
-  }, []);
+  }, [clearVoiceDeadline]);
 
   const handleRealtimeError = useCallback((message: string, kind: JacRealtimeErrorKind = "transport") => {
     const microphoneFailure = kind === "microphone-denied" || kind === "microphone-unavailable";
@@ -316,25 +375,25 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
       doorPhase: phaseRef.current,
       connectedBeforeFailure: realtimeConnected.current,
     });
-    setRealtimeIssue({ kind, message });
-    // Initialization failures stop here. A single explicit Retry control owns
-    // any later attempt, so provider callbacks cannot create a reconnect loop.
-    setRealtimeActive(false);
-    setRealtimePhase("error");
-  }, []);
+    enterVoiceFallback(kind, message);
+  }, [enterVoiceFallback]);
 
   const retryVoice = useCallback(() => {
-    // A terminal failure is recoverable only through this explicit gesture.
-    // reconnect() serializes endSession before booting a replacement.
+    if (manualRetryUsedRef.current) return;
+    manualRetryUsedRef.current = true;
     realtimeConnected.current = false;
+    realtimeIssueRef.current = null;
     setRealtimeIssue(null);
+    setVoiceRetryAvailable(false);
+    setConvMode("voice");
     setRealtimePhase("connecting");
     // Retry is itself a user gesture, so it can safely reacquire a microphone
     // after the user changes browser permission. React's active transition is
     // the only boot owner; do not call reconnect in this turn as well.
     realtimeRef.current?.activate();
     setRealtimeActive(true);
-  }, []);
+    armVoiceDeadline();
+  }, [armVoiceDeadline]);
 
   const handleRealtimeUser = useCallback((text: string) => {
     const t = text.trim();
@@ -378,14 +437,11 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const isVoiceLive   = convMode === "voice" &&
     (realtimePhase === "listening" || realtimePhase === "speaking" || realtimePhase === "thinking" || realtimePhase === "muted");
   const statusLabel   =
-    realtimeIssue?.kind === "microphone-denied" ? "Microphone permission needed — Type Instead is available" :
-    realtimeIssue?.kind === "microphone-unavailable" ? "Microphone unavailable — Type Instead is available" :
-    realtimeIssue && realtimePhase === "error" ? `Voice not connected — ${realtimeIssue.message}` :
-    realtimePhase === "connecting" ? "Connecting…" :
+    realtimePhase === "connecting" ? "Connecting to JAC…" :
     realtimePhase === "thinking"   ? "JAC is thinking…" :
     realtimePhase === "speaking"   ? "JAC is speaking" :
     realtimePhase === "listening"  ? "Listening…" :
-    realtimePhase === "muted"      ? "Muted — tap 🎙️ to unmute" : "Waiting for voice connection";
+    realtimePhase === "muted"      ? "Muted — tap 🎙️ to unmute" : "Connecting to JAC…";
 
   return (
     <>
@@ -909,6 +965,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                     {/* Type Instead remains available while auto-started voice is live. */}
                     <button
                       onClick={() => {
+                        clearVoiceDeadline();
                         setConvMode("text");
                         setRealtimeActive(false);
                         setTimeout(() => inputRef.current?.focus(), 300);
@@ -982,6 +1039,23 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                         transition:"background 200ms ease, transform 120ms ease",
                       }}
                     >↑</button>
+
+                    {voiceRetryAvailable && (
+                      <button
+                        onClick={retryVoice}
+                        aria-label="Retry JAC voice"
+                        style={{
+                          minHeight:44, flexShrink:0, padding:"0 11px",
+                          borderRadius:14, cursor:"pointer",
+                          background:"rgba(0,200,140,.14)",
+                          border:"1px solid rgba(0,220,140,.42)",
+                          color:"rgba(105,241,211,.95)",
+                          fontFamily:"'Inter',sans-serif", fontSize:12,
+                        }}
+                      >
+                        Retry voice
+                      </button>
+                    )}
 
                     {/* Explore → */}
                     <button onClick={() => exitToApp(false)} aria-label="Go to full app"

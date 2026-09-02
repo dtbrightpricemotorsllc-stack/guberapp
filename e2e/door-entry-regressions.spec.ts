@@ -53,12 +53,25 @@ test.describe("Team GUBER cinematic entry door", () => {
     await expectDoorGatedHome(page);
   });
 
-  test("every web refresh shows the door even for returning visitors", async ({ page }) => {
-    await page.addInitScript(() => localStorage.setItem("guberDoorSplashSeen", "1"));
+  test("a same-tab refresh does not replay the door", async ({ page }) => {
     await installUnauthenticatedSession(page);
 
     await page.goto("/");
     await expectDoorGatedHome(page);
+    await page.reload();
+    await expect(doorRegion(page)).toHaveCount(0);
+    await expect(page.getByTestId("jac-live-surface")).toHaveCount(1);
+  });
+
+  test("signed-out login navigation does not replay an already claimed door", async ({ page }) => {
+    await installUnauthenticatedSession(page);
+
+    await page.goto("/");
+    await expectDoorGatedHome(page);
+    await page.goto("/login");
+    await expect(doorRegion(page)).toHaveCount(0);
+    await page.goto("/");
+    await expect(doorRegion(page)).toHaveCount(0);
   });
 
   test("opening the door reveals JAC in-scene before optional Explore", async ({ page }) => {
@@ -69,7 +82,7 @@ test.describe("Team GUBER cinematic entry door", () => {
     await page.evaluate(() => history.replaceState(null, "", "/"));
 
     await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
-    await expect(page.getByText("Connecting…")).toBeVisible();
+    await expect(page.getByText("Connecting to JAC…")).toBeVisible();
     await emitVoice(page, "listening");
     const scene = page.locator('[aria-label="Team GUBER HQ"]');
     await expect(scene).toBeVisible();
@@ -90,7 +103,7 @@ test.describe("Team GUBER cinematic entry door", () => {
     await expectDoorGatedHome(page);
 
     await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
-    await expect(page.getByText("Connecting…")).toBeVisible();
+    await expect(page.getByText("Connecting to JAC…")).toBeVisible();
     await emitVoice(page, "connect");
     await emitVoice(page, "speaking");
     await completeCinematic(page);
@@ -119,7 +132,7 @@ test.describe("Team GUBER cinematic entry door", () => {
     await expectDoorGatedHome(page);
 
     await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
-    await expect(page.getByText("Connecting…")).toBeVisible();
+    await expect(page.getByText("Connecting to JAC…")).toBeVisible();
     await emitVoice(page, "listening");
     await completeCinematic(page);
     await page.getByRole("button", { name: "Switch to typing" }).click();
@@ -136,21 +149,37 @@ test.describe("Team GUBER cinematic entry door", () => {
 
     await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
     await emitVoice(page, "error", "transport");
-    await expect(page.getByRole("textbox", { name: "Message JAC" })).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: "Message JAC" })).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).not.toBe("TEXTAREA");
 
     await completeCinematic(page);
-    await expect(page.getByText(/Voice not connected/)).toBeVisible();
+    await expect(page.getByText("Voice couldn’t connect. You can keep chatting here.")).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Message JAC" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Retry JAC voice" })).toHaveCount(1);
     await page.waitForTimeout(2_000);
     await expect(page.getByText(/Reconnecting JAC/)).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Retry JAC voice" })).toHaveCount(1);
 
     await page.getByRole("button", { name: "Retry JAC voice" }).click();
-    await expect(page.getByText("Connecting…")).toBeVisible();
+    await expect(page.getByText("Connecting to JAC…")).toBeVisible();
     await emitVoice(page, "listening");
     await expect(page.getByText("Listening…")).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Message JAC" })).toHaveCount(0);
+  });
+
+  test("a silent provider reaches usable text instead of waiting indefinitely", async ({ page }) => {
+    await installUnauthenticatedSession(page);
+    await page.goto("/?jac_e2e=1");
+    await expectDoorGatedHome(page);
+
+    await doorRegion(page).getByRole("button", { name: "Enter Team GUBER" }).click();
+    await completeCinematic(page);
+    await expect(page.getByText("Connecting to JAC…")).toBeVisible();
+
+    await expect(page.getByText("Voice couldn’t connect. You can keep chatting here."))
+      .toBeVisible({ timeout: 14_000 });
+    await expect(page.getByRole("textbox", { name: "Message JAC" })).toBeVisible();
+    await expect(page.getByText(/Waiting for voice connection/)).toHaveCount(0);
   });
 
   test("an authenticated refresh skips the entrance doors", async ({ page }) => {
@@ -223,9 +252,9 @@ test.describe("Team GUBER cinematic entry door", () => {
     await emitVoice(page, "error", "microphone-denied");
     await completeCinematic(page);
 
-    await expect(page.getByText("Microphone permission needed — Type Instead is available")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Switch to typing" })).toHaveText("Type Instead");
-    await expect(page.getByRole("textbox", { name: "Message JAC" })).toHaveCount(0);
+    await expect(page.getByText("Voice couldn’t connect. You can keep chatting here.")).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Message JAC" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Retry JAC voice" })).toHaveCount(1);
     await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).not.toBe("TEXTAREA");
   });
 

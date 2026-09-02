@@ -17,6 +17,7 @@ import { JacHomepage } from "@/components/jac-homepage";
 import { JacLiveExperience } from "@/components/jac/jac-live-experience";
 import { GuberDoorSplash } from "@/components/guber-door-splash";
 import { isNativeApp } from "@/lib/platform";
+import { claimSignedOutEntrance } from "@/lib/entrance-session";
 
 import logoImg          from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
 import day1OGImg        from "@assets/Gubergoldday1_1772434950756.png";
@@ -795,9 +796,13 @@ export default function Home() {
   const [currentSlide,  setCurrentSlide]  = useState(SLIDES[0]);
   const { enabled: investorPitchPublic } = useFeatureFlag("investor_pitch_public");
 
-  // The Team GUBER door is the web entry experience. Web refreshes always
-  // begin at the cinematic scene; native builds keep their existing bypass.
-  const [doorSplashDone, setDoorSplashDone] = useState(() => isNativeApp);
+  // Claim the public entrance as soon as this signed-out root route mounts.
+  // It is tab-scoped, so navigation and refreshes cannot replay the door.
+  // Native builds retain their existing bypass.
+  const [shouldShowDoor] = useState(
+    () => !isNativeApp && claimSignedOutEntrance(),
+  );
+  const [doorSplashDone, setDoorSplashDone] = useState(() => !shouldShowDoor);
 
   const finishDoorSplash = () => setDoorSplashDone(true);
 
@@ -879,7 +884,7 @@ export default function Home() {
           The door scene is the first-visit guest experience. It is mounted
           instead of (not alongside) the canonical surface so its JAC greeting
           and realtime session can never be duplicated. ── */}
-      {!isNativeApp && (
+      {shouldShowDoor && (
         <GuberDoorSplash
           onEnterVoice={finishDoorSplash}
           onEnterText={finishDoorSplash}
