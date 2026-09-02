@@ -456,6 +456,9 @@ function PersonalDashboardSummary({
         <Link href="/marketplace"><span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[9px] font-display font-bold text-primary hover:bg-primary/10"><ShoppingBag className="w-3 h-3" /> Market</span></Link>
         <Link href="/cash-drops"><span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[9px] font-display font-bold text-primary hover:bg-primary/10"><Sparkles className="w-3 h-3" /> Drops</span></Link>
       </div>
+      <Link href="/repairmatch" className="mx-3 mb-3 flex min-h-11 items-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.06] px-3 text-xs font-display font-bold text-primary hover:bg-primary/[0.1]">
+        <ShieldCheck className="h-4 w-4" /> RepairMatch <span className="ml-auto font-normal text-muted-foreground">Document collision damage once <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></span>
+      </Link>
     </section>
   );
 }

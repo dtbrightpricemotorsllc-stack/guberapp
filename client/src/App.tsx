@@ -51,6 +51,7 @@ import { LoadingSplash } from "@/components/loading-splash";
 
 // Authenticated consumer pages — lazy loaded
 const Dashboard = lazy(() => import("@/pages/dashboard"));
+const RepairMatch = lazy(() => import("@/pages/repairmatch"));
 const BrowseJobs = lazy(() => import("@/pages/browse-jobs"));
 const BrowseServices = lazy(() => import("@/pages/services"));
 const OfferService = lazy(() => import("@/pages/offer-service"));
@@ -403,6 +404,9 @@ function Router() {
         return null;
       }} />
       <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
+      <Route path="/repairmatch/new" component={() => <ConsumerRoute component={RepairMatch} />} />
+      <Route path="/repairmatch/:id" component={() => <ConsumerRoute component={RepairMatch} />} />
+      <Route path="/repairmatch" component={() => <ConsumerRoute component={RepairMatch} />} />
       <Route path="/browse-jobs" component={() => <ProtectedRoute component={BrowseJobs} />} />
       <Route path="/jobs/:id/navigate" component={() => <ProtectedRoute component={JobNavigate} />} />
       <Route path="/jobs/:id" component={() => <ProtectedRoute component={JobDetail} />} />
@@ -501,6 +505,8 @@ function Router() {
       <Route path="/studio/promo/preview" component={StudioPromoPreview} />
       <Route path="/biz/login" component={() => <Redirect to="/login" />} />
       <Route path="/biz/dashboard" component={() => <BizRoute component={BizDashboard} />} />
+      <Route path="/biz/repairmatch/:id" component={() => <BizRoute component={RepairMatch} />} />
+      <Route path="/biz/repairmatch" component={() => <BizRoute component={RepairMatch} />} />
       <Route path="/biz/post-job" component={() => <BizRoute component={BizPostJob} />} />
       <Route path="/biz/bulk-post" component={() => <BizRoute component={BizBulkPost} />} />
       <Route path="/biz/templates" component={() => <BizRoute component={BizTemplates} />} />

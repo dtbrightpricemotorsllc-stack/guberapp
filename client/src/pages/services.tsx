@@ -148,7 +148,10 @@ export default function BrowseServices() {
             <h1 className="text-2xl font-display font-black tracking-tight">Browse services</h1>
             <p className="text-sm text-muted-foreground mt-1">Find a provider, then use GUBER’s protected job flow to request the work.</p>
           </div>
-          <Link href="/offer-service"><Button variant="outline" className="shrink-0 rounded-xl h-10 text-xs font-display"><BriefcaseBusiness className="w-4 h-4 mr-1.5" /> Offer</Button></Link>
+          <div className="flex shrink-0 gap-2">
+            <Link href="/repairmatch"><Button variant="outline" className="h-10 rounded-xl text-xs font-display"><ShieldCheck className="mr-1.5 h-4 w-4" /> RepairMatch</Button></Link>
+            <Link href="/offer-service"><Button variant="outline" className="h-10 rounded-xl text-xs font-display"><BriefcaseBusiness className="mr-1.5 h-4 w-4" /> Offer</Button></Link>
+          </div>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-[1fr_180px_auto] mb-3">

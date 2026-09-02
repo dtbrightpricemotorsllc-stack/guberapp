@@ -12,6 +12,7 @@ import { setNonceStore, PgNonceStore } from "./oauth";
 import { startStudioToolsListener } from "./studio-tools-notify";
 import { startOSRuntime } from "./os/index";
 import { setElevenLabsConvaiProbeResult } from "./os/health-checks";
+import { provisionRepairMatchTables } from "./repairmatch";
 
 const app = express();
 const httpServer = createServer(app);
@@ -243,6 +244,10 @@ app.use((req, res, next) => {
     ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS ein text;
     ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS legal_business_name text;
   `).catch(e => console.error("[migration] business_profiles EIN columns error:", e));
+
+  // RepairMatch is an additive module; production has no db:push, so create
+  // its isolated records safely at boot without touching existing flows.
+  await provisionRepairMatchTables().catch(e => console.error("[migration] repairmatch tables error:", e));
 
   await pool.query(`
     ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stuck_acknowledged_at TIMESTAMP;

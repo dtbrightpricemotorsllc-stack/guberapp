@@ -94,6 +94,7 @@ import {
   normalizeProfessionalServiceCategory,
 } from "./business-experience";
 import { registerBusinessBookingRoutes } from "./business-bookings";
+import { registerRepairMatchRoutes } from "./repairmatch";
 import {
   getCampaignSession,
   claimCampaignSession,
@@ -1014,6 +1015,7 @@ export async function registerRoutes(
   registerServiceOfferRoutes(app, { requireAuth, requireAdmin, checkSuspended });
   registerBusinessExperienceRoutes(app, { requireAuth, requireAdmin });
   registerBusinessBookingRoutes(app, { requireAuth });
+  registerRepairMatchRoutes(app, { requireAuth });
   registerCampaignOnboardingRoutes(app, { requireAuth });
 
   app.get("/api/config", (_req: Request, res: Response) => {

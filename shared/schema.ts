@@ -1456,6 +1456,141 @@ export const businessProfiles = pgTable("business_profiles", {
   availabilityNote: text("availability_note"),
 });
 
+// ── RepairMatch ────────────────────────────────────────────────────────────
+// Original visual analysis and a shop's review are intentionally different
+// records. RepairMatch is preliminary routing, never an insurer or final-estimate system.
+export const repairmatchEstimates = pgTable("repairmatch_estimates", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id").notNull(),
+  status: text("status").notNull().default("draft"),
+  vehicle: jsonb("vehicle").notNull().default({}),
+  incident: jsonb("incident").notNull().default({}),
+  photoUrls: jsonb("photo_urls").$type<string[]>().notNull().default([]),
+  locationApprox: text("location_approx"),
+  customerContact: jsonb("customer_contact").$type<Record<string, string>>().default({}),
+  aiResult: jsonb("ai_result"),
+  modelVersion: text("model_version"),
+  generationKey: text("generation_key"),
+  generationStatus: text("generation_status").notNull().default("not_requested"),
+  generationError: text("generation_error"),
+  disclosuresAcceptedAt: timestamp("disclosures_accepted_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  customerCreated: uniqueIndex("repairmatch_estimates_customer_generation_key").on(table.customerId, table.generationKey),
+}));
+
+export const repairmatchEstimateLines = pgTable("repairmatch_estimate_lines", {
+  id: serial("id").primaryKey(),
+  estimateId: integer("estimate_id").notNull(),
+  lineOrder: integer("line_order").notNull(),
+  component: text("component").notNull(),
+  recommendation: text("recommendation").notNull(),
+  bodyHoursLow: real("body_hours_low"),
+  bodyHoursHigh: real("body_hours_high"),
+  refinishHoursLow: real("refinish_hours_low"),
+  refinishHoursHigh: real("refinish_hours_high"),
+  mechanicalHoursLow: real("mechanical_hours_low"),
+  mechanicalHoursHigh: real("mechanical_hours_high"),
+  partsAllowanceLow: real("parts_allowance_low"),
+  partsAllowanceHigh: real("parts_allowance_high"),
+  confidence: real("confidence"),
+  inspectionRequired: boolean("inspection_required").default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const repairmatchShopProfiles = pgTable("repairmatch_shop_profiles", {
+  id: serial("id").primaryKey(),
+  ownerUserId: integer("owner_user_id").notNull().unique(),
+  active: boolean("active").notNull().default(false),
+  collisionBody: boolean("collision_body").notNull().default(false),
+  serviceZip: text("service_zip"),
+  serviceRadiusMiles: integer("service_radius_miles").notNull().default(25),
+  capabilities: jsonb("capabilities").$type<string[]>().default([]),
+  responseQuality: real("response_quality").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const repairmatchOpportunities = pgTable("repairmatch_opportunities", {
+  id: serial("id").primaryKey(),
+  estimateId: integer("estimate_id").notNull(),
+  shopProfileId: integer("shop_profile_id").notNull(),
+  status: text("status").notNull().default("new"),
+  sharingScope: jsonb("sharing_scope").notNull().default({}),
+  sentAt: timestamp("sent_at").defaultNow(),
+  viewedAt: timestamp("viewed_at"),
+  acceptedAt: timestamp("accepted_at"),
+  expiresAt: timestamp("expires_at"),
+});
+
+export const repairmatchShopResponses = pgTable("repairmatch_shop_responses", {
+  id: serial("id").primaryKey(),
+  opportunityId: integer("opportunity_id").notNull().unique(),
+  status: text("status").notNull().default("draft"),
+  availability: text("availability"),
+  inspectionRequest: text("inspection_request"),
+  expectedRepairTiming: text("expected_repair_timing"),
+  warranty: text("warranty"),
+  towingAvailable: boolean("towing_available").default(false),
+  partsApproach: text("parts_approach"),
+  capabilitiesNote: text("capabilities_note"),
+  customerNote: text("customer_note"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const repairmatchReviewedLines = pgTable("repairmatch_reviewed_lines", {
+  id: serial("id").primaryKey(),
+  responseId: integer("response_id").notNull(),
+  estimateLineId: integer("estimate_line_id"),
+  lineOrder: integer("line_order").notNull(),
+  component: text("component").notNull(),
+  recommendation: text("recommendation").notNull(),
+  bodyHoursLow: real("body_hours_low"),
+  bodyHoursHigh: real("body_hours_high"),
+  refinishHoursLow: real("refinish_hours_low"),
+  refinishHoursHigh: real("refinish_hours_high"),
+  mechanicalHoursLow: real("mechanical_hours_low"),
+  mechanicalHoursHigh: real("mechanical_hours_high"),
+  partsAllowanceLow: real("parts_allowance_low"),
+  partsAllowanceHigh: real("parts_allowance_high"),
+  inspectionRequired: boolean("inspection_required").default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const repairmatchConsentEvents = pgTable("repairmatch_consent_events", {
+  id: serial("id").primaryKey(),
+  estimateId: integer("estimate_id").notNull(),
+  opportunityId: integer("opportunity_id"),
+  actorUserId: integer("actor_user_id").notNull(),
+  eventType: text("event_type").notNull(),
+  scope: jsonb("scope").notNull().default({}),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const repairmatchAuditEvents = pgTable("repairmatch_audit_events", {
+  id: serial("id").primaryKey(),
+  estimateId: integer("estimate_id").notNull(),
+  opportunityId: integer("opportunity_id"),
+  actorUserId: integer("actor_user_id"),
+  action: text("action").notNull(),
+  details: jsonb("details").notNull().default({}),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertRepairmatchEstimateSchema = createInsertSchema(repairmatchEstimates).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertRepairmatchEstimateLineSchema = createInsertSchema(repairmatchEstimateLines).omit({ id: true, createdAt: true });
+export const insertRepairmatchShopProfileSchema = createInsertSchema(repairmatchShopProfiles).omit({ id: true, createdAt: true, updatedAt: true });
+export type RepairmatchEstimate = typeof repairmatchEstimates.$inferSelect;
+export type InsertRepairmatchEstimate = z.infer<typeof insertRepairmatchEstimateSchema>;
+export type RepairmatchEstimateLine = typeof repairmatchEstimateLines.$inferSelect;
+export type RepairmatchOpportunity = typeof repairmatchOpportunities.$inferSelect;
+export type RepairmatchShopResponse = typeof repairmatchShopResponses.$inferSelect;
+
 export const bulkJobBatches = pgTable("bulk_job_batches", {
   id: serial("id").primaryKey(),
   businessId: integer("business_id").notNull(),

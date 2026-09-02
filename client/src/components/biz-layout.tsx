@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, FileText, Settings, LogOut,
   Menu, X, Building2, ChevronRight, ChevronLeft, Flame, Search,
-   ShieldCheck, Send, ClipboardList, Eye, CalendarClock, MessageSquare, LockKeyhole
+  ShieldCheck, Send, ClipboardList, Eye, CalendarClock, MessageSquare, LockKeyhole, Wrench
 } from "lucide-react";
 
 const GOLD = "#C6A85C";
@@ -29,6 +29,7 @@ const NAV: NavItem[] = [
   { label: "Customer Requests", href: "/biz/requests", icon: MessageSquare, requiredAccess: "activity" },
   { label: "Bookings", href: "/biz/bookings", icon: CalendarClock, requiredAccess: "activity" },
   { label: "Inspection Standards", href: "/biz/templates", icon: FileText },
+  { label: "RepairMatch", href: "/biz/repairmatch", icon: Wrench },
   { section: "divider" },
   { sectionLabel: "CAMPAIGNS" },
   { label: "Field Observations", href: "/biz/observations", icon: Eye },
