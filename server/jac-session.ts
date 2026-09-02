@@ -142,7 +142,7 @@ export async function setJacSession(
   userId: number,
   patch: Partial<Omit<JacSessionState, "userId" | "updatedAt">>,
   options: { replaceFields?: boolean } = {}
-): Promise<void> {
+): Promise<boolean> {
   // Load current state (may come from cache)
   const existing = await getJacSession(userId);
 
@@ -161,9 +161,6 @@ export async function setJacSession(
         : existing.collectedFields,
     updatedAt: new Date(),
   };
-
-  // Update cache immediately
-  _cache.set(userId, { state: merged, loadedAt: Date.now() });
 
   try {
     await pool.query(
@@ -189,8 +186,12 @@ export async function setJacSession(
         merged.selectedModule,
       ]
     );
+    // Do not report a transferred/resumable workflow until it is durable.
+    _cache.set(userId, { state: merged, loadedAt: Date.now() });
+    return true;
   } catch (e: any) {
     console.error("[jac-session] setJacSession error:", e.message);
+    return false;
   }
 }
 

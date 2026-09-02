@@ -742,9 +742,11 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
     try {
       const res = await fetch(`/api/jac/actions/${pa.id}/confirm`, { method: "POST" });
       const data = await res.json();
-      if (res.ok) {
-        updatePendingAction(pa.id, { status: "confirmed" });
-        const confirmMsg = "Done — that's submitted. Anything else you need?";
+      if (res.ok && data?.state === "succeeded") {
+        const confirmMsg = typeof data.message === "string" && data.message.trim()
+          ? data.message.trim()
+          : "The service confirmed that action succeeded.";
+        updatePendingAction(pa.id, { status: "confirmed", resultMessage: confirmMsg });
         setMessages(prev => [...prev, { role: "assistant", content: confirmMsg, buttons: OPENING_OPTIONS }]);
         if (!muted) speak(confirmMsg);
       } else {
@@ -1119,7 +1121,7 @@ export function JacHomepage({ autoEnterChat = false, startVoice = false }: JacHo
                     </div>
                   )}
                   {latestJacMsg.pendingAction.status === "confirming" && <p className="text-[11px] text-white/50 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Submitting…</p>}
-                  {latestJacMsg.pendingAction.status === "confirmed"  && <p className="text-[11px] font-semibold" style={{ color: "hsl(152 100% 55%)" }}>✓ Submitted</p>}
+                  {latestJacMsg.pendingAction.status === "confirmed"  && <p className="text-[11px] font-semibold" style={{ color: "hsl(152 100% 55%)" }}>✓ {latestJacMsg.pendingAction.resultMessage || "Confirmed by the service"}</p>}
                   {latestJacMsg.pendingAction.status === "cancelled"  && <p className="text-[11px] text-white/40">Cancelled</p>}
                   {latestJacMsg.pendingAction.status === "failed"     && <p className="text-[11px]" style={{ color: "hsl(0 80% 65%)" }}>{latestJacMsg.pendingAction.resultMessage || "That didn't go through."}</p>}
                 </div>

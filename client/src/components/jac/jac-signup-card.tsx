@@ -10,12 +10,14 @@
 import { useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { nativeGoogleSignIn, browserGoogleSignIn } from "@/lib/native-google-sign-in";
+import { jacResumeDashboardTarget } from "@/lib/jac-workflow";
+import { transferGuestJacSession } from "@/hooks/use-guest-jac-session";
 
 export interface SignupCardProps {
   /** Dismiss the card and keep talking to JAC. */
   onDismiss: () => void;
   /** Called after a successful native sign-in so the scene can exit. */
-  onAuthed: (accountType?: string) => void;
+  onAuthed: (accountType?: string) => void | Promise<void>;
   /** Optional destination after authentication, for a draft JAC already prepared. */
   returnTo?: string;
 }
@@ -24,6 +26,7 @@ export function SignupCard({ onDismiss, onAuthed, returnTo }: SignupCardProps) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const inFlightRef = useRef(false);
   const isNative = Capacitor.isNativePlatform();
+  const authReturnTo = returnTo || jacResumeDashboardTarget();
 
   async function handleGoogle() {
     if (inFlightRef.current) return;
@@ -33,22 +36,23 @@ export function SignupCard({ onDismiss, onAuthed, returnTo }: SignupCardProps) {
       if (isNative) {
         const result = await nativeGoogleSignIn();
         if (result.ok) {
-          onAuthed(result.accountType);
+          await onAuthed(result.accountType);
           return;
         }
         if (result.reason === "plugin_not_available") {
-          const browserResult = await browserGoogleSignIn({ returnTo });
+          const browserResult = await browserGoogleSignIn({ returnTo: authReturnTo });
           if (browserResult.ok) {
-            onAuthed(browserResult.accountType);
+            await onAuthed(browserResult.accountType);
             return;
           }
         }
       } else {
+        await transferGuestJacSession();
         const googleUrl = new URL(`${window.location.origin}/api/auth/google`);
         // With no explicit work-in-progress destination, let auth-success route
         // from the resolved account type instead of forcing every user through
         // the consumer dashboard first.
-        if (returnTo) googleUrl.searchParams.set("returnTo", returnTo);
+        googleUrl.searchParams.set("returnTo", authReturnTo);
         window.location.href = googleUrl.toString();
         return; // full-page redirect — no state to reset
       }
@@ -120,12 +124,13 @@ export function SignupCard({ onDismiss, onAuthed, returnTo }: SignupCardProps) {
       {/* Phone / email — standard signup flow */}
       <button
         type="button"
-        onClick={() => {
+        onClick={async () => {
+          await transferGuestJacSession();
           const signupUrl = new URL("/signup", window.location.origin);
           signupUrl.searchParams.set("from", "jac");
-          if (returnTo) {
+          if (authReturnTo) {
             signupUrl.searchParams.set("intent", "worker");
-            signupUrl.searchParams.set("returnTo", returnTo);
+            signupUrl.searchParams.set("returnTo", authReturnTo);
           }
           window.location.href = signupUrl.pathname + signupUrl.search;
         }}

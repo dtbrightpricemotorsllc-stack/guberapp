@@ -599,14 +599,16 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated, voiceDisabled = false 
         headers: { "Content-Type": "application/json" },
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.message || "That action could not be updated.");
+      if (!response.ok || (operation === "confirm" && body.state !== "succeeded")) {
+        throw new Error(body.message || "That action could not be updated.");
+      }
       setPendingAction(null);
       setSurface({ kind: "welcome" });
       addMsg({
         id: uid(),
         role: "assistant",
         text: operation === "confirm"
-          ? (body.result?.message || body.summary || "Approved. I’ll take you to the next step.")
+          ? (body.message || "The service confirmed that action succeeded.")
           : "Okay — I left that action untouched. We can revise it or start something else.",
       });
     } catch (error: any) {

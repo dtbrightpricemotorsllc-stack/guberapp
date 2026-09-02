@@ -37,7 +37,7 @@ import { syncJacProfile, buildJacProfileContext, buildMorningBriefing, scanOppor
 import { buildDdFormationSteps } from "./dd-formation";
 import { reportIssue as recordSystemIssue, escalateCriticalIssue, tryAdminMonitoringAnswer, shouldDiagnose } from "./system-issues";
 import { maybeDiagnoseIssue } from "./ai-diagnosis";
-import { isValidActionType, validateAndSummarize, createPendingAction, executeAction } from "./jac-actions";
+import { isValidActionType, validateAndSummarize, createPendingAction, executeAction, actionExecutionState, actionSuccessMessage } from "./jac-actions";
 import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-reward";
 import {
   getZipFallbackTasks, completeGrowthTask, countRealJobsInZip,
@@ -10518,6 +10518,52 @@ export async function registerRoutes(
       .filter(j => viewerCanSeeJobSync(j, req.session.userId, isAdmin, demoIds))
       .map(j => sanitizeJobForPublic(j, req.session.userId, isAdmin));
     res.json(sanitized);
+  });
+
+  // Client-safe JAC search. It follows the normal jobs visibility policy but
+  // returns a deliberately small browse card; exact location/GPS never leaves
+  // this endpoint, including for the posting user.
+  app.get("/api/jac/jobs/nearby", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const query = typeof req.query.query === "string" ? req.query.query.trim().slice(0, 120).toLowerCase() : "";
+      const category = typeof req.query.category === "string" ? req.query.category.trim().slice(0, 120).toLowerCase() : "";
+      const zip = typeof req.query.zip === "string" ? req.query.zip.trim().slice(0, 16) : "";
+      const requestedLimit = Number.parseInt(String(req.query.limit || "10"), 10);
+      const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 20)) : 10;
+      const jobsList = await storage.getJobs();
+      const demoIds = await getDemoUserIds();
+      const isAdmin = await viewerIsAdmin(req);
+      const { listAllowlistedItemIds, filterVisibleItems } = await import("./visibility.js");
+      const allowlisted = await listAllowlistedItemIds("job", userId);
+      const visible = filterVisibleItems(jobsList, {
+        viewerId: userId, isAdmin, allowlistedIds: allowlisted,
+        ownerCheck: (job) => job.postedById === userId,
+      })
+        .filter(job => job.status !== "draft" && job.isPaid)
+        .filter(job => viewerCanSeeJobSync(job, userId, isAdmin, demoIds))
+        .filter(job => !category || String(job.category || "").toLowerCase().includes(category))
+        .filter(job => !zip || String(job.zip || "") === zip)
+        .filter(job => !query || `${job.title || ""} ${job.description || ""}`.toLowerCase().includes(query))
+        .slice(0, limit);
+      const results = visible.map(job => {
+        const safe = sanitizeJobForPublic(job, userId, isAdmin) as any;
+        return {
+          id: safe.id,
+          title: safe.title,
+          category: safe.category,
+          budget: safe.budget,
+          payType: safe.payType,
+          approximateLocation: safe.locationApprox || "Approximate location",
+          urgent: Boolean(safe.urgentSwitch),
+          detailRoute: `/jobs/${safe.id}`,
+        };
+      });
+      return res.json({ state: "succeeded", count: results.length, results });
+    } catch (err: any) {
+      console.error("[jac/jobs/nearby]", err?.message);
+      return res.status(500).json({ state: "failed", error: "Unable to search jobs right now." });
+    }
   });
 
   // /api/my-jobs and /api/jobs/:id are registered earlier — see the
@@ -21414,6 +21460,34 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     return ns;
   }
 
+  const GUEST_WORKFLOWS = new Set(["registration", "search_jobs", "browse_jobs"]);
+  const GUEST_MODULES = new Set(["profile", "jobs"]);
+  const GUEST_WORKFLOW_FIELDS = new Set([
+    "query", "category", "zip", "firstName", "lastName", "email", "phone",
+    "city", "state", "role", "registrationStep",
+  ]);
+  function safeGuestWorkflow(data: any): {
+    currentObjective: string; currentWorkflow: string; selectedModule: string; collectedFields: Record<string, string>;
+  } | null {
+    if (!data || typeof data !== "object") return null;
+    const currentWorkflow = typeof data.currentWorkflow === "string" ? data.currentWorkflow : data.workflow;
+    const selectedModule = typeof data.selectedModule === "string" ? data.selectedModule : data.module;
+    if (!GUEST_WORKFLOWS.has(currentWorkflow) || !GUEST_MODULES.has(selectedModule)) return null;
+    if (currentWorkflow === "registration" && selectedModule !== "profile") return null;
+    if (currentWorkflow !== "registration" && selectedModule !== "jobs") return null;
+    const source = data.collectedFields && typeof data.collectedFields === "object" ? data.collectedFields : {};
+    const collectedFields: Record<string, string> = {};
+    for (const [key, value] of Object.entries(source)) {
+      if (GUEST_WORKFLOW_FIELDS.has(key) && typeof value === "string" && value.length <= 280) {
+        collectedFields[key] = value.trim();
+      }
+    }
+    const currentObjective = typeof data.currentObjective === "string"
+      ? data.currentObjective.trim().slice(0, 280)
+      : currentWorkflow === "registration" ? "Complete registration" : "Search nearby jobs";
+    return { currentObjective, currentWorkflow, selectedModule, collectedFields };
+  }
+
   // POST /api/jac/guest-session — create or revalidate a guest session
   app.post("/api/jac/guest-session", (req: Request, res: Response) => {
     const { guest_session_id } = req.body || {};
@@ -21438,6 +21512,23 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     res.json({ success: true, draftsCount: s.drafts.length });
   });
 
+  // A guest can persist only a resumable registration or job-search workflow.
+  // This intentionally stores no credentials, payment data, exact coordinates, or
+  // creation instruction.
+  app.post("/api/jac/guest-workflow", (req: Request, res: Response) => {
+    const { guest_session_id, workflow } = req.body || {};
+    if (!guest_session_id || typeof guest_session_id !== "string") {
+      return res.status(400).json({ error: "guest_session_id required" });
+    }
+    const safe = safeGuestWorkflow(workflow);
+    if (!safe) return res.status(400).json({ error: "Invalid guest workflow" });
+    const s = ensureGuestSession(guest_session_id);
+    const idx = s.drafts.findIndex(d => d.type === "jac_workflow");
+    const entry: _GuestDraftEntry = { type: "jac_workflow", data: safe, savedAt: Date.now() };
+    if (idx >= 0) s.drafts[idx] = entry; else s.drafts.push(entry);
+    res.json({ state: "saved", expiresAt: s.expiresAt });
+  });
+
   // POST /api/jac/guest-transfer — migrate guest drafts into the authenticated user's account.
   // Called by auth-context after a successful login or signup.
   app.post("/api/jac/guest-transfer", requireAuth, async (req: Request, res: Response) => {
@@ -21453,11 +21544,33 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       }
 
       const results: Array<{ type: string; id?: number; error?: string }> = [];
+      const workflowDraft = [...session.drafts].reverse().find(d => d.type === "jac_workflow");
+      const safeWorkflow = workflowDraft && safeGuestWorkflow(workflowDraft.data);
 
+      if (safeWorkflow) {
+        const persisted = await setJacSession(userId, {
+          currentObjective: safeWorkflow.currentObjective,
+          currentWorkflow: safeWorkflow.currentWorkflow,
+          selectedModule: safeWorkflow.selectedModule,
+          collectedFields: safeWorkflow.collectedFields,
+          draftObjectId: null,
+          pendingApprovalId: null,
+        }, { replaceFields: true });
+        // Keep the complete guest session available for retry if the resumable
+        // workflow cannot be durably written.
+        if (!persisted) {
+          return res.status(503).json({ state: "failed", error: "Workflow transfer could not be saved. Please retry." });
+        }
+        results.push({ type: "jac_workflow" });
+      }
+
+      // Preserve every pre-existing guest draft migration; the workflow above
+      // extends this transfer and never replaces the user's manual draft path.
       for (const draft of session.drafts) {
+        if (draft.type === "jac_workflow") continue;
         try {
           if (draft.type === "job") {
-            const { title, category, price, location, description } = draft.data;
+            const { title, description, category, price, location } = draft.data;
             let lat: number | null = null, lng: number | null = null;
             if (location) { try { const c = await geocodeAddress(location); if (c) { lat = c.lat; lng = c.lng; } } catch {} }
             const job = await storage.createJob({
@@ -21486,7 +21599,6 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
             if (capDesc) await storage.updateUser(userId, { capabilitiesDescription: capDesc } as any);
             results.push({ type: "business_onboarding" });
           } else {
-            // marketplace, load_board, see_for_me — store as capabilities note
             results.push({ type: draft.type });
           }
         } catch (e: any) {
@@ -21498,8 +21610,14 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       const transferred = results.filter(r => !r.error).length;
       console.log(`[jac/guest-transfer] userId=${userId} transferred=${transferred}/${session.drafts.length}`);
       return res.json({
-        success: true, transferred, results,
-        message: transferred > 0 ? "Your drafts have been saved to your account." : "Nothing to transfer.",
+        success: true,
+        state: safeWorkflow ? "transferred" : "empty",
+        transferred,
+        workflow: safeWorkflow?.currentWorkflow ?? null,
+        results,
+        message: safeWorkflow
+          ? "Your workflow is ready to resume."
+          : transferred > 0 ? "Your drafts have been saved to your account." : "Nothing to transfer.",
       });
     } catch (err: any) {
       console.error("[jac/guest-transfer] error:", err?.message);
@@ -23634,6 +23752,21 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     }
   });
 
+  // Command Center reads this to resume a safe, authenticated workflow.
+  app.get("/api/jac/workflow", requireAuth, async (req: Request, res: Response) => {
+    const state = await getJacSession(req.session.userId!);
+    res.json({
+      state: state.currentWorkflow ? "resumable" : "empty",
+      objective: state.currentObjective,
+      workflow: state.currentWorkflow,
+      selectedModule: state.selectedModule,
+      collectedFields: state.collectedFields,
+      draftObjectId: state.draftObjectId,
+      pendingApprovalId: state.pendingApprovalId,
+      updatedAt: state.updatedAt,
+    });
+  });
+
   app.post("/api/jac/actions/:id/confirm", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
@@ -23663,17 +23796,23 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       }
       const port = parseInt(process.env.PORT || "5000", 10);
       const { status, body } = await executeAction(row.action_type, row.payload, req.headers.cookie, port);
-      const success = status >= 200 && status < 300;
+      const state = actionExecutionState(status, body);
+      const success = state === "succeeded";
       await pool.query(
         `UPDATE jac_pending_actions SET status = $2, result_body = $3::jsonb WHERE id = $1`,
         [id, success ? "completed" : "failed", JSON.stringify(body ?? {})]
       );
       if (!success) {
-        return res.status(status).json({ message: body?.message || "That didn't go through — please try again from the page directly.", body });
+        const failureStatus = status >= 400 ? status : 422;
+        return res.status(failureStatus).json({
+          state: "failed",
+          message: body?.message || body?.error || "The action was rejected by the service.",
+          result: body,
+        });
       }
       // Clear session — the confirmed workflow is done, so the next turn starts fresh
       clearJacSession(userId).catch((e: any) => console.error("[jac/actions confirm] clearSession error:", e.message));
-      res.json({ ok: true, summary, result: body });
+      res.json({ state: "succeeded", ok: true, summary, message: actionSuccessMessage(body), result: body });
     } catch (err: any) {
       console.error("[jac/actions confirm]", err.message);
       res.status(500).json({ message: "Something went wrong confirming this action." });

@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { Capacitor } from "@capacitor/core";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
 import {
   ConversationProvider,
@@ -37,6 +38,11 @@ import {
   updateCampaignSession,
   withCampaignSession,
 } from "@/lib/campaign-onboarding";
+import {
+  jacResumeDashboardTarget,
+  persistGuestJacWorkflow,
+  recognizeJacWorkflow,
+} from "@/lib/jac-workflow";
 
 // ── Greeting guard: fires at most once per browser tab session ────────────────
 // ── Cinematic assets ─────────────────────────────────────────────────────────
@@ -393,12 +399,29 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     armVoiceDeadline();
   }, [armVoiceDeadline]);
 
-  const handleConvaiUser = useCallback((text: string) => {
+  const handleConvaiUser = useCallback(async (text: string) => {
     const t = text.trim();
     if (!t || /^[.\s!?,]*$/.test(t)) return;
     appendSharedJacMessage({ role: "user", content: t, source: "homepage" });
     setMessages(prev => [...prev, { role: "user", text: t }]);
-  }, []);
+    const workflow = recognizeJacWorkflow(t);
+    if (workflow) {
+      // Stop the door-owned session before presenting typed authentication.
+      // The workflow is server-backed, so a provider redirect cannot lose it.
+      const persisted = await persistGuestJacWorkflow(workflow);
+      if (!persisted) {
+        setMessages(prev => [...prev, {
+          role: "jac",
+          text: "I couldn’t securely save that workflow yet, so I haven’t opened signup. Please try again.",
+        }]);
+        return;
+      }
+      clearVoiceDeadline();
+      setConvaiActive(false);
+      setShowSignup(true);
+      setSignupReturnTo(jacResumeDashboardTarget());
+    }
+  }, [clearVoiceDeadline]);
 
   const handleConvaiJac = useCallback((text: string) => {
     const t = text.replace(/\[.*?\]/g, "").trim();
@@ -875,14 +898,19 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
 
                 {/* ── INLINE SIGNUP CARD — in the scene, above the bubbles ── */}
                 {showSignup && (
-                  <div style={{ position:"relative", zIndex:8, background:"rgba(0,0,15,.74)" }}>
+                    <div style={{
+                      position: "relative", zIndex: 8, background: "rgba(0,0,15,.74)",
+                      ...(Capacitor.isNativePlatform()
+                        ? { position: "fixed" as const, inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }
+                        : {}),
+                    }}>
                     <SignupCard
                       returnTo={signupReturnTo}
-                      onDismiss={() => setShowSignup(false)}
+                      onDismiss={() => { setShowSignup(false); setConvaiPhase("idle"); }}
                       onAuthed={async (accountType) => {
                         // Door scene exits → standard new-user onboarding/dashboard
                         await transferGuestJacSession();
-                        const fallback = signupReturnTo || (accountType === "business" ? "/biz/dashboard" : "/dashboard");
+                        const fallback = signupReturnTo || (accountType === "business" ? "/biz/dashboard" : jacResumeDashboardTarget());
                         const destination = await claimAndResolveCampaignPath(fallback);
                         setPhase("exiting");
                         setConvaiActive(false);
@@ -947,6 +975,25 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                     >
                       {isMuted ? "🔇" : "🎙️"}
                     </button>}
+
+                    {!isVoiceLive && convaiPhase !== "error" && !showSignup && (
+                      <button
+                        onClick={() => {
+                          convaiConnected.current = false;
+                          setConvaiPhase("connecting");
+                          convaiRef.current?.activate();
+                          setConvaiActive(true);
+                          armVoiceDeadline();
+                        }}
+                        aria-label="Resume JAC voice"
+                        style={{
+                          fontSize:12, color:"rgba(0,220,140,.9)",
+                          background:"none", border:"1px solid rgba(0,220,140,.35)",
+                          borderRadius:12, padding:"7px 10px", cursor:"pointer",
+                          fontFamily:"'Inter',sans-serif", flexShrink:0,
+                        }}
+                      >Resume voice</button>
+                    )}
 
                     {convaiPhase === "error" && (
                       <button

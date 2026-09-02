@@ -35,6 +35,11 @@ import {
   JAC_WELCOME_GREETING,
   readSharedJacConversation,
 } from "@/lib/jac-live-coordination";
+import {
+  getJacWorkflowResume,
+  searchJacJobs,
+  type JacJobResult,
+} from "@/lib/jac-workflow";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
 const DD_PATTERNS = [
@@ -83,6 +88,7 @@ interface Message {
   ddDeadline?: string | null;
   ddEarnedSoFar?: number;
   draftCard?: { draftId: string; title: string };
+  jobSearch?: { count: number; results: JacJobResult[]; message?: string; error?: string };
 }
 
 const DD_GREETING = JAC_WELCOME_GREETING;
@@ -367,6 +373,7 @@ export function GUBERAssistant() {
   const lastUserInputRef = useRef("");
   const lastInputWasVoiceRef = useRef(false);
   const voiceTimingRef = useRef<{ start: number } | null>(null);
+  const workflowResumeCheckedRef = useRef(false);
 
   const { data: jacContext } = useJacContext(!!user && s.open);
   const { data: jacOpportunities } = useJacOpportunities(!!user && s.open);
@@ -489,6 +496,46 @@ export function GUBERAssistant() {
     if (!el) return;
     setTimeout(() => { el.scrollTop = el.scrollHeight; }, 80);
   }, [messages, s.open]);
+
+  useEffect(() => {
+    if (!user || new URLSearchParams(window.location.search).get("jac_resume") !== "1" || store.open) return;
+    markSeen();
+    patchStore({ open: true });
+  }, [user]);
+
+  // A post-auth JAC workflow is intentionally resumed only on the personal
+  // Command Center marker; ordinary dashboard opens remain text-only and quiet.
+  useEffect(() => {
+    const marked = new URLSearchParams(window.location.search).get("jac_resume") === "1";
+    if (!user || !s.open || !marked || workflowResumeCheckedRef.current) return;
+    workflowResumeCheckedRef.current = true;
+    void (async () => {
+      const workflow = await getJacWorkflowResume();
+      if (!workflow) return;
+      if (workflow.workflow === "registration") {
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: "Your account is ready. I’m here when you’re ready to continue.",
+        }]);
+        return;
+      }
+      try {
+        const data = await searchJacJobs(workflow.collectedFields || {});
+        const count = Number.isFinite(data.count) ? data.count : 0;
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: data.message || (count ? `I found ${count} nearby work ${count === 1 ? "opportunity" : "opportunities"}.` : "There are no nearby work opportunities matching that search right now."),
+          jobSearch: { count, results: Array.isArray(data.results) ? data.results : [], message: data.message },
+        }]);
+      } catch (error) {
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: error instanceof Error ? error.message : "Unable to search jobs right now.",
+          jobSearch: { count: 0, results: [], error: "Unable to search jobs right now." },
+        }]);
+      }
+    })();
+  }, [s.open, user]);
 
   // Personalise the signed-in surface without replaying the already-claimed
   // generic greeting.
@@ -1165,6 +1212,47 @@ export function GUBERAssistant() {
                 >
                   {msg.content}
                 </div>
+
+                {/* Results come directly from the authenticated search endpoint.
+                    Count remains the backend count even if a result lacks a route. */}
+                {msg.role === "assistant" && msg.jobSearch && (
+                  <div className="w-full space-y-1.5" data-testid={`jac-job-search-${i}`}>
+                    <p className="text-[10px] text-muted-foreground px-1">
+                      {msg.jobSearch.error
+                        ? msg.jobSearch.error
+                        : `${msg.jobSearch.count} result${msg.jobSearch.count === 1 ? "" : "s"}`}
+                    </p>
+                    {!msg.jobSearch.error && msg.jobSearch.results.map((job, index) => {
+                      const title = typeof job.title === "string" ? job.title : "Untitled job";
+                      const route = typeof job.route === "string" ? job.route : null;
+                      const details = [job.category, job.description]
+                        .filter((value): value is string => typeof value === "string" && Boolean(value))
+                        .join(" · ");
+                      const card = (
+                        <>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-white/90 truncate">{title}</p>
+                            {details && <p className="text-[10px] text-muted-foreground truncate mt-0.5">{details}</p>}
+                          </div>
+                          {route && <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />}
+                        </>
+                      );
+                      return route ? (
+                        <button key={`${String(job.id ?? title)}-${index}`} type="button" onClick={() => handleRoute(route)}
+                          className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-left"
+                          style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 18%)" }}
+                          data-testid={`jac-job-result-${index}`}>{card}</button>
+                      ) : (
+                        <div key={`${String(job.id ?? title)}-${index}`} className="w-full flex items-center gap-2 rounded-xl px-3 py-2"
+                          style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 18%)" }}
+                          data-testid={`jac-job-result-${index}`}>{card}</div>
+                      );
+                    })}
+                    {!msg.jobSearch.error && msg.jobSearch.count === 0 && (
+                      <p className="text-xs text-muted-foreground px-1">Try changing your location or search terms.</p>
+                    )}
+                  </div>
+                )}
 
                 {/* Draft card — shown when JAC creates a job draft by voice */}
                 {msg.role === "assistant" && msg.draftCard && (

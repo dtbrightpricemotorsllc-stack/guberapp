@@ -171,6 +171,27 @@ export function validateAndSummarize(
   return { ok: missing.length === 0, missing, summary };
 }
 
+export type JacActionExecutionState = "succeeded" | "failed";
+
+/**
+ * A transport success is not enough: several existing creation routes report
+ * validation/business-rule failures in a 2xx JSON response.
+ */
+export function actionExecutionState(status: number, body: any): JacActionExecutionState {
+  if (status < 200 || status >= 300) return "failed";
+  if (!body || typeof body !== "object") return "succeeded";
+  if (body.success === false || body.ok === false || Object.prototype.hasOwnProperty.call(body, "error")) {
+    return "failed";
+  }
+  return "succeeded";
+}
+
+/** Use only a response emitted by the creation endpoint for completion copy. */
+export function actionSuccessMessage(body: any): string | null {
+  if (body && typeof body.message === "string" && body.message.trim()) return body.message;
+  return null;
+}
+
 /**
  * Execute a confirmed action by calling GUBER's own creation endpoint
  * in-process, forwarding the user's session cookie so auth + every existing
