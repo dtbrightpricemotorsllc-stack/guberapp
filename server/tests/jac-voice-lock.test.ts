@@ -56,6 +56,22 @@ describe("JAC ElevenLabs voice lock", () => {
     expect(source).not.toContain("ConversationProvider");
   });
 
+  it("keeps the August 23 signed-session payload free of client voice overrides", () => {
+    const source = readFileSync(
+      path.join(projectRoot, "client/src/components/jac/jac-convai-session.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("const params: Record<string, any> = { dynamicVariables: dynVars }");
+    expect(source).not.toContain("createJacConvaiVoiceOverride");
+  });
+
+  it("keeps the custom OpenAI Realtime relay unregistered", () => {
+    const routes = readFileSync(path.join(projectRoot, "server/routes.ts"), "utf8");
+    expect(routes).not.toContain("registerJacRealtimeRelay");
+    expect(routes).toContain('app.post("/api/jac/realtime-token/guest"');
+    expect(routes).toContain("This legacy voice path is disabled.");
+  });
+
   it("does not retain static-audio or browser-speech fallbacks in JAC TTS", () => {
     const ttsSource = readFileSync(path.join(projectRoot, "client/src/lib/jac-tts.ts"), "utf8");
     expect(ttsSource).not.toContain("/jac-audio/");
