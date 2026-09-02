@@ -72,6 +72,14 @@ substitute for the physical-device rows above.
 physical iOS or Android device is attached, and the container does not provide
 `adb` or Xcode's `xcrun` device tooling. No device-level result is claimed.
 
+**Latest check:** 2026-09-02. The deterministic mobile profiles passed
+`e2e/jac-mobile-voice-acceptance.spec.ts` (2/2), the door regressions passed
+`e2e/door-entry-regressions.spec.ts` (12/12), the OpenAI Realtime transport and
+relay unit coverage passed (23/23), and the public provider-route regression
+passed (3/3). These results verify the simulated/browser-controlled lifecycle
+and the no-legacy-ConvAI route guard only; they do not change the pending
+physical-device status.
+
 The four required runtime rows remain pending for both public and signed-in
 JAC:
 
