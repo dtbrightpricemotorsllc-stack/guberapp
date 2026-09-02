@@ -88,8 +88,17 @@ async function enterCanonicalJac(page: Page) {
   const doorEntry = page.getByRole("button", { name: "Enter Team GUBER" });
   if (await doorEntry.isVisible({ timeout: 1_000 }).catch(() => false)) {
     await doorEntry.click();
-    await page.getByRole("button", { name: "Type to JAC instead" }).click();
+    const cinematic = page.getByTestId("guber-door-cinematic");
+    await cinematic.evaluate((video: HTMLVideoElement) => {
+      video.pause();
+      video.dispatchEvent(new Event("ended"));
+    });
+    const switchToTyping = page.getByRole("button", { name: "Switch to typing" });
+    if (await switchToTyping.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await switchToTyping.click();
+    }
     await page.getByRole("button", { name: "Go to full app" }).click();
+    await expect(page.getByTestId("guber-door-scene")).toHaveCount(0);
   }
   await expect(page.getByTestId("jac-live-surface")).toBeVisible();
 }
@@ -158,8 +167,8 @@ test("guest JAC asks whether to browse or post before showing a destination", as
   await page.goto("/");
   await expect(page.getByTestId("page-home")).toBeVisible();
   await enterCanonicalJac(page);
-  // Text JAC must be immediately usable. Voice is optional on web/PWA and
-  // cannot mint a session until the user explicitly taps the voice control.
+  // The public entry may attempt OpenAI Realtime after ENTER, but it must never
+  // switch to the legacy ConvAI transport before text chat becomes usable.
   expect(voiceRequests).toEqual([]);
   await sendGuestMessage(page, "I need help finding someone for a repair.");
 

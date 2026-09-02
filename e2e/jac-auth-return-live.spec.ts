@@ -36,7 +36,10 @@ async function enterCanonicalJac(page: Page) {
       video.pause();
       video.dispatchEvent(new Event("ended"));
     });
-    await page.getByRole("button", { name: "Switch to typing" }).click();
+    const switchToTyping = page.getByRole("button", { name: "Switch to typing" });
+    if (await switchToTyping.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await switchToTyping.click();
+    }
     await page.getByRole("button", { name: "Go to full app" }).click();
     await expect(page.getByTestId("guber-door-scene")).toHaveCount(0);
   }

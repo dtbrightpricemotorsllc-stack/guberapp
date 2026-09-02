@@ -13,11 +13,11 @@ The full-screen door scene is the sole web launch visual on every refresh. The u
 **How to apply:** Serve one generated 9:16 video for the door, light bloom, physical opening, character approach, and camera push. Use source art only to condition generation, never as runtime scene layers. Keep a tiny branded poster only for first paint, reduced motion/data, or video failure. The canonical JAC surface mounts only after optional Explore. Web auth guards and lazy-route fallbacks must use a quiet dark transition, never the mascot loader.
 
 ## Continuous cinematic-to-JAC handoff
-Warm the canonical signed ConvAI session behind the playing door film after the visitor's Enter gesture. ENTER must synchronously prime microphone permission and browser audio before React state updates. On the final frame, keep the same video element mounted and reveal the greeting/conversation controls over it; do not mount another splash or startup surface.
+Start the canonical OpenAI Realtime session behind the playing door film after the visitor's Enter gesture. ENTER must synchronously prime microphone permission and browser audio before React state updates. On the final frame, keep the same video element mounted and reveal the greeting/conversation controls over it; do not mount another splash or startup surface.
 
-**Why:** The door previously used the direct OpenAI realtime relay even when no direct realtime credential existed, so the UI could appear ready while JAC could neither hear nor speak. The cinematic and live JAC must remain one experience.
+**Why:** The cinematic and live JAC must remain one experience with one predictable microphone and audio owner.
 
-**How to apply:** Keep the signed ConvAI controller mounted behind the closed door and after optional Explore. Use ENTER for getUserMedia, audio unlock, and signed-session prewarm; require SDK connection confirmation before showing a live state. Let ConvAI own welcome, STT, turn-taking, and voice replies. The post-Explore and dashboard surfaces stay text-only so they cannot start competing transports.
+**How to apply:** Use ENTER for getUserMedia, audio unlock, and Realtime activation; require connection confirmation before showing a live state. Request the greeting once through the same Realtime session. On Explore, unmount the door controller and reveal text-only canonical JAC. The dashboard stays text-only.
 
 ## ENTER remains the authoritative voice choice
 Never let a voice startup failure switch the door scene into text mode or focus the composer. Microphone denial/unavailability may expose Type Instead, but the keyboard opens only after the visitor explicitly chooses text. Recoverable session, audio, token, and transport failures remain voice-first and preserve gesture-acquired resources for retry.
@@ -63,28 +63,28 @@ Character arrival and camera movement are baked into the single cinematic video.
 - JacState: `"idle" | "listening" | "thinking" | "speaking" | "interrupted"`
 
 ## JacLiveExperience architecture
-- `ConversationProvider` (ElevenLabs) wraps `JacLiveInner`
-- `JacLiveInner` uses `useConversation` hook directly (not JacConvaiSession)
-- Session auto-boots on mount: parallel `getUserMedia` + session fetch
+- `JacOpenAIRealtimeSession` is the only live controller on canonical public voice surfaces
+- OpenAI startup failures stop in text fallback; they do not switch providers
+- Session may auto-boot only when microphone readiness is already known
 - If mic denied: `needGesture=true` → overlay with Allow/Skip buttons
-- Phase mapping: `isSpeaking` → speaking, `isListening` → listening, connected+neither → thinking, else → idle
+- Phase mapping follows the Realtime transport's connecting/listening/thinking/speaking/muted/error states
 - Text mode: POST `/api/jac/onboard` with `mode: "homepage"`, last 12 messages
 - Surface 2: `inferSurface(text)` does keyword routing → updates surface kind
 - Session storage key: `jac_live_msgs_v1` (keeps last 40 messages)
 
 ## Session endpoints
-- Guest (unauthenticated): `/api/jac/convai/investor-session` — no auth required, returns signed URL
-- Logged-in: `/api/jac/convai/session` — requires auth, injects user context
-- Both return: `{ agentId, signedUrl, voiceToken, dynamicVariableName, userContext }`
+- Guest and authenticated Realtime token endpoints mint short-lived relay access
+- The browser connects through the same-origin OpenAI Realtime relay
+- Legacy ConvAI endpoints are not part of the public door/canonical live path
 
 ## Layout
 - Desktop: `lg:flex-row` — Surface 1 = `lg:w-[340px] xl:w-[380px] flex-shrink-0`, Surface 2 = `flex-1`
 - Mobile: `flex-col` — stacked, JAC on top
 
-**Why no JacConvaiSession:** JacLiveInner uses `useConversation` directly for full layout control. JacConvaiSession is still used by other parts (guber-assistant, jac-homepage).
+**Why no JacConvaiSession:** Public live voice must not start or fall back to a competing provider. Legacy specialized surfaces may retain ConvAI independently.
 
 ## Confirmed working
-- `POST /api/jac/convai/investor-session 200` with signed ElevenLabs URL
+- Door/mobile deterministic acceptance covers welcome, listening, user transcript, approved spoken reply, interruption, failure, and retry states
 - JAC character renders with glow animations visible in screenshot
 - Mic overlay shows correctly when mic unavailable
 - Surface 2 welcome chips render on the right side
