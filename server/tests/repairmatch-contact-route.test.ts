@@ -80,6 +80,15 @@ async function query(sql: string, params: any[] = []) {
     Object.assign(state.estimates.find((e) => e.id === params[0]), { status: "shared" });
     return rows();
   }
+  if (normalized.startsWith("SELECT o.*, b.company_name,b.company_logo FROM repairmatch_opportunities")) {
+    return rows(state.opportunities.filter((opportunity) => opportunity.estimate_id === params[0]).map((opportunity) => ({
+      ...opportunity,
+      company_name: state.shops.find((shop) => shop.id === opportunity.shop_profile_id)?.owner_user_id === 201
+        ? "First Collision"
+        : "Second Collision",
+      company_logo: null,
+    })));
+  }
   if (normalized.includes("FROM repairmatch_opportunities o JOIN repairmatch_shop_profiles s") && normalized.includes("e.customer_contact")) {
     const opportunity = state.opportunities.find((o) => o.id === params[0]);
     const shop = state.shops.find((s) => s.id === opportunity?.shop_profile_id);
@@ -248,6 +257,19 @@ describe("RepairMatch shop contact route policy", () => {
       .set("x-test-user", "100")
       .send({ opportunityId: firstOpportunity.id })
       .expect(200);
+
+    const customerView = await customer
+      .get(`/api/repairmatch/estimates/${estimate.id}`)
+      .set("x-test-user", "100")
+      .expect(200);
+    expect(customerView.body).toMatchObject({
+      status: "matched",
+      opportunities: [
+        { id: firstOpportunity.id, status: "accepted" },
+        { id: secondOpportunity.id, status: "not_selected" },
+      ],
+    });
+    expect(customerView.body).not.toHaveProperty("customer_contact");
 
     const accepted = await supertest(app)
       .get(`/api/repairmatch/shop/opportunities/${firstOpportunity.id}`)
