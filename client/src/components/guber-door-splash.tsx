@@ -5,7 +5,7 @@
  *
  * Spec: GUBER_JAC_INTERACTIVE_VIRTUAL_CHARACTER_PROMPT (see attached_assets)
  *   • JAC has four live states: idle | listening | thinking | speaking
- *   • Voice session is continuous (OpenAI Realtime turn-detection, no push-to-talk)
+ *   • Voice session is continuous (ElevenLabs turn-detection, no push-to-talk)
  *   • Greeting fires EXACTLY ONCE per tab session (module-level guard)
  *   • Conversation stays inside the scene — no navigation
  *   • One visible JAC — live character layer only
@@ -14,11 +14,13 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
 import {
-  JacOpenAIRealtimeSession,
-  type JacOpenAIRealtimeSessionHandle,
-} from "@/components/jac/jac-openai-realtime-session";
-import type { JacRealtimePhase } from "@/lib/jac-openai-realtime-transport";
-import type { JacRealtimeErrorKind } from "@/lib/jac-openai-realtime-transport";
+  ConversationProvider,
+} from "@elevenlabs/react";
+import {
+  JacConvaiSession,
+  type JacConvaiSessionHandle,
+  type ConvaiPhase,
+} from "@/components/jac/jac-convai-session";
 import { SignupCard } from "@/components/jac/jac-signup-card";
 import {
   getGuestSessionId,
@@ -51,7 +53,10 @@ const VOICE_FALLBACK_TEXT = "Voice couldn’t connect. You can keep chatting her
 type DoorPhase = "closed" | "unlocking" | "opening" | "open" | "exiting";
 type ConvMode  = "none" | "voice" | "text";
 interface Msg   { role: "jac" | "user"; text: string }
-type VoiceIssue = { kind: JacRealtimeErrorKind; message: string };
+type VoiceIssue = {
+  kind: "microphone-denied" | "microphone-unavailable" | "session" | "audio" | "transport";
+  message: string;
+};
 
 export interface GuberDoorSplashProps {
   onEnterVoice: () => void;
@@ -99,9 +104,9 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const [inputText,    setInputText]    = useState("");
   const [textLoading,  setTextLoading]  = useState(false);
   const [jacSpeakingTx,setJacSpeakingTx] = useState(false); // TTS for text replies
-  const [realtimePhase,  setRealtimePhase]  = useState<JacRealtimePhase>("idle");
-  const [realtimeActive, setRealtimeActive] = useState(false);
-  const [, setRealtimeIssue] = useState<VoiceIssue | null>(null);
+  const [convaiPhase,  setConvaiPhase]  = useState<ConvaiPhase>("idle");
+  const [convaiActive, setConvaiActive] = useState(false);
+  const [, setVoiceIssue] = useState<VoiceIssue | null>(null);
   const [voiceRetryAvailable, setVoiceRetryAvailable] = useState(false);
   const [showSignup,   setShowSignup]   = useState(false);
   const [signupReturnTo, setSignupReturnTo] = useState<string | undefined>();
@@ -117,15 +122,14 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
 
   const timerRefs      = useRef<ReturnType<typeof setTimeout>[]>([]);
   const cinematicRef   = useRef<HTMLVideoElement>(null);
-  const realtimeRef    = useRef<JacOpenAIRealtimeSessionHandle | null>(null);
+  const convaiRef      = useRef<JacConvaiSessionHandle | null>(null);
   const phaseRef       = useRef<DoorPhase>("closed");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef       = useRef<HTMLTextAreaElement>(null);
   const signupOffered  = useRef(false); // in-scene signup card fires at most once per conversation
   const greetingHasFired = useRef(false);
-  const greetingSpoken = useRef(false);
-  const realtimeConnected = useRef(false);
-  const realtimeIssueRef = useRef<VoiceIssue | null>(null);
+  const convaiConnected = useRef(false);
+  const convaiIssueRef = useRef<VoiceIssue | null>(null);
   const voiceDeadlineRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualRetryUsedRef = useRef(false);
 
@@ -142,16 +146,16 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   }, []);
 
   const enterVoiceFallback = useCallback((
-    kind: JacRealtimeErrorKind,
+    kind: VoiceIssue["kind"],
     technicalMessage: string,
   ) => {
     clearVoiceDeadline();
-    realtimeConnected.current = false;
+    convaiConnected.current = false;
     const issue = { kind, message: technicalMessage };
-    realtimeIssueRef.current = issue;
-    setRealtimeIssue(issue);
-    setRealtimePhase("error");
-    setRealtimeActive(false);
+    convaiIssueRef.current = issue;
+    setVoiceIssue(issue);
+    setConvaiPhase("error");
+    setConvaiActive(false);
     setConvMode("text");
     setVoiceRetryAvailable(!manualRetryUsedRef.current);
     cancelAllJacAudio();
@@ -168,7 +172,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
       console.warn("[JAC voice]", {
         category: "transport",
         kind: "connection-deadline",
-        connectedBeforeFailure: realtimeConnected.current,
+        connectedBeforeFailure: convaiConnected.current,
       });
       enterVoiceFallback("transport", "connection deadline exceeded");
     }, VOICE_CONNECTION_DEADLINE_MS);
@@ -216,21 +220,13 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     if (phase !== "closed") return;
     unlockAudioContext();
     // ENTER is the one user-activation gesture for the live voice path:
-    // acquire the mic and prime realtime audio before the film begins, rather
-    // than waiting for a post-render effect.
-    realtimeConnected.current = false;
-    realtimeIssueRef.current = null;
-    setRealtimeIssue(null);
+    // unlock audio now; the Talk button starts ConvAI after the scene opens.
+    convaiConnected.current = false;
+    convaiIssueRef.current = null;
+    setVoiceIssue(null);
     setVoiceRetryAvailable(false);
-    realtimeRef.current?.activate();
     phaseRef.current = "opening";
     setPhase("opening");
-    // Warm voice invisibly behind the film so the reveal lands directly in a
-    // listening JAC instead of showing a second startup state.
-    setConvMode("voice");
-    setRealtimePhase("connecting");
-    setRealtimeActive(true);
-    armVoiceDeadline();
 
     if (useLightweightFallback || !cinematicRef.current) {
       schedule(finishCinematic, 220);
@@ -249,9 +245,11 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     if (phase !== "open") return;
     cancelAllJacAudio();
     setGreetingPlaying(false);
-    // ENTER is intentionally the only mic/session activation gesture.  This
-    // button only returns to the already-established voice surface.
-    if (realtimeActive) setConvMode("voice");
+    setConvMode("voice");
+    setConvaiPhase("connecting");
+    setConvaiActive(true);
+    convaiRef.current?.activate();
+    armVoiceDeadline();
   }
 
   // ── Text mode entry ───────────────────────────────────────────────────────
@@ -260,7 +258,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     cancelAllJacAudio();
     setGreetingPlaying(false);
     clearVoiceDeadline();
-    setRealtimeActive(false);
+    setConvaiActive(false);
     setConvMode("text");
     setTimeout(() => inputRef.current?.focus(), 300);
   }
@@ -351,35 +349,26 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     }
   }
 
-  // ── Realtime callbacks ────────────────────────────────────────────────────
-  const handleRealtimePhase = useCallback((p: JacRealtimePhase) => {
-    // Deactivating after a real failure makes the SDK report idle. That late
-    // idle callback must never erase the terminal fallback and recreate the
-    // Samsung "Waiting for voice connection" trap.
-    if (p === "idle" && realtimeIssueRef.current) return;
-    setRealtimePhase(p);
+  // ── ConvAI callbacks ───────────────────────────────────────────────────────
+  const handleConvaiPhase = useCallback((p: ConvaiPhase) => {
+    if (p === "idle" && convaiIssueRef.current) return;
+    setConvaiPhase(p);
     if (p === "listening" || p === "speaking" || p === "thinking" || p === "muted") {
       clearVoiceDeadline();
-      realtimeConnected.current = true;
-      realtimeIssueRef.current = null;
-      setRealtimeIssue(null);
+      convaiConnected.current = true;
+      convaiIssueRef.current = null;
+      setVoiceIssue(null);
       setVoiceRetryAvailable(false);
-    }
-    if (p === "listening" && !greetingSpoken.current && phaseRef.current !== "exiting") {
-      greetingSpoken.current = true;
-      // The greeting must use the same live Realtime session as the
-      // conversation. Never start a second/local speech provider here.
-      realtimeRef.current?.speakApprovedText(GREETING_TEXT);
     }
   }, [clearVoiceDeadline]);
 
-  const handleRealtimeError = useCallback((message: string, kind: JacRealtimeErrorKind = "transport") => {
+  const handleConvaiError = useCallback((message: string, kind: VoiceIssue["kind"] = "transport") => {
     const microphoneFailure = kind === "microphone-denied" || kind === "microphone-unavailable";
     console.warn("[JAC voice]", {
       category: microphoneFailure ? "microphone" : kind === "session" ? "session-issuance" : "transport",
       kind,
       doorPhase: phaseRef.current,
-      connectedBeforeFailure: realtimeConnected.current,
+      connectedBeforeFailure: convaiConnected.current,
     });
     enterVoiceFallback(kind, message);
   }, [enterVoiceFallback]);
@@ -387,32 +376,27 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const retryVoice = useCallback(() => {
     if (manualRetryUsedRef.current) return;
     manualRetryUsedRef.current = true;
-    realtimeConnected.current = false;
-    realtimeIssueRef.current = null;
-    setRealtimeIssue(null);
+    convaiConnected.current = false;
+    convaiIssueRef.current = null;
+    setVoiceIssue(null);
     setVoiceRetryAvailable(false);
     setConvMode("voice");
-    setRealtimePhase("connecting");
-    // Retry is itself a user gesture, so it can safely reacquire a microphone
-    // after the user changes browser permission. React's active transition is
-    // the only boot owner; do not call reconnect in this turn as well.
-    realtimeRef.current?.activate();
-    setRealtimeActive(true);
+    setConvaiPhase("connecting");
+    convaiRef.current?.activate();
+    setConvaiActive(true);
     armVoiceDeadline();
   }, [armVoiceDeadline]);
 
-  const handleRealtimeUser = useCallback((text: string) => {
+  const handleConvaiUser = useCallback((text: string) => {
     const t = text.trim();
     if (!t || /^[.\s!?,]*$/.test(t)) return;
     appendSharedJacMessage({ role: "user", content: t, source: "homepage" });
     setMessages(prev => [...prev, { role: "user", text: t }]);
   }, []);
 
-  const handleRealtimeJac = useCallback((text: string) => {
-    const t = text.trim();
+  const handleConvaiJac = useCallback((text: string) => {
+    const t = text.replace(/\[.*?\]/g, "").trim();
     if (!t) return;
-    greetingHasFired.current = true;
-    setGreetingPlaying(false);
     setMessages(prev => {
       if (prev.at(-1)?.role === "jac" && prev.at(-1)?.text === t) return prev;
       appendSharedJacMessage({ role: "assistant", content: t, source: "homepage" });
@@ -425,6 +409,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     phaseRef.current = "exiting";
     setPhase("exiting");
     cancelAllJacAudio();
+    setConvaiActive(false);
     schedule(() => {
       // End the door-owned session before revealing the text-only full-app
       // surface. This keeps the door as the sole live-voice owner and prevents
@@ -441,15 +426,15 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const exiting   = phase === "exiting";
   const inConv    = convMode !== "none";
   const conversationVisible = phase === "open" && inConv;
-  const isMuted       = realtimePhase === "muted";
+  const isMuted       = convaiPhase === "muted";
   const isVoiceLive   = convMode === "voice" &&
-    (realtimePhase === "listening" || realtimePhase === "speaking" || realtimePhase === "thinking" || realtimePhase === "muted");
+    (convaiPhase === "listening" || convaiPhase === "speaking" || convaiPhase === "thinking" || convaiPhase === "muted");
   const statusLabel   =
-    realtimePhase === "connecting" ? "Connecting to JAC…" :
-    realtimePhase === "thinking"   ? "JAC is thinking…" :
-    realtimePhase === "speaking"   ? "JAC is speaking" :
-    realtimePhase === "listening"  ? "Listening…" :
-    realtimePhase === "muted"      ? "Muted — tap 🎙️ to unmute" : "Connecting to JAC…";
+    convaiPhase === "connecting" ? "Connecting to JAC…" :
+    convaiPhase === "thinking"   ? "JAC is thinking…" :
+    convaiPhase === "speaking"   ? "JAC is speaking" :
+    convaiPhase === "listening"  ? "Listening…" :
+    convaiPhase === "muted"      ? "Muted — tap 🎙️ to unmute" : "JAC is here";
 
   return (
     <>
@@ -853,7 +838,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                   }}>{m.text}</p>
                 </div>
               ))}
-              {(textLoading || realtimePhase === "thinking" || realtimePhase === "connecting") && (
+              {(textLoading || convaiPhase === "thinking" || convaiPhase === "connecting") && (
                 <div style={{
                   alignSelf:"flex-start", color:"rgba(0,220,190,.95)",
                   fontSize:"clamp(14px,3.8vw,18px)",
@@ -894,7 +879,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                         const fallback = signupReturnTo || (accountType === "business" ? "/biz/dashboard" : "/dashboard");
                         const destination = await claimAndResolveCampaignPath(fallback);
                         setPhase("exiting");
-                        setRealtimeActive(false);
+                        setConvaiActive(false);
                         cancelAllJacAudio();
                         schedule(() => {
                           setMounted(false);
@@ -921,21 +906,21 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                       <span style={{
                         fontSize:"clamp(11px,3vw,13px)",
                         color:
-                          realtimePhase === "speaking"  ? "rgba(130,100,255,.95)" :
-                          realtimePhase === "listening" ? "rgba(0,220,140,.95)" :
-                          realtimePhase === "thinking"  ? "rgba(180,140,255,.85)" :
+                          convaiPhase === "speaking"  ? "rgba(130,100,255,.95)" :
+                          convaiPhase === "listening" ? "rgba(0,220,140,.95)" :
+                          convaiPhase === "thinking"  ? "rgba(180,140,255,.85)" :
                           "rgba(255,255,255,.5)",
                         fontFamily:"'Inter',sans-serif", letterSpacing:".04em",
                         transition:"color 300ms ease",
                       }}>
                         {statusLabel}
                       </span>
-                      <ListenWave active={realtimePhase === "listening"} />
+                      <ListenWave active={convaiPhase === "listening"} />
                     </div>
 
                     {/* MUTE / UNMUTE toggle (replaces push-to-talk) */}
                     {isVoiceLive && <button
-                      onClick={() => realtimeRef.current?.toggleMute()}
+                      onClick={() => convaiRef.current?.toggleMute()}
                       aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
                       className="gdoor-mute-btn"
                       style={{
@@ -950,14 +935,14 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                         display:"flex", alignItems:"center", justifyContent:"center",
                         fontSize:20, color:"#fff",
                         transition:"background 200ms ease, border 200ms ease",
-                        animation: !isMuted && realtimePhase === "listening"
+                        animation: !isMuted && convaiPhase === "listening"
                           ? "think-pulse 2s ease-in-out infinite" : "none",
                       }}
                     >
                       {isMuted ? "🔇" : "🎙️"}
                     </button>}
 
-                    {realtimePhase === "error" && (
+                    {convaiPhase === "error" && (
                       <button
                         onClick={retryVoice}
                         aria-label="Retry JAC voice"
@@ -975,7 +960,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
                       onClick={() => {
                         clearVoiceDeadline();
                         setConvMode("text");
-                        setRealtimeActive(false);
+                        setConvaiActive(false);
                         setTimeout(() => inputRef.current?.focus(), 300);
                       }}
                       aria-label="Switch to typing"
@@ -1083,18 +1068,21 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
         {/* ── end open-scene UI ─────────────────────────────────────────── */}
 
 
-        {/* Keep the canonical OpenAI Realtime controller mounted while the
-            door is closed so ENTER can synchronously prime mic/audio permission. */}
-        <JacOpenAIRealtimeSession
-          ref={realtimeRef}
-          active={realtimeActive}
-          sessionEndpoint="/api/jac/realtime-token/guest"
-          e2eTarget="homepage"
-          onPhaseChange={handleRealtimePhase}
-          onUserTranscript={handleRealtimeUser}
-          onJacResponse={handleRealtimeJac}
-          onError={handleRealtimeError}
-        />
+        {/* The reference canonical voice path uses one invisible ConvAI owner.
+            It stays mounted through the door transition so the Talk gesture can
+            synchronously prime mic/audio before the provider opens its stream. */}
+        <ConversationProvider>
+          <JacConvaiSession
+            ref={convaiRef}
+            active={convaiActive}
+            sessionEndpoint="/api/jac/convai/public-session"
+            e2eTarget="homepage"
+            onPhaseChange={handleConvaiPhase}
+            onUserTranscript={handleConvaiUser}
+            onJacResponse={handleConvaiJac}
+            onError={handleConvaiError}
+          />
+        </ConversationProvider>
 
       </div>
     </>

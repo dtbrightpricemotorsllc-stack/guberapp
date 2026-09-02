@@ -8,16 +8,19 @@ const authState = vi.hoisted(() => ({ user: null as { id: number } | null }));
 const microphoneReady = vi.hoisted(() => vi.fn());
 const saveGuestDraftSpy = vi.hoisted(() => vi.fn());
 const saveServiceOfferPrefillSpy = vi.hoisted(() => vi.fn());
-const realtimeProps = vi.hoisted(() => ({ current: null as any }));
-const realtimeHandle = vi.hoisted(() => ({
-  end: vi.fn(), reconnect: vi.fn(), toggleMute: vi.fn(), speakApprovedText: vi.fn(),
+const convaiProps = vi.hoisted(() => ({ current: null as any }));
+const convaiHandle = vi.hoisted(() => ({
+  activate: vi.fn(), reconnect: vi.fn(), toggleMute: vi.fn(),
 }));
 
-vi.mock("@/components/jac/jac-openai-realtime-session", () => ({
-  JacOpenAIRealtimeSession: React.forwardRef((props: any, ref: any) => {
-    realtimeProps.current = props;
-    React.useImperativeHandle(ref, () => realtimeHandle);
-    React.useEffect(() => () => { realtimeHandle.end(); }, []);
+vi.mock("@elevenlabs/react", () => ({
+  ConversationProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+vi.mock("@/components/jac/jac-convai-session", () => ({
+  JacConvaiSession: React.forwardRef((props: any, ref: any) => {
+    convaiProps.current = props;
+    React.useImperativeHandle(ref, () => convaiHandle);
+    React.useEffect(() => () => {}, []);
     return null;
   }),
 }));
@@ -42,8 +45,8 @@ describe("JacLiveExperience realtime voice", () => {
   afterEach(cleanup);
   beforeEach(() => {
     authState.user = null;
-    realtimeProps.current = null;
-    Object.values(realtimeHandle).forEach(spy => spy.mockReset());
+    convaiProps.current = null;
+    Object.values(convaiHandle).forEach(spy => spy.mockReset());
     microphoneReady.mockResolvedValue(true);
     window.sessionStorage.clear();
     Element.prototype.scrollIntoView = vi.fn();
@@ -53,23 +56,22 @@ describe("JacLiveExperience realtime voice", () => {
     }));
   });
 
-  it("auto-starts web voice when microphone access is already granted", async () => {
+  it("auto-starts ConvAI voice when microphone access is already granted", async () => {
     const view = render(<JacLiveExperience />);
-    expect(getJacLiveSessionEndpoint(false)).toBe("/api/jac/realtime-token/guest");
-    await waitFor(() => expect(realtimeProps.current.active).toBe(true));
-    expect(realtimeProps.current.sessionEndpoint).toBe("/api/jac/realtime-token/guest");
-    expect(realtimeProps.current.e2eTarget).toBe("homepage");
+    expect(getJacLiveSessionEndpoint(false)).toBe("/api/jac/convai/investor-session");
+    await waitFor(() => expect(convaiProps.current.active).toBe(true));
+    expect(convaiProps.current.sessionEndpoint).toBe("/api/jac/convai/investor-session");
+    expect(convaiProps.current.e2eTarget).toBe("homepage");
     authState.user = { id: 1 };
     view.rerender(<JacLiveExperience />);
-    await waitFor(() => expect(realtimeHandle.end).toHaveBeenCalled());
-    expect(realtimeProps.current.sessionEndpoint).toBe("/api/jac/realtime-token/session");
+    await waitFor(() => expect(convaiProps.current.sessionEndpoint).toBe("/api/jac/convai/session"));
   });
 
   it("keeps text available without attempting voice when permission is not ready", async () => {
     microphoneReady.mockResolvedValue(false);
     const view = render(<JacLiveExperience />);
     await new Promise(resolve => setTimeout(resolve, 0));
-    expect(realtimeProps.current.active).toBe(false);
+    expect(convaiProps.current.active).toBe(false);
     expect(view.getByRole("button", { name: /start voice/i })).toBeTruthy();
     expect(view.getByLabelText("Message JAC")).toBeTruthy();
   });
@@ -77,44 +79,42 @@ describe("JacLiveExperience realtime voice", () => {
   it("stays text-only when the public door owns the voice lifecycle", async () => {
     const view = render(<JacLiveExperience voiceDisabled />);
     await new Promise(resolve => setTimeout(resolve, 0));
-    expect(realtimeProps.current).toBeNull();
+    expect(convaiProps.current).toBeNull();
     expect(view.queryByRole("button", { name: /start voice/i })).toBeNull();
     expect(view.getByLabelText("Message JAC")).toBeTruthy();
     expect(view.getByText("Text chat is ready")).toBeTruthy();
   });
 
-  it("routes a voice transcript through onboard once and speaks only approved text", async () => {
+  it("keeps ConvAI transcript and assistant response in the shared conversation", async () => {
     const view = render(<JacLiveExperience />);
     fireEvent.click(view.getByRole("button", { name: /start voice/i }));
-    await waitFor(() => expect(realtimeProps.current.active).toBe(true));
-    await act(async () => { realtimeProps.current.onUserTranscript("Find me work nearby"); });
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/jac/onboard", expect.anything()));
-    expect(realtimeHandle.speakApprovedText).toHaveBeenCalledWith("I can help you find nearby jobs.");
-    act(() => realtimeProps.current.onJacResponse("I can help you find nearby jobs."));
+    await waitFor(() => expect(convaiProps.current.active).toBe(true));
+    act(() => convaiProps.current.onUserTranscript("Find me work nearby"));
+    act(() => convaiProps.current.onJacResponse("I can help you find nearby jobs."));
     fireEvent.click(view.getByRole("button", { name: "Chat" }));
     expect(view.getAllByText("I can help you find nearby jobs.")).toHaveLength(1);
   });
 
-  it("stays on OpenAI after an initial failure and keeps text available", async () => {
+  it("keeps text available after an initial ConvAI failure", async () => {
     const view = render(<JacLiveExperience />);
-    await waitFor(() => expect(realtimeProps.current.active).toBe(true));
-    act(() => realtimeProps.current.onError("Voice connection lost."));
+    await waitFor(() => expect(convaiProps.current.active).toBe(true));
+    act(() => convaiProps.current.onError("Voice connection lost."));
     expect(view.getByTestId("jac-live-voice-error").textContent)
       .toContain("Voice is unavailable right now. JAC text is still ready.");
-    expect(realtimeProps.current.active).toBe(false);
-    expect(realtimeHandle.reconnect).not.toHaveBeenCalled();
+    expect(convaiProps.current.active).toBe(false);
+    expect(convaiHandle.reconnect).not.toHaveBeenCalled();
   });
 
   it("reconnects at most twice after a connected disconnect", async () => {
     const view = render(<JacLiveExperience />);
     fireEvent.click(view.getByRole("button", { name: /start voice/i }));
-    act(() => realtimeProps.current.onPhaseChange("listening"));
-    act(() => realtimeProps.current.onError("network lost"));
-    await waitFor(() => expect(realtimeHandle.reconnect).toHaveBeenCalledTimes(1), { timeout: 1200 });
-    act(() => realtimeProps.current.onError("network lost"));
-    await waitFor(() => expect(realtimeHandle.reconnect).toHaveBeenCalledTimes(2), { timeout: 2200 });
-    act(() => realtimeProps.current.onError("network lost"));
+    act(() => convaiProps.current.onPhaseChange("listening"));
+    act(() => convaiProps.current.onError("network lost"));
+    await waitFor(() => expect(convaiHandle.reconnect).toHaveBeenCalledTimes(1), { timeout: 1200 });
+    act(() => convaiProps.current.onError("network lost"));
+    await waitFor(() => expect(convaiHandle.reconnect).toHaveBeenCalledTimes(2), { timeout: 2200 });
+    act(() => convaiProps.current.onError("network lost"));
     await new Promise(resolve => setTimeout(resolve, 1800));
-    expect(realtimeHandle.reconnect).toHaveBeenCalledTimes(2);
+    expect(convaiHandle.reconnect).toHaveBeenCalledTimes(2);
   });
 });

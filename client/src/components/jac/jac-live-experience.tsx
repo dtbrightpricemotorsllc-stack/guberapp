@@ -5,7 +5,7 @@
  *   Surface 1 (left / top)   — JAC character + conversation controls
  *   Surface 2 (right / bottom) — context-driven action area
  *
- * Voice: OpenAI Realtime, starts automatically only when microphone permission
+ * Voice: ElevenLabs ConvAI, starts automatically only when microphone permission
  * is already granted; otherwise it starts from the explicit mic control.
  * Text:  /api/jac/onboard with full conversation history.
  * Both modes share the same message history and Surface 2 state.
@@ -25,10 +25,13 @@ import { Link } from "wouter";
 import { useGuestJacSession } from "@/hooks/use-guest-jac-session";
 import { cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
 import {
-  JacOpenAIRealtimeSession,
-  type JacOpenAIRealtimeSessionHandle,
-} from "@/components/jac/jac-openai-realtime-session";
-import type { JacRealtimePhase } from "@/lib/jac-openai-realtime-transport";
+  ConversationProvider,
+} from "@elevenlabs/react";
+import {
+  JacConvaiSession,
+  type JacConvaiSessionHandle,
+  type ConvaiPhase,
+} from "@/components/jac/jac-convai-session";
 import {
   appendSharedJacMessage,
   claimJacWelcomeGreeting,
@@ -88,8 +91,8 @@ const WELCOME_GREETING = JAC_WELCOME_GREETING;
 
 export function getJacLiveSessionEndpoint(isAuthenticated: boolean): string {
   return isAuthenticated
-    ? "/api/jac/realtime-token/session"
-    : "/api/jac/realtime-token/guest";
+    ? "/api/jac/convai/session"
+    : "/api/jac/convai/investor-session";
 }
 
 // ── Session storage persistence ──────────────────────────────────────────────
@@ -447,13 +450,12 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated, voiceDisabled = false 
   const mountedRef = useRef(false);
   const voiceRequestedRef = useRef(false);
   const intentionalEndRef = useRef(false);
-  const sessionRef = useRef<JacOpenAIRealtimeSessionHandle>(null);
-  const statusRef = useRef<JacRealtimePhase>("idle");
+  const sessionRef = useRef<JacConvaiSessionHandle>(null);
+  const statusRef = useRef<ConvaiPhase>("idle");
   const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recoveryAttemptsRef = useRef(0);
   const voiceConnectedRef = useRef(false);
   const recoveryRef = useRef<((reason: string) => void) | null>(null);
-  const pendingVoiceReplyRef = useRef(false);
   const automaticVoiceStartClaimRef = useRef(createJacAutomaticVoiceStartClaim());
 
   const [msgs, setMsgs]         = useState<Msg[]>(loadMsgs);
@@ -466,7 +468,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated, voiceDisabled = false 
   const [muted, setMutedLocal]  = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
-  const [voicePhase, setVoicePhase] = useState<JacRealtimePhase>("idle");
+  const [voicePhase, setVoicePhase] = useState<ConvaiPhase>("idle");
   const [voiceActive, setVoiceActive] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
@@ -495,7 +497,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated, voiceDisabled = false 
     });
   }
 
-  // ── Map Realtime phase → JacState ─────────────────────────────────────────
+  // ── Map ConvAI phase → JacState ────────────────────────────────────────────
   const connected = voicePhase === "listening" || voicePhase === "thinking" || voicePhase === "speaking" || voicePhase === "muted";
   const voiceIsSpeaking = voicePhase === "speaking";
   const voiceIsListening = voicePhase === "listening";
@@ -579,10 +581,6 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated, voiceDisabled = false 
         setSurface(nextPendingAction
           ? { kind: "confirmation", data: { pendingAction: nextPendingAction } }
           : { kind, route });
-        if (pendingVoiceReplyRef.current) {
-          pendingVoiceReplyRef.current = false;
-          sessionRef.current?.speakApprovedText(reply);
-        }
       }
     } catch {
       addMsg({ id: uid(), role: "assistant", text: "Sorry, I had trouble responding. Try again?" });
@@ -631,6 +629,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated, voiceDisabled = false 
     setReconnecting(false);
     cancelAllJacAudio();
     unlockAudioContext();
+    sessionRef.current?.activate();
     setVoiceActive(true);
   }, []);
 
@@ -657,7 +656,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated, voiceDisabled = false 
     }, attempt === 1 ? 700 : 1600);
   }, []);
 
-  const onVoicePhaseChange = useCallback((phase: JacRealtimePhase) => {
+  const onVoicePhaseChange = useCallback((phase: ConvaiPhase) => {
     statusRef.current = phase;
     setVoicePhase(phase);
     if (phase === "listening" || phase === "thinking" || phase === "speaking" || phase === "muted") {
@@ -706,7 +705,7 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated, voiceDisabled = false 
       mountedRef.current = false;
       intentionalEndRef.current = true;
       if (recoveryTimerRef.current) clearTimeout(recoveryTimerRef.current);
-      sessionRef.current?.end();
+       setVoiceActive(false);
     };
   }, [startVoice, voiceDisabled]);
 
@@ -749,14 +748,14 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated, voiceDisabled = false 
     }
     recoveryAttemptsRef.current = 0;
     voiceConnectedRef.current = false;
-    sessionRef.current?.end();
+    setVoiceActive(false);
     setEnded(false);
     setError(null);
     setReconnecting(true);
     setTimeout(() => {
       intentionalEndRef.current = false;
+      sessionRef.current?.activate();
       setVoiceActive(true);
-      sessionRef.current?.reconnect();
     }, 400);
   }, []);
 
@@ -790,19 +789,20 @@ function JacLiveInner({ sessionEndpoint, isAuthenticated, voiceDisabled = false 
       }}
     >
       {!voiceDisabled && (
-        <JacOpenAIRealtimeSession
+        <JacConvaiSession
           ref={sessionRef}
           e2eTarget="homepage"
           active={voiceActive}
           sessionEndpoint={sessionEndpoint}
           onPhaseChange={onVoicePhaseChange}
           onUserTranscript={(text) => {
-            pendingVoiceReplyRef.current = true;
-            void sendText(text);
+            addMsg({ id: uid(), role: "user", text });
           }}
-          // Realtime speech is only accepted after the onboard brain has approved
-          // and appended it above; never duplicate it in the transcript.
-          onJacResponse={() => {}}
+          onJacResponse={(text) => {
+            const kind = inferSurface(text);
+            addMsg({ id: uid(), role: "assistant", text, surface: kind });
+            setSurface({ kind });
+          }}
           onError={onVoiceError}
         />
       )}
@@ -1011,14 +1011,18 @@ export function JacLiveExperience({ voiceDisabled = false }: { voiceDisabled?: b
   // Authentication hydrates after the initial public render. The endpoint is
   // part of the realtime-session identity; recent transcript remains available
   // through shared storage.
-  const sessionEndpoint = getJacLiveSessionEndpoint(!!user);
+  const sessionEndpoint = user
+    ? "/api/jac/convai/session"
+    : "/api/jac/convai/investor-session";
 
   return (
-    <JacLiveInner
-      key={sessionEndpoint}
-      sessionEndpoint={sessionEndpoint}
-      isAuthenticated={!!user}
-      voiceDisabled={voiceDisabled}
-    />
+    <ConversationProvider key={sessionEndpoint}>
+      <JacLiveInner
+        key={sessionEndpoint}
+        sessionEndpoint={sessionEndpoint}
+        isAuthenticated={!!user}
+        voiceDisabled={voiceDisabled}
+      />
+    </ConversationProvider>
   );
 }
