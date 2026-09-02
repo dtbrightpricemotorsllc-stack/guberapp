@@ -9,12 +9,8 @@ const microphoneReady = vi.hoisted(() => vi.fn());
 const saveGuestDraftSpy = vi.hoisted(() => vi.fn());
 const saveServiceOfferPrefillSpy = vi.hoisted(() => vi.fn());
 const realtimeProps = vi.hoisted(() => ({ current: null as any }));
-const convaiProps = vi.hoisted(() => ({ current: null as any }));
 const realtimeHandle = vi.hoisted(() => ({
   end: vi.fn(), reconnect: vi.fn(), toggleMute: vi.fn(), speakApprovedText: vi.fn(),
-}));
-const convaiHandle = vi.hoisted(() => ({
-  reconnect: vi.fn(), toggleMute: vi.fn(), connected: false, isMuted: false,
 }));
 
 vi.mock("@/components/jac/jac-openai-realtime-session", () => ({
@@ -22,13 +18,6 @@ vi.mock("@/components/jac/jac-openai-realtime-session", () => ({
     realtimeProps.current = props;
     React.useImperativeHandle(ref, () => realtimeHandle);
     React.useEffect(() => () => { realtimeHandle.end(); }, []);
-    return null;
-  }),
-}));
-vi.mock("@/components/jac/jac-convai-session", () => ({
-  JacConvaiSession: React.forwardRef((props: any, ref: any) => {
-    convaiProps.current = props;
-    React.useImperativeHandle(ref, () => convaiHandle);
     return null;
   }),
 }));
@@ -54,10 +43,7 @@ describe("JacLiveExperience realtime voice", () => {
   beforeEach(() => {
     authState.user = null;
     realtimeProps.current = null;
-    convaiProps.current = null;
     Object.values(realtimeHandle).forEach(spy => spy.mockReset());
-    convaiHandle.reconnect.mockReset();
-    convaiHandle.toggleMute.mockReset();
     microphoneReady.mockResolvedValue(true);
     window.sessionStorage.clear();
     Element.prototype.scrollIntoView = vi.fn();
@@ -92,7 +78,6 @@ describe("JacLiveExperience realtime voice", () => {
     const view = render(<JacLiveExperience voiceDisabled />);
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(realtimeProps.current).toBeNull();
-    expect(convaiProps.current).toBeNull();
     expect(view.queryByRole("button", { name: /start voice/i })).toBeNull();
     expect(view.getByLabelText("Message JAC")).toBeTruthy();
     expect(view.getByText("Text chat is ready")).toBeTruthy();
@@ -110,18 +95,14 @@ describe("JacLiveExperience realtime voice", () => {
     expect(view.getAllByText("I can help you find nearby jobs.")).toHaveLength(1);
   });
 
-  it("falls back once after an initial OpenAI failure, then keeps text available", async () => {
+  it("stays on OpenAI after an initial failure and keeps text available", async () => {
     const view = render(<JacLiveExperience />);
     await waitFor(() => expect(realtimeProps.current.active).toBe(true));
     act(() => realtimeProps.current.onError("Voice connection lost."));
-    await waitFor(() => expect(convaiProps.current?.active).toBe(true));
-    expect(view.queryByTestId("jac-live-voice-error")).toBeNull();
-    act(() => convaiProps.current.onError("Could not reach JAC voice."));
     expect(view.getByTestId("jac-live-voice-error").textContent)
       .toContain("Voice is unavailable right now. JAC text is still ready.");
-    await new Promise(resolve => setTimeout(resolve, 800));
+    expect(realtimeProps.current.active).toBe(false);
     expect(realtimeHandle.reconnect).not.toHaveBeenCalled();
-    expect(convaiHandle.reconnect).not.toHaveBeenCalled();
   });
 
   it("reconnects at most twice after a connected disconnect", async () => {

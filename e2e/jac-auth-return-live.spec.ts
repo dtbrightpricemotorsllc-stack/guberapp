@@ -12,31 +12,7 @@ import { test, expect, type Page, type Route } from "@playwright/test";
 const DEMO_EMAIL = "demo.consumer@guberapp.internal";
 const DEMO_PASSWORD = "GuberDemo2026!";
 const PUBLIC_TEXT_REPLY = "I can explain your options and keep the next step safe.";
-const PUBLIC_VOICE_REPLY = "I heard you. We can continue after you sign in.";
-const AUTH_VOICE_REPLY = "Welcome back. Your earlier conversation is still here.";
 const AUTH_TEXT_REPLY = "Your profile is the safe place to review those account details.";
-
-type VoiceKind =
-  | "connect"
-  | "listening"
-  | "thinking"
-  | "speaking"
-  | "user-transcript"
-  | "assistant-response"
-  | "error"
-  | "disconnect";
-
-async function emitVoice(
-  page: Page,
-  target: "homepage" | "assistant",
-  kind: VoiceKind,
-  text?: string,
-) {
-  await page.evaluate(
-    (detail) => window.dispatchEvent(new CustomEvent("jac:e2e-voice", { detail })),
-    { target, kind, text },
-  );
-}
 
 async function dismissDashboardOverlays(page: Page) {
   const gpsConfirm = page.getByTestId("button-gps-disclaimer-confirm");
@@ -55,8 +31,14 @@ async function enterCanonicalJac(page: Page) {
   const doorEntry = page.getByRole("button", { name: "Enter Team GUBER" });
   if (await doorEntry.isVisible({ timeout: 1_000 }).catch(() => false)) {
     await doorEntry.click();
-    await page.getByRole("button", { name: "Type to JAC instead" }).click();
+    const cinematic = page.getByTestId("guber-door-cinematic");
+    await cinematic.evaluate((video: HTMLVideoElement) => {
+      video.pause();
+      video.dispatchEvent(new Event("ended"));
+    });
+    await page.getByRole("button", { name: "Switch to typing" }).click();
     await page.getByRole("button", { name: "Go to full app" }).click();
+    await expect(page.getByTestId("guber-door-scene")).toHaveCount(0);
   }
   await expect(page.getByTestId("jac-live-surface")).toBeVisible();
 }
@@ -100,20 +82,6 @@ test("JAC takes a real user from greeting to a safe action across login", async 
     });
   });
   await page.route("**/api/ai/guber-assist", async (route) => {
-    const payload = route.request().postDataJSON();
-    if (payload?.voiceMode === true) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          reply: AUTH_VOICE_REPLY,
-          route: null,
-          actions: [],
-          options: [],
-        }),
-      });
-      return;
-    }
     assistantTextAttempts += 1;
     if (assistantTextAttempts === 1) {
       await route.fulfill({
@@ -143,36 +111,15 @@ test("JAC takes a real user from greeting to a safe action across login", async 
   await page.route("**/api/jac/pending-draft-card", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ card: null }) }));
 
-  // A first OpenAI outage switches once to the configured ConvAI transport
-  // without showing a terminal error or taking text chat away.
+  // Enter the canonical JAC surface through the existing text path. Live voice
+  // behavior is covered separately by the mobile/door acceptance specs.
   await page.goto("/?jac_e2e=1");
   await expect(page.getByTestId("page-home")).toBeVisible();
   await enterCanonicalJac(page);
-  const startVoice = page.getByRole("button", { name: "Start voice" });
-  if (await startVoice.isVisible({ timeout: 1_000 }).catch(() => false)) {
-    await startVoice.click({ timeout: 1_000 }).catch(() => {
-      // Permission-ready browsers may auto-start and replace this button
-      // between the visibility check and click.
-    });
-  }
-  await emitVoice(page, "homepage", "error", "temporary voice outage");
-  await expect(page.getByTestId("jac-live-voice-status")).toHaveText("Connecting…");
-
-  // The deterministic provider seam emits the same callbacks as the backup
-  // transport, including the approved assistant response.
-  await emitVoice(page, "homepage", "connect");
-  await expect(page.getByTestId("jac-live-voice-status")).toHaveText("Listening…");
-  await emitVoice(page, "homepage", "user-transcript", "Please remember that I need account guidance.");
-  await emitVoice(page, "homepage", "assistant-response", PUBLIC_TEXT_REPLY);
-  await emitVoice(page, "homepage", "speaking");
-  await expect(page.getByTestId("jac-live-voice-status")).toHaveText("JAC is speaking");
-
+  const publicInput = page.getByPlaceholder("Type to JAC…");
+  await publicInput.fill("Please remember that I need account guidance.");
+  await publicInput.press("Enter");
   await page.getByRole("button", { name: "Chat", exact: true }).click();
-  await expect(page.getByTestId("jac-live-transcript")).toContainText("Please remember that I need account guidance.");
-  await expect(page.getByTestId("jac-live-transcript")).toContainText(PUBLIC_TEXT_REPLY);
-
-  await page.getByLabel("Message JAC").fill("Explain my safe account options.");
-  await page.getByLabel("Message JAC").press("Enter");
   await expect(page.getByTestId("jac-live-transcript")).toContainText(PUBLIC_TEXT_REPLY);
 
   // Use the real login form and demo fixture account in the same tab so browser
@@ -185,26 +132,13 @@ test("JAC takes a real user from greeting to a safe action across login", async 
   await expect(page.getByTestId("page-dashboard")).toBeVisible();
   await dismissDashboardOverlays(page);
 
-  // Authenticated web voice must remain idle until the real user taps the mic.
+  // The authenticated dashboard deliberately remains text-only so the public
+  // door/canonical surface remains the single live voice owner.
   await page.getByTestId("button-guber-assistant").click();
   const thread = page.getByTestId("assistant-message-thread");
   await expect(thread).toContainText(PUBLIC_TEXT_REPLY);
-  await page.getByRole("button", { name: "Start voice" }).click();
-  await emitVoice(page, "assistant", "connect");
-  await emitVoice(page, "assistant", "user-transcript", "Can we continue from before?");
-  await expect(thread).toContainText(AUTH_VOICE_REPLY);
-  await emitVoice(page, "assistant", "speaking");
-  await expect(page.getByTestId("status-convai-phase")).toHaveText("Speaking…");
-  await expect(thread).toContainText("Can we continue from before?");
-  await expect(thread).toContainText(AUTH_VOICE_REPLY);
-
-  // A provider failure remains visible and retryable. Retry renegotiates the
-  // authenticated session instead of silently falling back or changing modes.
-  await emitVoice(page, "assistant", "error", "Voice network interrupted.");
-  await expect(page.getByTestId("text-convai-error")).toHaveText("Voice network interrupted.");
-  await page.getByTestId("button-convai-reconnect").click();
-  await emitVoice(page, "assistant", "listening");
-  await expect(page.getByTestId("status-convai-phase")).toHaveText("Listening…");
+  await expect(page.getByTestId("button-dd-mic")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Start voice" })).toHaveCount(0);
 
   // Text failure is explicit, a second request succeeds, and the only action in
   // the smoke path is safe navigation to the profile page.

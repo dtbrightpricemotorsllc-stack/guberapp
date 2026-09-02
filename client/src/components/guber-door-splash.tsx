@@ -12,13 +12,12 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { ConversationProvider } from "@elevenlabs/react";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
 import {
-  JacConvaiSession,
-  type ConvaiPhase,
-  type JacConvaiSessionHandle,
-} from "@/components/jac/jac-convai-session";
+  JacOpenAIRealtimeSession,
+  type JacOpenAIRealtimeSessionHandle,
+} from "@/components/jac/jac-openai-realtime-session";
+import type { JacRealtimePhase } from "@/lib/jac-openai-realtime-transport";
 import type { JacRealtimeErrorKind } from "@/lib/jac-openai-realtime-transport";
 import { SignupCard } from "@/components/jac/jac-signup-card";
 import {
@@ -100,7 +99,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   const [inputText,    setInputText]    = useState("");
   const [textLoading,  setTextLoading]  = useState(false);
   const [jacSpeakingTx,setJacSpeakingTx] = useState(false); // TTS for text replies
-  const [realtimePhase,  setRealtimePhase]  = useState<ConvaiPhase>("idle");
+  const [realtimePhase,  setRealtimePhase]  = useState<JacRealtimePhase>("idle");
   const [realtimeActive, setRealtimeActive] = useState(false);
   const [, setRealtimeIssue] = useState<VoiceIssue | null>(null);
   const [voiceRetryAvailable, setVoiceRetryAvailable] = useState(false);
@@ -118,12 +117,13 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
 
   const timerRefs      = useRef<ReturnType<typeof setTimeout>[]>([]);
   const cinematicRef   = useRef<HTMLVideoElement>(null);
-  const realtimeRef    = useRef<JacConvaiSessionHandle | null>(null);
+  const realtimeRef    = useRef<JacOpenAIRealtimeSessionHandle | null>(null);
   const phaseRef       = useRef<DoorPhase>("closed");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef       = useRef<HTMLTextAreaElement>(null);
   const signupOffered  = useRef(false); // in-scene signup card fires at most once per conversation
   const greetingHasFired = useRef(false);
+  const greetingSpoken = useRef(false);
   const realtimeConnected = useRef(false);
   const realtimeIssueRef = useRef<VoiceIssue | null>(null);
   const voiceDeadlineRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -352,7 +352,7 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
   }
 
   // ── Realtime callbacks ────────────────────────────────────────────────────
-  const handleRealtimePhase = useCallback((p: ConvaiPhase) => {
+  const handleRealtimePhase = useCallback((p: JacRealtimePhase) => {
     // Deactivating after a real failure makes the SDK report idle. That late
     // idle callback must never erase the terminal fallback and recreate the
     // Samsung "Waiting for voice connection" trap.
@@ -364,6 +364,12 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
       realtimeIssueRef.current = null;
       setRealtimeIssue(null);
       setVoiceRetryAvailable(false);
+    }
+    if (p === "listening" && !greetingSpoken.current && phaseRef.current !== "exiting") {
+      greetingSpoken.current = true;
+      // The greeting must use the same live Realtime session as the
+      // conversation. Never start a second/local speech provider here.
+      realtimeRef.current?.speakApprovedText(GREETING_TEXT);
     }
   }, [clearVoiceDeadline]);
 
@@ -420,8 +426,10 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
     setPhase("exiting");
     cancelAllJacAudio();
     schedule(() => {
-      // Keep this controller mounted.  The full-app surface is text-only and
-      // must not replace an established public ConvAI socket.
+      // End the door-owned session before revealing the text-only full-app
+      // surface. This keeps the door as the sole live-voice owner and prevents
+      // duplicate hidden inputs/controllers after Explore.
+      setMounted(false);
       if (voice) onEnterVoice(); else onEnterText();
     }, 440);
   }
@@ -1075,20 +1083,18 @@ export function GuberDoorSplash({ onEnterVoice, onEnterText, skip }: GuberDoorSp
         {/* ── end open-scene UI ─────────────────────────────────────────── */}
 
 
-        {/* Keep the canonical ConvAI controller mounted while the door is
-            closed so ENTER can synchronously prime mic/audio permission. */}
-        <ConversationProvider>
-          <JacConvaiSession
-            ref={realtimeRef}
-            active={realtimeActive}
-            sessionEndpoint="/api/jac/convai/public-session"
-            e2eTarget="homepage"
-            onPhaseChange={handleRealtimePhase}
-            onUserTranscript={handleRealtimeUser}
-            onJacResponse={handleRealtimeJac}
-            onError={handleRealtimeError}
-          />
-        </ConversationProvider>
+        {/* Keep the canonical OpenAI Realtime controller mounted while the
+            door is closed so ENTER can synchronously prime mic/audio permission. */}
+        <JacOpenAIRealtimeSession
+          ref={realtimeRef}
+          active={realtimeActive}
+          sessionEndpoint="/api/jac/realtime-token/guest"
+          e2eTarget="homepage"
+          onPhaseChange={handleRealtimePhase}
+          onUserTranscript={handleRealtimeUser}
+          onJacResponse={handleRealtimeJac}
+          onError={handleRealtimeError}
+        />
 
       </div>
     </>

@@ -892,10 +892,9 @@ export default function Home() {
       )}
       {doorSplashDone && (
         <section className="relative z-10 w-full px-4 sm:px-6 pb-8 max-w-5xl mx-auto">
-          {/* The entry scene remains the sole public voice owner after Explore.
-              This surface deliberately remains text-only, so it cannot open a
-              second microphone/session while the hidden entry controller keeps
-              the established ConvAI conversation alive. */}
+          {/* The entry scene owns public live voice. This surface deliberately
+              remains text-only, so it cannot open a second microphone/session
+              after the door handoff. */}
           <JacLiveExperience voiceDisabled={!isNativeApp} />
         </section>
       )}
