@@ -23,12 +23,12 @@ describe("retired JAC OpenAI Realtime voice path", () => {
       "client/src/lib/jac-realtime.ts",
       "client/src/components/jac/jac-realtime-voice.tsx",
       "client/src/pages/jac-realtime-test.tsx",
+      "client/src/lib/jac-openai-realtime-transport.ts",
+      "client/src/components/jac/jac-openai-realtime-session.tsx",
+      "server/jac-realtime-relay.ts",
+      "server/jac-prompt-tools.ts",
     ]) {
       expect(existsSync(path.join(projectRoot, relativePath)), relativePath).toBe(false);
     }
-
-    const conciergeSource = readFileSync(path.join(projectRoot, "server/jac-prompt-tools.ts"), "utf8");
-    expect(conciergeSource).not.toContain("JAC_REALTIME_VOICE");
-    expect(conciergeSource).not.toMatch(/voice\s*:\s*["']verse["']/);
   });
 });

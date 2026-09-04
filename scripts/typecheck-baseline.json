@@ -93,13 +93,6 @@
       "message": "Property 'bodyStyle' does not exist on type 'WizardForm'."
     },
     {
-      "path": "client/src/lib/voice/ConversationEngine.ts",
-      "line": 219,
-      "column": 11,
-      "code": "TS2367",
-      "message": "This comparison appears to be unintentional because the types '\"listening\" | \"speaking\" | \"processing\" | \"recording\"' and '\"idle\"' have no overlap."
-    },
-    {
       "path": "client/src/lib/voice/WakeWordDetector.ts",
       "line": 26,
       "column": 18,

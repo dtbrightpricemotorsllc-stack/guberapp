@@ -1,8 +1,7 @@
 /**
- * Shared speech-to-text helpers used by both the tap-to-talk WhisperProvider
- * and the always-listening ConversationEngine. Keeping this in one place
- * avoids the two providers drifting out of sync on MIME handling or the
- * /api/jac/stt contract.
+ * Shared speech-to-text helpers used by the tap-to-talk WhisperProvider.
+ * Keeping MIME handling and the /api/jac/stt contract in one place prevents
+ * platform-specific recording behavior from drifting.
  */
 
 /**
