@@ -1,0 +1,29 @@
+name: Hourly Safety Reconciliation
+
+on:
+  schedule:
+    # GitHub Actions schedules run in UTC. The endpoint itself is idempotent,
+    # so a delayed or manually retried invocation is safe.
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Run production safety reconciliation
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$CRON_SECRET"
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --retry 3 \
+            --retry-delay 10 \
+            --max-time 300 \
+            -X POST \
+            -H "x-cron-secret: $CRON_SECRET" \
+            "https://guberapp.app/api/internal/cron/run"
